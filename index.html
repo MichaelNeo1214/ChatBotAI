@@ -1,12 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>[Nama Bot]</title>
-    <meta name="description" content="[Nama Bot] - [Deskripsi Bot]">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>MAX — AI Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+
 </head>
 <body>
+
+<div class="app">
+
+  <div class="overlay" id="overlay"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-name">MAX</div>
+    </div>
+
+    <button class="new-chat-btn" id="newChatBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Percakapan baru
+    </button>
+
+    <nav class="history" id="history">
+      <div class="history-label">Riwayat</div>
+      <div class="history-item active"><span>Rencana belajar Teknik Informatika</span></div>
+      <div class="history-item"><span>Ide bisnis modal kecil</span></div>
+      <div class="history-item"><span>Debug training LoRA Qwen</span></div>
+      <div class="history-item"><span>Struktur UI chatbot</span></div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="profile-btn" id="profileBtn">
+        <div class="avatar">M</div>
+        <div class="profile-meta">
+          <div class="profile-name">Michael</div>
+          <div class="profile-sub">Akun bebas</div>
+        </div>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Buka menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <span class="model-name">MAX</span>
+      <span class="model-sub">— lokal / dev</span>
+    </header>
+
+    <div class="chat-scroll" id="chatScroll">
+      <div class="chat-inner" id="chatInner">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-title">Ada yang bisa dibantu?</div>
+          <div class="empty-sub">Tulis pertanyaan atau pilih salah satu di bawah.</div>
+          <div class="suggestions">
+            <button class="suggestion-card" data-fill="Jelaskan cara kerja LoRA fine-tuning secara singkat">Jelaskan cara kerja LoRA fine-tuning</button>
+            <button class="suggestion-card" data-fill="Bantu aku bikin outline bisnis modal kecil">Ide bisnis modal kecil</button>
+            <button class="suggestion-card" data-fill="Review struktur folder project Node.js aku">Review struktur project Node.js</button>
+            <button class="suggestion-card" data-fill="Ringkas perbedaan JWT dan session-based auth">JWT vs session-based auth</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer">
+        <textarea id="composerInput" rows="1" placeholder="Kirim pesan ke MAX..."></textarea>
+        <button class="send-btn" id="sendBtn" disabled aria-label="Kirim">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+      <div class="composer-hint">MAX bisa saja salah. Periksa kembali info penting.</div>
+    </div>
+  </main>
+
+</div>
+
+<script src="js/script.js"></script>
 
 </body>
 </html>
