@@ -1,169 +1,418 @@
-(function () {
-  "use strict";
+        (function() {
+            'use strict';
 
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('overlay');
-  const menuToggle = document.getElementById('menuToggle');
-  const newChatBtn = document.getElementById('newChatBtn');
-  const chatScroll = document.getElementById('chatScroll');
-  const chatInner = document.getElementById('chatInner');
-  const emptyState = document.getElementById('emptyState');
-  const input = document.getElementById('composerInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const suggestionCards = document.querySelectorAll('.suggestion-card');
+            // Elements
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const btnOpen = document.getElementById('btnOpenSidebar');
+            const btnClose = document.getElementById('btnCloseSidebar');
+            const btnNewChat = document.getElementById('btnNewChat');
+            const chatInput = document.getElementById('chatInput');
+            const btnSend = document.getElementById('btnSend');
+            const chatArea = document.getElementById('chatArea');
+            const messagesWrapper = document.getElementById('messagesWrapper');
+            const welcomeScreen = document.getElementById('welcomeScreen');
+            const typingIndicator = document.getElementById('typingIndicator');
+            const historyItems = document.querySelectorAll('.history-item');
+            const quickActions = document.querySelectorAll('.quick-action');
+            const searchInput = document.getElementById('searchInput');
+            const btnClearSearch = document.getElementById('btnClearSearch');
+            const btnThemeToggle = document.getElementById('btnThemeToggle');
+            const btnModelDropdown = document.getElementById('btnModelDropdown');
+            const modelDropdown = document.getElementById('modelDropdown');
+            const modelOptions = document.querySelectorAll('.model-option');
+            const currentModel = document.getElementById('currentModel');
+            const chatHistory = document.getElementById('chatHistory');
 
-  let isGenerating = false;
+            // State
+            let chatStarted = false;
 
-  /* ---- sidebar mobile toggle ---- */
-  function openSidebar() {
-    sidebar.classList.add('open');
-    overlay.classList.add('show');
-  }
-  function closeSidebar() {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('show');
-  }
-  menuToggle.addEventListener('click', openSidebar);
-  overlay.addEventListener('click', closeSidebar);
+            // ===== SIDEBAR TOGGLE =====
+            function getBreakpoint() {
+                const w = window.innerWidth;
+                if (w <= 768) return 'mobile';
+                if (w <= 1024) return 'tablet';
+                return 'desktop';
+            }
 
-  /* close drawer automatically if resized to desktop */
-  window.addEventListener('resize', function () {
-    if (window.innerWidth > 768) closeSidebar();
-  });
+            function isSidebarVisible() {
+                return !sidebar.classList.contains('collapsed');
+            }
 
-  /* ---- new chat ---- */
-  newChatBtn.addEventListener('click', function () {
-    document.querySelectorAll('.msg-row').forEach(el => el.remove());
-    emptyState.style.display = 'flex';
-    input.value = '';
-    autoResize();
-    updateSendState();
-    closeSidebar();
-  });
+            function openSidebar() {
+                sidebar.classList.remove('collapsed');
+                if (getBreakpoint() !== 'desktop') {
+                    overlay.classList.add('visible');
+                    document.body.style.overflow = 'hidden';
+                }
+            }
 
-  /* ---- history item selection ---- */
-  document.getElementById('history').addEventListener('click', function (e) {
-    const item = e.target.closest('.history-item');
-    if (!item) return;
-    document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
-    item.classList.add('active');
-    closeSidebar();
-  });
+            function closeSidebar() {
+                sidebar.classList.add('collapsed');
+                overlay.classList.remove('visible');
+                document.body.style.overflow = '';
+            }
 
-  /* ---- suggestion cards ---- */
-  suggestionCards.forEach(card => {
-    card.addEventListener('click', function () {
-      input.value = card.dataset.fill || card.textContent.trim();
-      autoResize();
-      updateSendState();
-      input.focus();
-    });
-  });
+            function toggleSidebar() {
+                if (isSidebarVisible()) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
+            }
 
-  /* ---- textarea auto-resize ---- */
-  function autoResize() {
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 200) + 'px';
-  }
-  function updateSendState() {
-    sendBtn.disabled = input.value.trim().length === 0 || isGenerating;
-  }
-  input.addEventListener('input', function () {
-    autoResize();
-    updateSendState();
-  });
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      trySend();
-    }
-  });
-  sendBtn.addEventListener('click', trySend);
+            btnOpen.addEventListener('click', toggleSidebar);
+            btnClose.addEventListener('click', closeSidebar);
+            overlay.addEventListener('click', closeSidebar);
 
-  /* ---- rendering helpers ---- */
-  function scrollToBottom() {
-    chatScroll.scrollTop = chatScroll.scrollHeight;
-  }
+            // Initialize sidebar state: closed by default on first open
+            function initSidebar() {
+                const bp = getBreakpoint();
+                if (bp === 'desktop') {
+                    sidebar.classList.add('collapsed');
+                    overlay.classList.remove('visible');
+                } else {
+                    sidebar.classList.add('collapsed');
+                    overlay.classList.remove('visible');
+                }
+            }
 
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
+            initSidebar();
 
-  function addUserMessage(text) {
-    emptyState.style.display = 'none';
-    const row = document.createElement('div');
-    row.className = 'msg-row user';
-    row.innerHTML = '<div class="msg-content"><p>' + escapeHtml(text) + '</p></div>';
-    chatInner.appendChild(row);
-    scrollToBottom();
-  }
+            let lastBreakpoint = getBreakpoint();
+            window.addEventListener('resize', function() {
+                const bp = getBreakpoint();
+                if (bp !== lastBreakpoint) {
+                    lastBreakpoint = bp;
+                    initSidebar();
+                }
+            });
 
-  function addAssistantPlaceholder() {
-    const row = document.createElement('div');
-    row.className = 'msg-row assistant';
-    row.innerHTML =
-      '<div class="msg-avatar">M</div>' +
-      '<div class="msg-content"><div class="typing"><span></span><span></span><span></span></div></div>';
-    chatInner.appendChild(row);
-    scrollToBottom();
-    return row.querySelector('.msg-content');
-  }
+            // ===== TEXTAREA AUTO RESIZE =====
+            chatInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+                btnSend.disabled = this.value.trim() === '';
+            });
 
-  /* ---- fake streaming reply (replace with real API call, see note below) ---- */
-  function fakeReply(userText) {
-    return "Ini contoh balasan MAX untuk: \u201c" + userText + "\u201d. " +
-      "Ganti fungsi sendToBackend() di bawah dengan pemanggilan endpoint chat kamu " +
-      "(disarankan pakai Server-Sent Events untuk efek mengetik seperti ini).";
-  }
+            // ===== SEND MESSAGE =====
+            function sendMessage(text) {
+                if (!text || text.trim() === '') return;
 
-  function streamText(el, fullText) {
-    el.innerHTML = '<p></p>';
-    const p = el.querySelector('p');
-    let i = 0;
-    isGenerating = true;
-    updateSendState();
-    const interval = setInterval(function () {
-      p.textContent += fullText[i];
-      i++;
-      scrollToBottom();
-      if (i >= fullText.length) {
-        clearInterval(interval);
-        isGenerating = false;
-        updateSendState();
-      }
-    }, 14);
-  }
+                if (!chatStarted) {
+                    chatStarted = true;
+                    welcomeScreen.style.display = 'none';
+                    messagesWrapper.classList.add('visible');
+                }
 
-  /* ---- placeholder network call ----
-     Ganti isi fungsi ini dengan fetch ke backend Node.js kamu, contoh:
+                // Add user message
+                addMessage('user', text.trim());
 
-     async function sendToBackend(message) {
-       const res = await fetch('/api/chat', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         credentials: 'include', // supaya cookie sesi/JWT ikut terkirim
-         body: JSON.stringify({ message })
-       });
-       // lalu baca stream (SSE) dan panggil streamText() per chunk yang datang
-     }
-  ------------------------------------ */
-  function sendToBackend(message, targetEl) {
-    setTimeout(function () {
-      streamText(targetEl, fakeReply(message));
-    }, 500);
-  }
+                // Clear input
+                chatInput.value = '';
+                chatInput.style.height = 'auto';
+                btnSend.disabled = true;
 
-  function trySend() {
-    const text = input.value.trim();
-    if (!text || isGenerating) return;
-    addUserMessage(text);
-    input.value = '';
-    autoResize();
-    updateSendState();
-    const target = addAssistantPlaceholder();
-    sendToBackend(text, target);
-  }
+                // Show typing
+                typingIndicator.classList.add('visible');
+                scrollToBottom();
 
-})();
+                // Simulate response
+                setTimeout(function() {
+                    typingIndicator.classList.remove('visible');
+                    const responses = [
+                        "That's a great question! Here's what I think:\n\nThe solution involves breaking down the problem into smaller, manageable parts. Each part can then be addressed individually, which makes the overall solution much cleaner and easier to implement.",
+                        "I'd be happy to help with that!\n\nHere's a step-by-step approach:\n\n1. First, understand the core requirements\n2. Plan your architecture\n3. Implement incrementally\n4. Test each component thoroughly\n\nWould you like me to go into more detail on any of these steps?",
+                        "Great point! Let me explain that in detail.\n\nThe key concept here is to maintain clean separation of concerns. This means each module should have a single responsibility and communicate with others through well-defined interfaces.",
+                        "Here's my take on this:\n\n```javascript\nfunction example() {\n    return 'Clean, well-structured code';\n}\n```\n\nThe main thing to remember is to keep your code simple and readable. Always write code for humans first, machines second.",
+                        "Absolutely! Here's what you need to know:\n\nThe most important aspect is consistency. Whether you're working on frontend or backend, following a consistent pattern will make your codebase much more maintainable in the long run."
+                    ];
+                    const response = responses[Math.floor(Math.random() * responses.length)];
+                    addMessage('assistant', response);
+                    scrollToBottom();
+                }, 1200 + Math.random() * 800);
+            }
+
+            function addMessage(role, text) {
+                const msg = document.createElement('div');
+                msg.className = 'message ' + role;
+
+                const avatarIcon = role === 'user'
+                    ? 'U'
+                    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+
+                const senderName = role === 'user' ? 'You' : 'ChatBot AI';
+
+                const formattedText = formatText(text);
+
+                msg.innerHTML = '<div class="message-content">'
+                    + '<div class="message-avatar">' + avatarIcon + '</div>'
+                    + '<div class="message-body">'
+                    + '<div class="message-sender">' + senderName + '</div>'
+                    + '<div class="message-text">' + formattedText + '</div>'
+                    + '<div class="message-actions">'
+                    + '<button class="btn-msg-action" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>'
+                    + '<button class="btn-msg-action" aria-label="Like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg></button>'
+                    + '<button class="btn-msg-action" aria-label="Dislike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg></button>'
+                    + '</div>'
+                    + '</div></div>';
+
+                messagesWrapper.appendChild(msg);
+
+                // Copy button
+                const copyBtn = msg.querySelector('.btn-msg-action[aria-label="Copy"]');
+                copyBtn.addEventListener('click', function() {
+                    navigator.clipboard.writeText(text).then(function() {
+                        copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                        setTimeout(function() {
+                            copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
+                        }, 2000);
+                    });
+                });
+            }
+
+            function formatText(text) {
+                // Escape HTML
+                let formatted = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
+                // Code blocks
+                formatted = formatted.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+
+                // Inline code
+                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+                // Bold
+                formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+                // Line breaks to paragraphs
+                formatted = formatted.split('\n\n').map(function(p) {
+                    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
+                }).join('');
+
+                return formatted;
+            }
+
+            function scrollToBottom() {
+                requestAnimationFrame(function() {
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                });
+            }
+
+            // Send button
+            btnSend.addEventListener('click', function() {
+                sendMessage(chatInput.value);
+            });
+
+            // Enter to send (Shift+Enter for newline)
+            chatInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (this.value.trim()) {
+                        sendMessage(this.value);
+                    }
+                }
+            });
+
+            // ===== QUICK ACTIONS =====
+            quickActions.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    chatInput.value = this.textContent;
+                    btnSend.disabled = false;
+                    sendMessage(this.textContent);
+                });
+            });
+
+            // ===== HISTORY ITEMS =====
+            historyItems.forEach(function(item) {
+                item.addEventListener('click', function(e) {
+                    if (e.target.closest('.btn-item-action')) return;
+                    historyItems.forEach(function(i) { i.classList.remove('active'); });
+                    this.classList.add('active');
+                    if (getBreakpoint() !== 'desktop') {
+                        closeSidebar();
+                    }
+                });
+
+                // Delete button
+                const delBtn = item.querySelector('.btn-item-action[aria-label="Delete"]');
+                if (delBtn) {
+                    delBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        item.style.transition = 'opacity 0.2s, transform 0.2s';
+                        item.style.opacity = '0';
+                        item.style.transform = 'translateX(-10px)';
+                        setTimeout(function() { item.remove(); }, 200);
+                    });
+                }
+            });
+
+            // ===== NEW CHAT =====
+            btnNewChat.addEventListener('click', function() {
+                chatStarted = false;
+                welcomeScreen.style.display = '';
+                messagesWrapper.classList.remove('visible');
+                messagesWrapper.innerHTML = '';
+                historyItems.forEach(function(i) { i.classList.remove('active'); });
+                if (getBreakpoint() !== 'desktop') {
+                    closeSidebar();
+                }
+                chatInput.focus();
+            });
+
+            // ===== SEARCH CONVERSATIONS =====
+            function filterHistory(query) {
+                query = query.trim().toLowerCase();
+                const sections = document.querySelectorAll('.history-section');
+                let anyMatch = false;
+
+                sections.forEach(function(section) {
+                    let sectionMatch = false;
+                    const items = section.querySelectorAll('.history-item');
+                    items.forEach(function(item) {
+                        const text = item.querySelector('.history-item-text').textContent.toLowerCase();
+                        const match = !query || text.indexOf(query) !== -1;
+                        item.classList.toggle('hidden', !match);
+                        if (match) sectionMatch = true;
+                    });
+                    section.classList.toggle('has-matches', sectionMatch);
+                    if (sectionMatch) anyMatch = true;
+                });
+
+                chatHistory.classList.toggle('searching', !!query);
+                btnClearSearch.hidden = !query;
+                const noResults = document.querySelector('.no-results');
+                if (noResults) {
+                    noResults.classList.toggle('visible', !!query && !anyMatch);
+                }
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    filterHistory(this.value);
+                });
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        this.value = '';
+                        filterHistory('');
+                        this.blur();
+                    }
+                });
+            }
+
+            if (btnClearSearch) {
+                btnClearSearch.addEventListener('click', function() {
+                    if (searchInput) {
+                        searchInput.value = '';
+                        filterHistory('');
+                        searchInput.focus();
+                    }
+                });
+            }
+
+            // ===== THEME TOGGLE =====
+            function applyTheme(theme) {
+                document.body.classList.toggle('light', theme === 'light');
+                localStorage.setItem('chatbot-theme', theme);
+            }
+
+            if (btnThemeToggle) {
+                btnThemeToggle.addEventListener('click', function() {
+                    const isLight = document.body.classList.contains('light');
+                    applyTheme(isLight ? 'dark' : 'light');
+                });
+            }
+
+            // Load saved theme
+            try {
+                const savedTheme = localStorage.getItem('chatbot-theme');
+                if (savedTheme) applyTheme(savedTheme);
+                else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    applyTheme('light');
+                }
+            } catch (e) {}
+
+            // ===== MODEL DROPDOWN =====
+            function closeModelDropdown() {
+                modelDropdown.hidden = true;
+                btnModelDropdown.parentElement.classList.remove('open');
+            }
+
+            if (btnModelDropdown) {
+                btnModelDropdown.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = !modelDropdown.hidden;
+                    closeModelDropdown();
+                    closePlusDropdown();
+                    if (!isOpen) {
+                        modelDropdown.hidden = false;
+                        btnModelDropdown.parentElement.classList.add('open');
+                    }
+                });
+            }
+
+            if (modelDropdown) {
+                modelOptions.forEach(function(opt) {
+                    opt.addEventListener('click', function() {
+                        modelOptions.forEach(function(o) { o.classList.remove('active'); });
+                        this.classList.add('active');
+                        currentModel.textContent = this.getAttribute('data-model');
+                        closeModelDropdown();
+                    });
+                });
+            }
+
+            // ===== PLUS TOOL DROPDOWN (opens upward) =====
+            const btnPlus = document.getElementById('btnPlus');
+            const plusDropdown = document.getElementById('plusDropdown');
+
+            function openPlusDropdown() {
+                plusDropdown.hidden = false;
+                btnPlus.classList.add('open');
+            }
+
+            function plusDropdownIsOpen() {
+                return plusDropdown && !plusDropdown.hidden;
+            }
+
+            function closePlusDropdown() {
+                if (plusDropdown) {
+                    plusDropdown.hidden = true;
+                    btnPlus.classList.remove('open');
+                }
+            }
+
+            if (btnPlus && plusDropdown) {
+                btnPlus.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = !plusDropdown.hidden;
+                    closeModelDropdown();
+                    closePlusDropdown();
+                    if (!isOpen) {
+                        plusDropdown.hidden = false;
+                        btnPlus.classList.add('open');
+                    }
+                });
+
+                plusDropdown.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    closePlusDropdown();
+                });
+            }
+
+            document.addEventListener('click', function() {
+                if (modelDropdown && !modelDropdown.hidden) closeModelDropdown();
+                if (plusDropdownIsOpen()) closePlusDropdown();
+            });
+
+            // ===== KEYBOARD SHORTCUT =====
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'b') {
+                    e.preventDefault();
+                    toggleSidebar();
+                }
+            });
+
+        })();

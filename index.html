@@ -1,89 +1,234 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<title>MAX — AI Assistant</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatBot AI</title>
+    <meta name="description" content="ChatBot AI - Your intelligent assistant">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
 
-<div class="app">
+    <!-- Sidebar Overlay (mobile/tablet) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <div class="overlay" id="overlay"></div>
-
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-mark">M</div>
-      <div class="brand-name">MAX</div>
-    </div>
-
-    <button class="new-chat-btn" id="newChatBtn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-      Percakapan baru
-    </button>
-
-    <nav class="history" id="history">
-      <div class="history-label">Riwayat</div>
-      <div class="history-item active"><span>Rencana belajar Teknik Informatika</span></div>
-      <div class="history-item"><span>Ide bisnis modal kecil</span></div>
-      <div class="history-item"><span>Debug training LoRA Qwen</span></div>
-      <div class="history-item"><span>Struktur UI chatbot</span></div>
-    </nav>
-
-    <div class="sidebar-footer">
-      <button class="profile-btn" id="profileBtn">
-        <div class="avatar">M</div>
-        <div class="profile-meta">
-          <div class="profile-name">Michael</div>
-          <div class="profile-sub">Akun bebas</div>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-top">
+                <button class="btn-new-chat" id="btnNewChat">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                    New chat
+                </button>
+                <button class="btn-icon" id="btnCloseSidebar" aria-label="Close sidebar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+                </button>
+            </div>
+            <div class="search-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="searchInput" placeholder="Search conversations..." aria-label="Search conversations">
+                <button class="btn-clear-search" id="btnClearSearch" aria-label="Clear search" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
         </div>
-      </button>
-    </div>
-  </aside>
 
-  <main class="main">
-    <header class="topbar">
-      <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Buka menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <span class="model-name">MAX</span>
-      <span class="model-sub">— lokal / dev</span>
-    </header>
+        <nav class="chat-history" id="chatHistory" aria-label="Chat history">
+            <div class="history-section">
+                <div class="history-label">Today</div>
+                <div class="history-item active" data-id="1">
+                    <span class="history-item-text">Welcome conversation</span>
+                    <div class="history-item-actions">
+                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+                    </div>
+                </div>
+            </div>
+            <div class="history-section">
+                <div class="history-label">Yesterday</div>
+                <div class="history-item" data-id="2">
+                    <span class="history-item-text">How to learn JavaScript</span>
+                    <div class="history-item-actions">
+                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+                    </div>
+                </div>
+                <div class="history-item" data-id="3">
+                    <span class="history-item-text">Building REST API with Python</span>
+                    <div class="history-item-actions">
+                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+                    </div>
+                </div>
+            </div>
+            <div class="history-section">
+                <div class="history-label">Previous 7 days</div>
+                <div class="history-item" data-id="4">
+                    <span class="history-item-text">CSS Grid layout tutorial</span>
+                    <div class="history-item-actions">
+                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+                    </div>
+                </div>
+                    <div class="history-item" data-id="5">
+                        <span class="history-item-text">Debugging Node.js memory leak</span>
+                        <div class="history-item-actions">
+                            <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+                            <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+                        </div>
+                    </div>
+                </div>
+            <div class="no-results" id="noResults">No conversations found</div>
+        </nav>
 
-    <div class="chat-scroll" id="chatScroll">
-      <div class="chat-inner" id="chatInner">
-        <div class="empty-state" id="emptyState">
-          <div class="empty-title">Ada yang bisa dibantu?</div>
-          <div class="empty-sub">Tulis pertanyaan atau pilih salah satu di bawah.</div>
-          <div class="suggestions">
-            <button class="suggestion-card" data-fill="Jelaskan cara kerja LoRA fine-tuning secara singkat">Jelaskan cara kerja LoRA fine-tuning</button>
-            <button class="suggestion-card" data-fill="Bantu aku bikin outline bisnis modal kecil">Ide bisnis modal kecil</button>
-            <button class="suggestion-card" data-fill="Review struktur folder project Node.js aku">Review struktur project Node.js</button>
-            <button class="suggestion-card" data-fill="Ringkas perbedaan JWT dan session-based auth">JWT vs session-based auth</button>
-          </div>
+        <div class="sidebar-footer">
+            <button class="user-btn">
+                <div class="user-avatar">U</div>
+                <div class="user-info">
+                    <div class="user-name">User</div>
+                    <div class="user-plan">Free Plan</div>
+                </div>
+            </button>
         </div>
-      </div>
-    </div>
+    </aside>
 
-    <div class="composer-wrap">
-      <div class="composer">
-        <textarea id="composerInput" rows="1" placeholder="Kirim pesan ke MAX..."></textarea>
-        <button class="send-btn" id="sendBtn" disabled aria-label="Kirim">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-        </button>
-      </div>
-      <div class="composer-hint">MAX bisa saja salah. Periksa kembali info penting.</div>
-    </div>
-  </main>
+    <!-- Main -->
+    <main class="main" id="main">
+        <!-- Top Bar -->
+        <div class="topbar">
+            <button class="btn-toggle-sidebar" id="btnOpenSidebar" aria-label="Open sidebar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+            </button>
+            
+            <div class="topbar-spacer"></div>
+            <div class="topbar-right">
+                <button class="btn-icon" id="btnThemeToggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+                <button class="btn-icon" aria-label="Share">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                </button>
+            </div>
+        </div>
 
-</div>
+        <!-- Chat Area -->
+        <div class="chat-area" id="chatArea">
+            <div class="chat-container">
+                <!-- Welcome -->
+                <div class="welcome" id="welcomeScreen">
+                    <div class="welcome-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <h1>How can I help you today?</h1>
+                    <p>Ask me anything. I can help with coding, writing, analysis, and more.</p>
+                    <div class="quick-actions">
+                        <button class="quick-action">Explain how a neural network works</button>
+                        <button class="quick-action">Write a Python function to sort a list</button>
+                        <button class="quick-action">What are the best practices for React?</button>
+                        <button class="quick-action">Help me debug this code</button>
+                    </div>
+                </div>
 
-<script src="js/script.js"></script>
+                <!-- Messages -->
+                <div class="messages-wrapper" id="messagesWrapper">
+                    <!-- Messages inserted here by JS -->
+                </div>
 
+                <!-- Typing Indicator -->
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="message-content">
+                        <div class="message-avatar" style="background: var(--accent-color);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </div>
+                        <div class="message-body">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-area">
+            
+            <div class="input-wrapper">
+                <div class="input-box">
+                    <div class="model-selector-wrap input-model-wrap">
+                        <button class="model-selector input-model-selector" id="btnModelDropdown">
+                            <span class="model-selector-label" id="currentModel">ChatBot AI</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="model-dropdown" id="modelDropdown" hidden>
+                            <button class="model-option active" data-model="ChatBot AI">
+                                <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                <span class="model-name">ChatBot AI</span>
+                                <span class="model-desc">Default assistant</span>
+                            </button>
+                            <button class="model-option" data-model="GPT-4o">
+                                <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                <span class="model-name">GPT-4o</span>
+                                <span class="model-desc">OpenAI flagship</span>
+                            </button>
+                            <button class="model-option" data-model="Gemini">
+                                <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                <span class="model-name">Gemini</span>
+                                <span class="model-desc">Google multimodal</span>
+                            </button>
+                            <button class="model-option" data-model="Claude">
+                                <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                <span class="model-name">Claude</span>
+                                <span class="model-desc">Anthropic AI</span>
+                            </button>
+                            <button class="model-option" data-model="DeepSeek">
+                                <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                                <span class="model-name">DeepSeek</span>
+                                <span class="model-desc">DeepSeek reasoning</span>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Message ChatBot AI..." aria-label="Message input"></textarea>
+                    <button class="btn-send" id="btnSend" disabled aria-label="Send message">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
+                                    <div class="input-bottom">
+                    <div class="input-tools">
+                        <div class="tool-plus-wrap">
+                            <button class="btn-tool btn-plus" id="btnPlus" aria-label="More options">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                            </button>
+                            <div class="plus-dropdown" id="plusDropdown" hidden>
+                                <button class="plus-option" aria-label="Attach file">
+                                    <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
+                                    <span class="plus-name">Upload file</span>
+                                </button>
+                                <button class="plus-option" aria-label="Voice input">
+                                    <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span>
+                                    <span class="plus-name">Voice message</span>
+                                </button>
+                                <button class="plus-option" aria-label="Add image">
+                                    <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                                    <span class="plus-name">Add image</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+                
+
+            </div>
+            <div class="input-footer">ChatBot AI can make mistakes. Check important info.</div>
+        </div>
+    </main>
+
+    <script src="js/script.js"></script>
 </body>
 </html>
