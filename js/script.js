@@ -24,6 +24,8 @@
             const currentModel = document.getElementById('currentModel');
             const chatHistory = document.getElementById('chatHistory');
 
+
+            
             // State
             let chatStarted = false;
 
@@ -312,10 +314,21 @@
                 });
             }
 
-            // ===== THEME TOGGLE =====
+            // ===== THEME TOGGLE + APPEARANCE SETTING =====
+            const appearanceSelect = document.getElementById('appearanceSelect');
+
+            function syncAppearanceSelect(theme) {
+                if (appearanceSelect) {
+                    appearanceSelect.value = theme === 'light' ? 'Light' : 'Dark';
+                }
+            }
+
             function applyTheme(theme) {
                 document.body.classList.toggle('light', theme === 'light');
-                localStorage.setItem('chatbot-theme', theme);
+                syncAppearanceSelect(theme);
+                try {
+                    sessionStorage.setItem('chatbot-theme', theme);
+                } catch (e) {}
             }
 
             if (btnThemeToggle) {
@@ -325,14 +338,25 @@
                 });
             }
 
-            // Load saved theme
-            try {
-                const savedTheme = localStorage.getItem('chatbot-theme');
-                if (savedTheme) applyTheme(savedTheme);
-                else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-                    applyTheme('light');
+            if (appearanceSelect) {
+                appearanceSelect.addEventListener('change', function() {
+                    applyTheme(this.value === 'Light' ? 'light' : 'dark');
+                });
+            }
+
+            // Load saved theme (sessionStorage: survives refresh, resets on browser close)
+            (function initTheme() {
+                let savedTheme = null;
+                try {
+                    savedTheme = sessionStorage.getItem('chatbot-theme');
+                } catch (e) {}
+                if (savedTheme) {
+                    applyTheme(savedTheme);
+                } else {
+                    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+                    applyTheme(prefersLight ? 'light' : 'dark');
                 }
-            } catch (e) {}
+            })();
 
             // ===== MODEL DROPDOWN =====
             function closeModelDropdown() {
