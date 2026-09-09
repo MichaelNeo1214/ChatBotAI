@@ -88,6 +88,10 @@ All endpoints live under `/api`. Conversations are scoped to the caller by an
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | Liveness, active provider, uptime. |
+| `POST` | `/api/auth/signup` | Create an account and start a session. |
+| `POST` | `/api/auth/login` | Start a session. |
+| `POST` | `/api/auth/logout` | End the current session. |
+| `GET` | `/api/auth/me` | The signed-in user, or `null`. |
 | `POST` | `/api/chat` | Send a message; streams the reply. |
 | `GET` | `/api/conversations` | List conversations, most recent first. |
 | `POST` | `/api/conversations` | Create an empty conversation. |
@@ -124,9 +128,29 @@ Messages are stored in SQLite at `DATABASE_PATH` (default `./data/chatbot.db`,
 which is gitignored). The schema in `src/db/schema.sql` is applied on every
 boot and is idempotent, so there are no migrations to run yet.
 
-Conversations carry an `owner_id`. Today that is an anonymous per-browser id
-from a cookie; when authentication lands it becomes the user id, and nothing
-downstream has to change.
+Conversations carry an `owner_id`: the user id when signed in, otherwise an
+anonymous per-browser id. That means **you can chat before creating an account**,
+and signing up moves those conversations onto the new account rather than
+discarding them.
+
+## 🔑 Accounts
+
+Email and password, with server-side sessions:
+
+- Passwords are hashed with **scrypt** from `node:crypto` — memory-hard, and no
+  native dependency to compile.
+- Sessions live in the database and the cookie holds a random token; only a
+  SHA-256 hash of it is stored, so a database leak does not yield usable cookies.
+- The session cookie is `httpOnly` and `sameSite=lax`, and `secure` in production.
+- Login and signup are rate limited per IP **and** email, so one attacker cannot
+  lock out everyone behind a shared IP.
+- A failed login verifies against a dummy hash when the account does not exist,
+  so response time does not reveal which emails are registered.
+
+Sign-in is optional — anonymous browsing still works.
+
+Not implemented yet: email verification, password reset, and the Google / GitHub
+/ Apple buttons, which now say so instead of silently doing nothing.
 
 ## 🧩 Suggested Capabilities
 
@@ -206,7 +230,8 @@ Please keep pull requests focused, document new configuration, and preserve user
 ## 🗺️ Roadmap
 
 - [x] Persist conversations and messages
-- [ ] Add authentication (the signup page is still a mockup)
+- [x] Add authentication (email + password, server-side sessions)
+- [ ] Email verification and password reset
 - [ ] Improve conversation memory
 - [ ] Add configurable assistant personalities
 - [x] Support multiple AI providers

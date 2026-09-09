@@ -38,6 +38,64 @@
         function LoginSignupComponent() {
             const canvasRef = React.useRef(null);
             const [isLogin, setIsLogin] = React.useState(true);
+            const [name, setName] = React.useState("");
+            const [email, setEmail] = React.useState("");
+            const [password, setPassword] = React.useState("");
+            const [error, setError] = React.useState(null);
+            const [busy, setBusy] = React.useState(false);
+
+            // Already signed in? Nothing to do on this page.
+            React.useEffect(() => {
+                fetch("/api/auth/me", { credentials: "same-origin" })
+                    .then(r => r.json())
+                    .then(d => { if (d.user) window.location.replace("/"); })
+                    .catch(() => {});
+            }, []);
+
+            const switchMode = (toLogin) => {
+                setIsLogin(toLogin);
+                setError(null);
+                setPassword("");
+            };
+
+            const submit = async (e) => {
+                e.preventDefault();
+                if (busy) return;
+                setBusy(true);
+                setError(null);
+
+                const endpoint = isLogin ? "/api/auth/login" : "/api/auth/signup";
+                const payload = isLogin ? { email, password } : { name, email, password };
+
+                try {
+                    const res = await fetch(endpoint, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "same-origin",
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json().catch(() => null);
+
+                    if (!res.ok) {
+                        setError((data && data.error && data.error.message) || "Something went wrong. Please try again.");
+                        setBusy(false);
+                        return;
+                    }
+                    window.location.assign("/");
+                } catch (err) {
+                    setError("Could not reach the server. Is it running?");
+                    setBusy(false);
+                }
+            };
+
+            const ErrorBanner = error ? (
+                <div role="alert" style={{ width: "100%", background: "#2a1212", border: "1px solid #5c2626", color: "#ffb4b4", borderRadius: 6, padding: "0.55rem 0.7rem", fontSize: "0.8rem", marginBottom: "0.65rem", textAlign: "left" }}>
+                    {error}
+                </div>
+            ) : null;
+
+            // OAuth is not implemented yet; say so rather than showing a dead button.
+            const notImplemented = () => setError("Social sign-in isn't available yet — use your email and password.");
 
             React.useEffect(() => {
                 let active = true;
@@ -247,20 +305,24 @@
                                 <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em" }}>Sign in to Account</h1>
                                 <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>Sign in to your Account.</p>
 
-                                <form onSubmit={e => e.preventDefault()} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-                                    <input style={input} type="email" placeholder="name@work-email.com" required />
-                                    <button type="submit" style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: "pointer" }}>Continue with Email</button>
+                                {ErrorBanner}
+                                <form onSubmit={submit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                                    <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
+                                        value={email} onChange={e => setEmail(e.target.value)} />
+                                    <input style={input} type="password" placeholder="Password" autoComplete="current-password" required
+                                        value={password} onChange={e => setPassword(e.target.value)} />
+                                    <button type="submit" disabled={busy} style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: busy ? "#8a8a8a" : "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: busy ? "default" : "pointer" }}>{busy ? "Signing in…" : "Continue with Email"}</button>
                                 </form>
 
                                 <div style={{ height: 1, background: "#222", width: "100%", margin: "0.85rem 0" }} />
 
-                                <button style={socialBtn}>{GoogleIcon}Continue with Google</button>
-                                <button style={socialBtn}>{GitHubIcon}Continue with GitHub</button>
-                                <button style={{ ...socialBtn, marginBottom: 0 }}>{AppleIcon}Continue with Apple</button>
+                                <button type="button" onClick={notImplemented} style={socialBtn}>{GoogleIcon}Continue with Google</button>
+                                <button type="button" onClick={notImplemented} style={socialBtn}>{GitHubIcon}Continue with GitHub</button>
+                                <button type="button" onClick={notImplemented} style={{ ...socialBtn, marginBottom: 0 }}>{AppleIcon}Continue with Apple</button>
 
                                 <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
                                     Don't have an account?{" "}
-                                    <button onClick={() => setIsLogin(false)} style={{ color: "#fff", fontWeight: 500, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}>Sign Up</button>
+                                    <button type="button" onClick={() => switchMode(false)} style={{ color: "#fff", fontWeight: 500, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}>Sign Up</button>
                                 </div>
                                 {Footer}
                             </div>
@@ -270,21 +332,26 @@
                                 <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em" }}>Sign up for Account</h1>
                                 <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>Create a new account to get started.</p>
 
-                                <form onSubmit={e => e.preventDefault()} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-                                    <input style={input} type="text" placeholder="Full Name" required />
-                                    <input style={input} type="email" placeholder="name@work-email.com" required />
-                                    <button type="submit" style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: "pointer" }}>Sign Up with Email</button>
+                                {ErrorBanner}
+                                <form onSubmit={submit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                                    <input style={input} type="text" placeholder="Full Name" autoComplete="name" required
+                                        value={name} onChange={e => setName(e.target.value)} />
+                                    <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
+                                        value={email} onChange={e => setEmail(e.target.value)} />
+                                    <input style={input} type="password" placeholder="Password (at least 8 characters)" autoComplete="new-password" minLength={8} required
+                                        value={password} onChange={e => setPassword(e.target.value)} />
+                                    <button type="submit" disabled={busy} style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: busy ? "#8a8a8a" : "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: busy ? "default" : "pointer" }}>{busy ? "Creating account…" : "Sign Up with Email"}</button>
                                 </form>
 
                                 <div style={{ height: 1, background: "#222", width: "100%", margin: "0.85rem 0" }} />
 
-                                <button style={socialBtn}>{GoogleIcon}Sign up with Google</button>
-                                <button style={socialBtn}>{GitHubIcon}Sign up with GitHub</button>
-                                <button style={{ ...socialBtn, marginBottom: 0 }}>{AppleIcon}Sign up with Apple</button>
+                                <button type="button" onClick={notImplemented} style={socialBtn}>{GoogleIcon}Sign up with Google</button>
+                                <button type="button" onClick={notImplemented} style={socialBtn}>{GitHubIcon}Sign up with GitHub</button>
+                                <button type="button" onClick={notImplemented} style={{ ...socialBtn, marginBottom: 0 }}>{AppleIcon}Sign up with Apple</button>
 
                                 <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
                                     Already have an account?{" "}
-                                    <button onClick={() => setIsLogin(true)} style={{ color: "#fff", fontWeight: 500, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}>Sign In</button>
+                                    <button type="button" onClick={() => switchMode(true)} style={{ color: "#fff", fontWeight: 500, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}>Sign In</button>
                                 </div>
                                 {Footer}
                             </div>

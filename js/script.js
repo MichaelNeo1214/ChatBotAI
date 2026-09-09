@@ -23,6 +23,10 @@
             const modelOptions = document.querySelectorAll('.model-option');
             const currentModel = document.getElementById('currentModel');
             const chatHistory = document.getElementById('chatHistory');
+            const btnSignIn = document.getElementById('btnSignIn');
+            const account = document.getElementById('account');
+            const accountName = document.getElementById('accountName');
+            const btnSignOut = document.getElementById('btnSignOut');
 
 
             
@@ -90,6 +94,25 @@
                     }
                 }
             }
+
+            // ===== ACCOUNT =====
+            function renderAccount(user) {
+                const signedIn = !!user;
+                account.hidden = !signedIn;
+                btnSignIn.hidden = signedIn;
+                accountName.textContent = signedIn ? user.name : '';
+                accountName.title = signedIn ? user.email : '';
+            }
+
+            fetch(API_BASE + '/auth/me', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) { renderAccount(d.user); })
+                .catch(function() { renderAccount(null); });
+
+            btnSignOut.addEventListener('click', function() {
+                fetch(API_BASE + '/auth/logout', { method: 'POST', credentials: 'same-origin' })
+                    .finally(function() { window.location.reload(); });
+            });
 
             // ===== SIDEBAR TOGGLE =====
             function getBreakpoint() {

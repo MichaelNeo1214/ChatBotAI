@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { ROOT_DIR, config } from './config.ts';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { identifyOwner } from './middleware/owner.ts';
+import { authRouter } from './routes/auth.ts';
 import { chatRouter } from './routes/chat.ts';
 import { conversationsRouter } from './routes/conversations.ts';
 import { healthRouter } from './routes/health.ts';
@@ -34,6 +35,7 @@ export function createApp() {
 
   // Everything below is scoped to a caller.
   app.use('/api', identifyOwner);
+  app.use('/api/auth', authRouter);
   app.use('/api/conversations', conversationsRouter);
   app.use('/api/chat', chatRouter);
 
