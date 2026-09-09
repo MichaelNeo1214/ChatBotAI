@@ -26,20 +26,6 @@
             --radius-lg: 12px;
             --radius-xl: 16px;
             --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            /* Settings modal theme vars */
-            --settings-bg: #212121;
-            --settings-bg-panel: #171717;
-            --settings-border: #303030;
-            --settings-border-soft: #2d2d2d;
-            --settings-hover: #2a2a2a;
-            --settings-input-border: #383838;
-            --settings-text: #ececec;
-            --settings-text-muted: #8e8e8e;
-            --settings-text-soft: #b4b4b4;
-            --settings-icon: #8e8e8e;
-            --settings-placeholder: #737373;
-            --settings-banner-bg: #000000;
-            --settings-banner-border: #2e2e2e;
         }
 
         body.light {
@@ -57,52 +43,6 @@
             --accent-hover: #0d8a6a;
             --scrollbar-thumb: #cccccc;
             --shadow-lg: 0 8px 32px rgba(0,0,0,0.15);
-            /* Settings modal theme vars (light) */
-            --settings-bg: #ffffff;
-            --settings-bg-panel: #f4f4f4;
-            --settings-border: #d9d9d9;
-            --settings-border-soft: #e5e5e5;
-            --settings-hover: #ebebeb;
-            --settings-input-border: #d4d4d4;
-            --settings-text: #202123;
-            --settings-text-muted: #707070;
-            --settings-text-soft: #4d4d4d;
-            --settings-icon: #707070;
-            --settings-placeholder: #909090;
-            --settings-banner-bg: #fafafa;
-            --settings-banner-border: #e5e5e5;
-        }
-
-        /* ===== ACCENT COLORS ===== */
-        body.accent-blue {
-            --accent-color: #3b82f6;
-            --accent-hover: #2563eb;
-        }
-        body.accent-green {
-            --accent-color: #10a37f;
-            --accent-hover: #0d8a6a;
-        }
-        body.accent-purple {
-            --accent-color: #a855f7;
-            --accent-hover: #9333ea;
-        }
-        body.accent-orange {
-            --accent-color: #f97316;
-            --accent-hover: #ea580c;
-        }
-
-        /* ===== HIGH CONTRAST ===== */
-        body.contrast-high {
-            --text-primary: #f5f5f5;
-            --text-secondary: #d6d6d6;
-            --text-muted: #b6b6b6;
-            --border-color: #4a4a4a;
-        }
-        body.light.contrast-high {
-            --text-primary: #0a0a0a;
-            --text-secondary: #1a1a1a;
-            --text-muted: #3a3a3a;
-            --border-color: #555555;
         }
 
     :root[data-theme="dark"] {
@@ -119,55 +59,8 @@
   transition: background-color 0.3s, color 0.3s;
     }
 
-  .switch {
-    position: relative;
-    display: inline-block;
-    width: 60px;
-    height: 30px;
-  }
-  .switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-  .slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #555;
-    border-radius: 30px;
-    transition: background-color 0.3s;
-  }
-  .slider::before {
-    content: "";
-    position: absolute;
-    height: 22px;
-    width: 22px;
-    left: 4px;
-    bottom: 4px;
-    background-color: white;
-    border-radius: 50%;
-    transition: transform 0.3s;
-  }
-  input:checked + .slider {
-    background-color: #4f46e5;
-  }
-  input:checked + .slider::before {
-    transform: translateX(30px);
-  }
-  #themeLabel {
-    font-weight: 600;
-    min-width: 50px;
-  }
 
-   .toggle-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 1.5rem;
-  }
-
+    
         html, body {
             height: 100%;
             overflow: hidden;
@@ -1421,7 +1314,7 @@
         }
 
         .settings-modal {
-            background-color: var(--settings-bg);
+            background-color: #212121;
             width: 780px;
             height: 580px;
             max-width: 95vw;
@@ -1430,7 +1323,7 @@
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
             display: flex;
             overflow: hidden;
-            border: 1px solid var(--settings-border);
+            border: 1px solid #303030;
             transform: scale(1);
             transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
@@ -1446,12 +1339,12 @@
         /* Settings Sidebar */
         .settings-sidebar {
             width: 250px;
-            background-color: var(--settings-bg-panel);
+            background-color: #171717;
             padding: 16px 12px;
             display: flex;
             flex-direction: column;
             gap: 12px;
-            border-right: 1px solid var(--settings-border-soft);
+            border-right: 1px solid #2d2d2d;
             flex-shrink: 0;
             overflow-y: auto;
         }
@@ -1465,7 +1358,7 @@
         .btn-close-settings {
             background: transparent;
             border: none;
-            color: var(--settings-text-soft);
+            color: #b4b4b4;
             width: 32px;
             height: 32px;
             border-radius: 6px;
@@ -1477,13 +1370,13 @@
         }
 
         .btn-close-settings:hover {
-            background: var(--settings-hover);
-            color: var(--settings-text);
+            background: #2a2a2a;
+            color: #fff;
         }
 
         .settings-search-box {
-            background: var(--settings-bg);
-            border: 1px solid var(--settings-input-border);
+            background: #212121;
+            border: 1px solid #383838;
             border-radius: 8px;
             padding: 8px 12px;
             display: flex;
@@ -1492,7 +1385,7 @@
         }
 
         .settings-search-box i {
-            color: var(--settings-icon);
+            color: #8e8e8e;
             font-size: 13px;
         }
 
@@ -1500,13 +1393,13 @@
             background: transparent;
             border: none;
             outline: none;
-            color: var(--settings-text);
+            color: #ececec;
             font-size: 13.5px;
             width: 100%;
         }
 
         .settings-search-box input::placeholder {
-            color: var(--settings-placeholder);
+            color: #737373;
         }
 
         .settings-menu-list {
@@ -1525,7 +1418,7 @@
             gap: 12px;
             padding: 9px 12px;
             border-radius: 8px;
-            color: var(--settings-text-soft);
+            color: #b4b4b4;
             font-size: 13.5px;
             font-weight: 500;
             cursor: pointer;
@@ -1542,13 +1435,13 @@
         }
 
         .settings-menu-item:hover {
-            background: var(--settings-hover);
-            color: var(--settings-text);
+            background: #212121;
+            color: #ececec;
         }
 
         .settings-menu-item.active {
-            background: var(--settings-hover);
-            color: var(--settings-text);
+            background: #2a2a2a;
+            color: #ffffff;
         }
 
         /* Settings Content Panel */
@@ -1558,24 +1451,24 @@
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            background-color: var(--settings-bg);
+            background-color: #212121;
         }
 
         .settings-page-title {
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 20px;
-            color: var(--settings-text);
+            color: #ececec;
         }
 
         /* MFA Banner */
         .mfa-banner {
-            background: var(--settings-banner-bg);
+            background: #000000;
             border-radius: 12px;
             padding: 16px 20px;
             margin-bottom: 24px;
             position: relative;
-            border: 1px solid var(--settings-banner-border);
+            border: 1px solid #2e2e2e;
             transition: opacity 0.2s ease, margin-bottom 0.2s ease, transform 0.2s ease;
         }
 
@@ -1596,7 +1489,7 @@
             right: 14px;
             background: transparent;
             border: none;
-            color: var(--settings-icon);
+            color: #8e8e8e;
             cursor: pointer;
             font-size: 14px;
             width: 24px;
@@ -1608,8 +1501,8 @@
         }
 
         .btn-banner-close:hover {
-            color: var(--settings-text);
-            background: var(--settings-hover);
+            color: #fff;
+            background: #222;
         }
 
         .mfa-icon-wrap {
@@ -1621,28 +1514,28 @@
 
         .mfa-icon {
             font-size: 24px;
-            color: var(--settings-text);
+            color: #fff;
         }
 
         .mfa-title {
             font-size: 15px;
             font-weight: 600;
             margin-bottom: 6px;
-            color: var(--settings-text);
+            color: #fff;
         }
 
         .mfa-desc {
             font-size: 13px;
-            color: var(--settings-text-muted);
+            color: #9e9e9e;
             line-height: 1.45;
             margin-bottom: 16px;
             max-width: 420px;
         }
 
         .btn-mfa {
-            background: var(--settings-hover);
-            color: var(--settings-text);
-            border: 1px solid var(--settings-input-border);
+            background: #000;
+            color: #fff;
+            border: 1px solid #444;
             padding: 8px 16px;
             border-radius: 20px;
             font-size: 13px;
@@ -1652,8 +1545,8 @@
         }
 
         .btn-mfa:hover {
-            background: var(--settings-bg-panel);
-            border-color: var(--settings-text-muted);
+            background: #1a1a1a;
+            border-color: #666;
         }
 
         /* Settings Rows */
@@ -1662,7 +1555,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 16px 0;
-            border-bottom: 1px solid var(--settings-border-soft);
+            border-bottom: 1px solid #2d2d2d;
         }
 
         .setting-info {
@@ -1675,12 +1568,12 @@
         .setting-label {
             font-size: 14px;
             font-weight: 500;
-            color: var(--settings-text);
+            color: #ececec;
         }
 
         .setting-sublabel {
             font-size: 12.5px;
-            color: var(--settings-text-muted);
+            color: #8e8e8e;
             line-height: 1.4;
         }
 
@@ -1694,7 +1587,7 @@
             appearance: none;
             -webkit-appearance: none;
             background: transparent;
-            color: var(--text-primary);
+            color: #ececec;
             border: none;
             font-size: 14px;
             font-weight: 400;
@@ -1707,12 +1600,12 @@
         }
 
         .custom-select option {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
+            background: #212121;
+            color: #ececec;
         }
 
         .custom-select:hover {
-            background: var(--bg-hover);
+            background: #2c2c2c;
         }
 
         .select-arrow {
@@ -1721,7 +1614,7 @@
             top: 50%;
             transform: translateY(-50%);
             pointer-events: none;
-            color: var(--text-muted);
+            color: #8e8e8e;
             font-size: 10px;
         }
 
@@ -1736,7 +1629,7 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background-color: var(--settings-icon);
+            background-color: #8e8e8e;
             display: inline-block;
         }
 
@@ -1759,7 +1652,7 @@
             position: absolute;
             cursor: pointer;
             inset: 0;
-            background-color: var(--settings-input-border);
+            background-color: #383838;
             transition: background-color 0.25s, box-shadow 0.25s;
             border-radius: 24px;
         }
@@ -1777,8 +1670,8 @@
         }
 
         .switch input:checked + .slider {
-            background-color: var(--accent-color);
-            box-shadow: 0 0 10px var(--accent-color);
+            background-color: #3b82f6;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
         }
 
         .switch input:checked + .slider::before {
