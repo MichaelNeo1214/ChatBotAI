@@ -2040,3 +2040,43 @@
 }
 .plan-card .plan-name{ font-size:15px; color:#fff; font-weight:600; }
 .plan-card .plan-sub{ font-size:12.5px; color:#8a8a92; margin-top:4px; }
+
+        /* ===== ACCOUNT (top bar) ===== */
+        .account {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .account-name {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            max-width: 14ch;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .btn-account {
+            font: inherit;
+            font-size: 0.8125rem;
+            line-height: 1;
+            padding: 0.4rem 0.7rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-primary);
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .btn-account:hover {
+            background: var(--bg-hover);
+        }
+
+        .account[hidden],
+        .btn-account[hidden] {
+            display: none;
+        }
