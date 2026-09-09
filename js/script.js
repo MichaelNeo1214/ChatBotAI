@@ -28,6 +28,68 @@
             
             // State
             let chatStarted = false;
+            let currentConversationId = null;
+            let inFlight = null;
+
+            // ===== BACKEND =====
+            const API_BASE = '/api';
+
+            /**
+             * POSTs a message and yields assistant text as it streams back.
+             * The server speaks Server-Sent Events: meta, delta*, then done|error.
+             */
+            async function streamChat(text, onMeta, onDelta) {
+                const controller = new AbortController();
+                inFlight = controller;
+
+                const response = await fetch(API_BASE + '/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    signal: controller.signal,
+                    body: JSON.stringify(
+                        currentConversationId
+                            ? { message: text, conversationId: currentConversationId, model: currentModel.textContent.trim() }
+                            : { message: text, model: currentModel.textContent.trim() }
+                    )
+                });
+
+                if (!response.ok) {
+                    const detail = await response.json().catch(function() { return null; });
+                    throw new Error((detail && detail.error && detail.error.message) || ('Request failed with status ' + response.status));
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                for (;;) {
+                    const chunk = await reader.read();
+                    if (chunk.done) break;
+                    buffer += decoder.decode(chunk.value, { stream: true });
+
+                    // Events are separated by a blank line and can split across chunks.
+                    let boundary = buffer.indexOf('\n\n');
+                    while (boundary !== -1) {
+                        const raw = buffer.slice(0, boundary);
+                        buffer = buffer.slice(boundary + 2);
+                        boundary = buffer.indexOf('\n\n');
+
+                        let name = 'message';
+                        let data = '';
+                        raw.split('\n').forEach(function(line) {
+                            if (line.indexOf('event:') === 0) name = line.slice(6).trim();
+                            else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
+                        });
+                        if (!data) continue;
+
+                        const payload = JSON.parse(data);
+                        if (name === 'meta') onMeta(payload);
+                        else if (name === 'delta') onDelta(payload.text);
+                        else if (name === 'error') throw new Error(payload.message);
+                    }
+                }
+            }
 
             // ===== SIDEBAR TOGGLE =====
             function getBreakpoint() {
@@ -125,20 +187,31 @@
                 typingIndicator.classList.add('visible');
                 scrollToBottom();
 
-                // Simulate response
-                setTimeout(function() {
+                let reply = null;
+                streamChat(
+                    text.trim(),
+                    function onMeta(meta) {
+                        currentConversationId = meta.conversationId;
+                    },
+                    function onDelta(chunk) {
+                        if (reply === null) {
+                            typingIndicator.classList.remove('visible');
+                            reply = addMessage('assistant', '');
+                        }
+                        reply.append(chunk);
+                        scrollToBottom();
+                    }
+                ).catch(function(error) {
                     typingIndicator.classList.remove('visible');
-                    const responses = [
-                        "That's a great question! Here's what I think:\n\nThe solution involves breaking down the problem into smaller, manageable parts. Each part can then be addressed individually, which makes the overall solution much cleaner and easier to implement.",
-                        "I'd be happy to help with that!\n\nHere's a step-by-step approach:\n\n1. First, understand the core requirements\n2. Plan your architecture\n3. Implement incrementally\n4. Test each component thoroughly\n\nWould you like me to go into more detail on any of these steps?",
-                        "Great point! Let me explain that in detail.\n\nThe key concept here is to maintain clean separation of concerns. This means each module should have a single responsibility and communicate with others through well-defined interfaces.",
-                        "Here's my take on this:\n\n```javascript\nfunction example() {\n    return 'Clean, well-structured code';\n}\n```\n\nThe main thing to remember is to keep your code simple and readable. Always write code for humans first, machines second.",
-                        "Absolutely! Here's what you need to know:\n\nThe most important aspect is consistency. Whether you're working on frontend or backend, following a consistent pattern will make your codebase much more maintainable in the long run."
-                    ];
-                    const response = responses[Math.floor(Math.random() * responses.length)];
-                    addMessage('assistant', response);
+                    const message = 'Sorry — ' + error.message;
+                    if (reply === null) addMessage('assistant', message);
+                    else reply.setText(message);
                     scrollToBottom();
-                }, 1200 + Math.random() * 800);
+                }).finally(function() {
+                    typingIndicator.classList.remove('visible');
+                    inFlight = null;
+                    scrollToBottom();
+                });
             }
 
             function addMessage(role, text) {
@@ -167,16 +240,33 @@
 
                 messagesWrapper.appendChild(msg);
 
+                // Streaming replies grow after insertion, so keep the source text
+                // here and re-render on each update.
+                let currentText = text;
+                const textNode = msg.querySelector('.message-text');
+
                 // Copy button
                 const copyBtn = msg.querySelector('.btn-msg-action[aria-label="Copy"]');
                 copyBtn.addEventListener('click', function() {
-                    navigator.clipboard.writeText(text).then(function() {
+                    navigator.clipboard.writeText(currentText).then(function() {
                         copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
                         setTimeout(function() {
                             copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
                         }, 2000);
                     });
                 });
+
+                return {
+                    element: msg,
+                    append: function(chunk) {
+                        currentText += chunk;
+                        textNode.innerHTML = formatText(currentText);
+                    },
+                    setText: function(next) {
+                        currentText = next;
+                        textNode.innerHTML = formatText(currentText);
+                    }
+                };
             }
 
             function formatText(text) {
@@ -260,6 +350,8 @@
 
             // ===== NEW CHAT =====
             btnNewChat.addEventListener('click', function() {
+                if (inFlight) inFlight.abort();
+                currentConversationId = null;
                 chatStarted = false;
                 welcomeScreen.style.display = '';
                 messagesWrapper.classList.remove('visible');
