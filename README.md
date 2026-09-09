@@ -20,47 +20,113 @@ ChatBotAI aims to make intelligent technology feel less like a machine and more 
 
 ### Prerequisites
 
-Before starting, ensure that your development environment includes:
-
-- Git
-- The runtime and package manager required by your implementation
-- Access to any AI provider or model credentials used by the project
+- **Node.js 22.5 or newer** (24+ recommended). The backend runs TypeScript directly
+  and uses the built-in `node:sqlite` module, so there is no build step and no
+  native database dependency to compile.
+- Git.
+- An API key for a model provider — optional; the default `mock` provider runs
+  without one.
 
 ### Installation
-
-Clone the repository:
 
 ```bash
 git clone https://github.com/MichaelNeo1214/ChatBotAI.git
 cd ChatBotAI
-```
-
-Install the project dependencies using the package manager configured for your implementation. For example:
-
-```bash
 npm install
 ```
 
 ### Configuration
 
-Create an environment file based on the variables required by your selected AI provider:
+Copy the example environment file and edit it:
 
-```env
-AI_API_KEY=your_api_key_here
-AI_MODEL=your_model_name
+```bash
+cp .env.example .env
 ```
 
-Keep secrets private. Never commit API keys, passwords, or other sensitive credentials to the repository.
+The backend runs with no configuration at all — it defaults to the `mock`
+provider, which streams canned replies so you can develop the frontend without
+an API key. To get real answers, set `AI_PROVIDER` to one of:
+
+| `AI_PROVIDER` | What it calls | Required settings |
+| --- | --- | --- |
+| `mock` | Nothing. Streams placeholder text. | none |
+| `anthropic` | Claude, via the official SDK. | `AI_API_KEY`, `AI_MODEL` |
+| `openai-compatible` | Any service exposing `POST /chat/completions`. | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` |
+
+`openai-compatible` covers OpenAI, OpenRouter, Groq, Together, DeepSeek, and
+local runtimes such as Ollama and LM Studio — they all speak the same wire
+format, so you switch vendors by changing `AI_BASE_URL`.
+
+`AI_MODEL_MAP` connects the model picker in the UI to real model ids. Anything
+unmapped falls back to `AI_MODEL`:
+
+```env
+AI_PROVIDER=openai-compatible
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_API_KEY=sk-...
+AI_MODEL=openai/gpt-4o-mini
+AI_MODEL_MAP={"GPT-4o":"openai/gpt-4o","Gemini":"google/gemini-2.0-flash-001","DeepSeek":"deepseek/deepseek-chat"}
+```
+
+Never commit `.env` — it is already in `.gitignore`.
 
 ### Run the Project
-
-Start the development server with the command used by your implementation. A common example is:
 
 ```bash
 npm run dev
 ```
 
-Then open the local URL shown in your terminal.
+This starts the API and serves the frontend from the same origin at
+<http://localhost:3000>. `npm start` runs it without file watching, and
+`npm run typecheck` checks types without emitting anything.
+
+## 🔌 API
+
+All endpoints live under `/api`. Conversations are scoped to the caller by an
+`httpOnly` cookie, so each browser sees only its own history.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Liveness, active provider, uptime. |
+| `POST` | `/api/chat` | Send a message; streams the reply. |
+| `GET` | `/api/conversations` | List conversations, most recent first. |
+| `POST` | `/api/conversations` | Create an empty conversation. |
+| `GET` | `/api/conversations/:id` | One conversation with all its messages. |
+| `PATCH` | `/api/conversations/:id` | Rename a conversation. |
+| `DELETE` | `/api/conversations/:id` | Delete a conversation and its messages. |
+
+### `POST /api/chat`
+
+```json
+{ "message": "Hello", "conversationId": "optional-uuid", "model": "GPT-4o" }
+```
+
+Omit `conversationId` to start a new conversation; the response names the one
+that was created. The reply streams back as Server-Sent Events:
+
+```text
+event: meta
+data: {"conversationId":"...","model":"ChatBot AI"}
+
+event: delta
+data: {"text":"Hello"}
+
+event: done
+data: {"messageId":"...","content":"Hello there"}
+```
+
+A failure mid-stream arrives as `event: error` instead of `event: done`; any
+text generated before the failure is still saved.
+
+## 🗄️ Data
+
+Messages are stored in SQLite at `DATABASE_PATH` (default `./data/chatbot.db`,
+which is gitignored). The schema in `src/db/schema.sql` is applied on every
+boot and is idempotent, so there are no migrations to run yet.
+
+Conversations carry an `owner_id`. Today that is an anonymous per-browser id
+from a cookie; when authentication lands it becomes the user id, and nothing
+downstream has to change.
 
 ## 🧩 Suggested Capabilities
 
@@ -139,10 +205,12 @@ Please keep pull requests focused, document new configuration, and preserve user
 
 ## 🗺️ Roadmap
 
+- [x] Persist conversations and messages
+- [ ] Add authentication (the signup page is still a mockup)
 - [ ] Improve conversation memory
 - [ ] Add configurable assistant personalities
-- [ ] Support multiple AI providers
-- [ ] Add streaming and rich message rendering
+- [x] Support multiple AI providers
+- [x] Add streaming and rich message rendering
 - [ ] Introduce analytics and administration tools
 - [ ] Provide production deployment examples
 
