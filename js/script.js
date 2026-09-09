@@ -90,11 +90,17 @@
                 }
             });
 
-            // ===== TEXTAREA AUTO RESIZE =====
+            // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
+            function updateSendState() {
+                const hasText = chatInput.value.trim() !== '';
+                btnSend.disabled = !hasText;
+                btnSend.classList.toggle('active', hasText);
+            }
+
             chatInput.addEventListener('input', function() {
                 this.style.height = 'auto';
                 this.style.height = Math.min(this.scrollHeight, 200) + 'px';
-                btnSend.disabled = this.value.trim() === '';
+                updateSendState();
             });
 
             // ===== SEND MESSAGE =====
@@ -113,7 +119,7 @@
                 // Clear input
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
-                btnSend.disabled = true;
+                updateSendState();
 
                 // Show typing
                 typingIndicator.classList.add('visible');
@@ -222,10 +228,11 @@
             quickActions.forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     chatInput.value = this.textContent;
-                    btnSend.disabled = false;
+                    updateSendState();
                     sendMessage(this.textContent);
                 });
             });
+            updateSendState();
 
             // ===== HISTORY ITEMS =====
             historyItems.forEach(function(item) {
@@ -454,6 +461,8 @@
             const settingsMenuSearch = document.getElementById('settingsMenuSearch');
             const accentColorSelect = document.getElementById('accentColorSelect');
             const accentDot = document.getElementById('accentDot');
+            const contrastSelect = document.getElementById('contrastSelect');
+            const languageSelect = document.getElementById('languageSelect');
 
             // Open Settings Modal
             if (btnOpenSettings) {
@@ -524,7 +533,7 @@
                 });
             }
 
-            // Accent Color Dot update
+            // Accent Color: dot + body theme class (persisted)
             const colorMap = {
                 'Default': '#8e8e8e',
                 'Blue': '#3b82f6',
@@ -532,12 +541,71 @@
                 'Purple': '#a855f7',
                 'Orange': '#f97316'
             };
+            const accentClassMap = {
+                'Default': '',
+                'Blue': 'accent-blue',
+                'Green': 'accent-green',
+                'Purple': 'accent-purple',
+                'Orange': 'accent-orange'
+            };
+
+            function applyAccent(value) {
+                document.body.classList.remove('accent-blue', 'accent-green', 'accent-purple', 'accent-orange');
+                const cls = accentClassMap[value];
+                if (cls) document.body.classList.add(cls);
+                if (accentDot) {
+                    accentDot.style.backgroundColor = colorMap[value] || '#8e8e8e';
+                }
+                try {
+                    sessionStorage.setItem('chatbot-accent', value);
+                } catch (e) {}
+            }
 
             if (accentColorSelect) {
                 accentColorSelect.addEventListener('change', (e) => {
-                    if (accentDot) {
-                        accentDot.style.backgroundColor = colorMap[e.target.value] || '#8e8e8e';
+                    applyAccent(e.target.value);
+                });
+                let savedAccent = null;
+                try {
+                    savedAccent = sessionStorage.getItem('chatbot-accent');
+                } catch (e) {}
+                if (savedAccent && colorMap[savedAccent]) {
+                    accentColorSelect.value = savedAccent;
+                    applyAccent(savedAccent);
+                }
+            }
+
+            // Contrast setting: toggles high-contrast body class (persisted)
+            function applyContrast(value) {
+                document.body.classList.toggle('contrast-high', value === 'High');
+                try {
+                    sessionStorage.setItem('chatbot-contrast', value);
+                } catch (e) {}
+            }
+
+            if (contrastSelect) {
+                contrastSelect.addEventListener('change', (e) => {
+                    applyContrast(e.target.value);
+                });
+                try {
+                    const savedContrast = sessionStorage.getItem('chatbot-contrast');
+                    if (savedContrast) {
+                        contrastSelect.value = savedContrast;
+                        applyContrast(savedContrast);
                     }
+                } catch (e) {}
+            }
+
+            // Language setting: persisted, applied on next load (no i18n engine yet)
+            if (languageSelect) {
+                try {
+                    const savedLang = sessionStorage.getItem('chatbot-lang');
+                    if (savedLang) languageSelect.value = savedLang;
+                } catch (e) {}
+                languageSelect.addEventListener('change', (e) => {
+                    try {
+                        sessionStorage.setItem('chatbot-lang', e.target.value);
+                    } catch (err) {}
                 });
             }
         })();
