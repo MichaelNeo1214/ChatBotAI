@@ -471,6 +471,8 @@
             cursor: pointer;
             transition: background var(--transition);
             font-family: inherit;
+            text-decoration: none;
+            box-sizing: border-box;
         }
 
         .user-btn:hover {
@@ -662,11 +664,9 @@
             color: var(--text-muted);
         }
 
-        /* ===== INPUT MODEL SELECTOR (pill, opens upward) ===== */
+        /* ===== INPUT MODEL SELECTOR (pill, opens upward, in bottom row) ===== */
         .input-model-wrap {
-            position: absolute;
-            right: 60px;
-            bottom: 12px;
+            position: relative;
         }
 
         .input-model-selector {
@@ -707,7 +707,8 @@
         .input-model-wrap .model-dropdown {
             top: auto;
             bottom: calc(100% + 6px);
-            left: 0;
+            left: auto;
+            right: 0;
             animation: dropdownUp 0.15s ease;
         }
 
@@ -1106,12 +1107,14 @@
         }
 
         .input-box {
-            position: relative;
             background: var(--bg-input);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-xl);
-            padding: 12px 60px 12px 18px;
+            padding: 14px 14px 10px 14px;
             transition: border-color var(--transition);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .input-box:focus-within {
@@ -1131,7 +1134,7 @@
             max-height: 200px;
             min-height: 24px;
             height: auto;
-            padding-right: 170px;
+            padding: 0;
         }
 
         .chat-input::placeholder {
@@ -1142,7 +1145,14 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-top: 8px;
+            gap: 8px;
+            margin-top: 0;
+        }
+
+        .input-actions-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .input-tools {
@@ -1175,27 +1185,29 @@
         }
 
         .btn-send {
-            position: absolute;
-            right: 12px;
-            bottom: 12px;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             background: var(--text-muted);
             border: none;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
             cursor: not-allowed;
-            transition: background var(--transition);
+            opacity: 0.5;
+            transition: background var(--transition), opacity var(--transition);
         }
 
-        .btn-send.active {
+        .btn-send.active,
+        .btn-send:not(:disabled) {
             background: var(--accent-color);
             cursor: pointer;
+            opacity: 1;
         }
 
-        .btn-send.active:hover {
+        .btn-send.active:hover,
+        .btn-send:not(:disabled):hover {
             background: var(--accent-hover);
         }
 
@@ -1366,10 +1378,6 @@
 
             .plus-dropdown {
                 min-width: 180px;
-            }
-
-            .chat-input {
-                padding-right: 155px;
             }
         }
 
