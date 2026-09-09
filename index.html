@@ -7,6 +7,7 @@
     <meta name="description" content="ChatBot AI - Your intelligent assistant">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -108,6 +109,9 @@
                 <button class="btn-icon" id="btnThemeToggle" aria-label="Toggle theme">
                     <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
                     <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+                <button class="btn-icon" id="btnOpenSettings" aria-label="Settings">
+                    <i class="fa-solid fa-gear"></i>
                 </button>
                 <button class="btn-icon" aria-label="Share">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
@@ -228,6 +232,131 @@
             <div class="input-footer">ChatBot AI can make mistakes. Check important info.</div>
         </div>
     </main>
+
+    <!-- Settings Modal Overlay -->
+    <div class="settings-modal-overlay" id="settingsModalOverlay">
+        <div class="settings-modal" id="settingsModal">
+            <!-- Settings Sidebar -->
+            <div class="settings-sidebar">
+                <div class="settings-sidebar-top">
+                    <button class="btn-close-settings" id="btnCloseSettings" title="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="settings-search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="settingsMenuSearch" placeholder="Search settings">
+                </div>
+
+                <ul class="settings-menu-list" id="settingsMenuList">
+                    <li class="settings-menu-item active" data-title="General"><i class="fa-solid fa-gear"></i> General</li>
+                    <li class="settings-menu-item" data-title="Notifications"><i class="fa-regular fa-bell"></i> Notifications</li>
+                    <li class="settings-menu-item" data-title="Personalization"><i class="fa-solid fa-wand-magic-sparkles"></i> Personalization</li>
+                    <li class="settings-menu-item" data-title="Plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
+                    <li class="settings-menu-item" data-title="Voice"><i class="fa-solid fa-microphone"></i> Voice</li>
+                    <li class="settings-menu-item" data-title="Billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
+                    <li class="settings-menu-item" data-title="Usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
+                    <li class="settings-menu-item" data-title="Analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
+                    <li class="settings-menu-item" data-title="Data controls"><i class="fa-solid fa-database"></i> Data controls</li>
+                    <li class="settings-menu-item" data-title="Storage"><i class="fa-solid fa-hard-drive"></i> Storage</li>
+                    <li class="settings-menu-item" data-title="Safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
+                    <li class="settings-menu-item" data-title="Security and login"><i class="fa-solid fa-key"></i> Security and login</li>
+                    <li class="settings-menu-item" data-title="Parental controls"><i class="fa-solid fa-user-group"></i> Parental controls</li>
+                    <li class="settings-menu-item" data-title="Account"><i class="fa-regular fa-circle-user"></i> Account</li>
+                </ul>
+            </div>
+
+            <!-- Settings Content Panel -->
+            <div class="settings-content-panel">
+                <h2 class="settings-page-title" id="settingsPageTitle">General</h2>
+
+                <!-- MFA Security Banner -->
+                <div class="mfa-banner" id="mfaBanner">
+                    <button class="btn-banner-close" id="btnCloseBanner" title="Dismiss">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    <div class="mfa-icon-wrap">
+                        <i class="fa-solid fa-shield-halved mfa-icon"></i>
+                    </div>
+                    <div class="mfa-title">Secure your account</div>
+                    <div class="mfa-desc">
+                        Add multi-factor authentication (MFA), like a text message or authenticator app, to help protect your account when logging in.
+                    </div>
+                    <button class="btn-mfa" id="btnSetupMfa">Set up MFA</button>
+                </div>
+
+                <!-- Settings Items -->
+                <div class="setting-row">
+                    <span class="setting-label">Appearance</span>
+                    <div class="select-wrapper">
+                        <select class="custom-select" id="appearanceSelect">
+                            <option value="System">System</option>
+                            <option value="Dark">Dark</option>
+                            <option value="Light">Light</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-arrow"></i>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <span class="setting-label">Contrast</span>
+                    <div class="select-wrapper">
+                        <select class="custom-select" id="contrastSelect">
+                            <option value="System">System</option>
+                            <option value="Standard">Standard</option>
+                            <option value="High">High</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-arrow"></i>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <span class="setting-label">Accent color</span>
+                    <div class="accent-select-wrap">
+                        <span class="accent-dot" id="accentDot"></span>
+                        <div class="select-wrapper">
+                            <select class="custom-select" id="accentColorSelect">
+                                <option value="Default">Default</option>
+                                <option value="Blue">Blue</option>
+                                <option value="Green">Green</option>
+                                <option value="Purple">Purple</option>
+                                <option value="Orange">Orange</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down select-arrow"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <span class="setting-label">Language</span>
+                    <div class="select-wrapper">
+                        <select class="custom-select" id="languageSelect">
+                            <option value="Auto-detect">Auto-detect</option>
+                            <option value="English (US)">English (US)</option>
+                            <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                            <option value="Español">Español</option>
+                            <option value="Français">Français</option>
+                            <option value="Deutsch">Deutsch</option>
+                            <option value="日本語">日本語</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down select-arrow"></i>
+                    </div>
+                </div>
+
+                <div class="setting-row" style="border-bottom: none;">
+                    <div class="setting-info">
+                        <span class="setting-label">Higher intelligence</span>
+                        <span class="setting-sublabel">ChatGPT can automatically use a higher intelligence setting when you ask a complex question.</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="higherIntelligenceToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="js/script.js"></script>
 </body>

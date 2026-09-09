@@ -416,3 +416,104 @@
             });
 
         })();
+
+        // ===== SETTINGS MODAL =====
+        (function() {
+            const settingsModalOverlay = document.getElementById('settingsModalOverlay');
+            const btnOpenSettings = document.getElementById('btnOpenSettings');
+            const btnCloseSettings = document.getElementById('btnCloseSettings');
+            const settingsPageTitle = document.getElementById('settingsPageTitle');
+            const settingsMenuItems = document.querySelectorAll('.settings-menu-item');
+            const mfaBanner = document.getElementById('mfaBanner');
+            const btnCloseBanner = document.getElementById('btnCloseBanner');
+            const btnSetupMfa = document.getElementById('btnSetupMfa');
+            const settingsMenuSearch = document.getElementById('settingsMenuSearch');
+            const accentColorSelect = document.getElementById('accentColorSelect');
+            const accentDot = document.getElementById('accentDot');
+
+            // Open Settings Modal
+            if (btnOpenSettings) {
+                btnOpenSettings.addEventListener('click', () => {
+                    settingsModalOverlay.classList.add('active');
+                });
+            }
+
+            // Close Settings Modal
+            if (btnCloseSettings) {
+                btnCloseSettings.addEventListener('click', () => {
+                    settingsModalOverlay.classList.remove('active');
+                });
+            }
+
+            // Close on overlay click
+            if (settingsModalOverlay) {
+                settingsModalOverlay.addEventListener('click', (e) => {
+                    if (e.target === settingsModalOverlay) {
+                        settingsModalOverlay.classList.remove('active');
+                    }
+                });
+            }
+
+            // Close on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && settingsModalOverlay.classList.contains('active')) {
+                    settingsModalOverlay.classList.remove('active');
+                }
+            });
+
+            // Sidebar Menu Navigation & Title Update
+            settingsMenuItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    settingsMenuItems.forEach(el => el.classList.remove('active'));
+                    item.classList.add('active');
+                    if (settingsPageTitle) {
+                        settingsPageTitle.textContent = item.getAttribute('data-title');
+                    }
+                });
+            });
+
+            // Sidebar Menu Search Filter
+            if (settingsMenuSearch) {
+                settingsMenuSearch.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase();
+                    settingsMenuItems.forEach(item => {
+                        const text = item.textContent.toLowerCase();
+                        if (text.includes(query)) {
+                            item.style.display = 'flex';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            }
+
+            // MFA Banner Close
+            if (btnCloseBanner) {
+                btnCloseBanner.addEventListener('click', () => {
+                    mfaBanner.classList.add('dismissed');
+                });
+            }
+
+            if (btnSetupMfa) {
+                btnSetupMfa.addEventListener('click', () => {
+                    alert('Setup MFA initiated. This feature will be implemented soon.');
+                });
+            }
+
+            // Accent Color Dot update
+            const colorMap = {
+                'Default': '#8e8e8e',
+                'Blue': '#3b82f6',
+                'Green': '#10a37f',
+                'Purple': '#a855f7',
+                'Orange': '#f97316'
+            };
+
+            if (accentColorSelect) {
+                accentColorSelect.addEventListener('change', (e) => {
+                    if (accentDot) {
+                        accentDot.style.backgroundColor = colorMap[e.target.value] || '#8e8e8e';
+                    }
+                });
+            }
+        })();
