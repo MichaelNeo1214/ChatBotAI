@@ -609,3 +609,85 @@
                 });
             }
         })();
+
+
+        const select = document.getElementById("languageSelect");
+const SOURCE_LANG = "en"; // bahasa asli konten yang kamu tulis di HTML
+const CACHE_KEY = "translationCache";
+const PREF_KEY = "preferredLanguage";
+
+// simpan teks asli tiap elemen, sekali aja, sebelum ada perubahan apapun
+function captureOriginalText() {
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    if (!el.dataset.original) {
+      el.dataset.original = el.textContent.trim();
+    }
+  });
+}
+
+function getCache() {
+  return JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
+}
+function saveCache(cache) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+}
+
+function detectBrowserLang() {
+  const supported = ["en", "id", "es", "fr", "de", "ja"];
+  const nav = (navigator.language || "en").slice(0, 2);
+  return supported.includes(nav) ? nav : "en";
+}
+
+async function translateText(text, targetLang) {
+  if (targetLang === SOURCE_LANG) return text;
+
+  const cache = getCache();
+  const cacheKey = `${targetLang}:${text}`;
+  if (cache[cacheKey]) return cache[cacheKey];
+
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${SOURCE_LANG}|${targetLang}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText || text;
+
+    cache[cacheKey] = translated;
+    saveCache(cache);
+    return translated;
+  } catch (err) {
+    console.error("Translation failed:", err);
+    return text; // fallback ke teks asli kalau API gagal
+  }
+}
+
+async function applyLanguage(lang) {
+  const targetLang = lang === "auto" ? detectBrowserLang() : lang;
+  const nodes = document.querySelectorAll("[data-i18n]");
+
+  document.body.style.opacity = "0.6"; // indikator loading ringan
+
+  await Promise.all(
+    Array.from(nodes).map(async el => {
+      const translated = await translateText(el.dataset.original, targetLang);
+      el.textContent = translated;
+    })
+  );
+
+  document.documentElement.setAttribute("lang", targetLang);
+  document.body.style.opacity = "1";
+}
+
+function initLanguage() {
+  captureOriginalText();
+  const saved = localStorage.getItem(PREF_KEY) || "auto";
+  select.value = saved;
+  applyLanguage(saved);
+}
+
+select.addEventListener("change", (e) => {
+  const value = e.target.value;
+  localStorage.setItem(PREF_KEY, value);
+  applyLanguage(value);
+});
+
+initLanguage();
