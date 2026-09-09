@@ -494,7 +494,15 @@
                 }
             });
 
-            // Sidebar Menu Navigation & Title Update
+            // Sidebar Menu Navigation & Panel Switch
+            const settingsPanels = document.querySelectorAll('.settings-panel');
+
+            function showSettingsPanel(key) {
+                settingsPanels.forEach(panel => {
+                    panel.classList.toggle('active', panel.getAttribute('data-panel') === key);
+                });
+            }
+
             settingsMenuItems.forEach(item => {
                 item.addEventListener('click', () => {
                     settingsMenuItems.forEach(el => el.classList.remove('active'));
@@ -502,6 +510,7 @@
                     if (settingsPageTitle) {
                         settingsPageTitle.textContent = item.getAttribute('data-title');
                     }
+                    showSettingsPanel(item.getAttribute('data-panel'));
                 });
             });
 
@@ -616,6 +625,50 @@ const SOURCE_LANG = "en"; // bahasa asli konten yang kamu tulis di HTML
 const CACHE_KEY = "translationCache";
 const PREF_KEY = "preferredLanguage";
 
+// Nilai <option> di dropdown adalah nama tampilan ("Auto-detect", "Bahasa Indonesia", ...),
+// sedangkan API translate butuh kode ("auto", "id", ...). Petakan di sini agar tidak
+// pernah terkirim nilai mentah seperti "Auto-detect" ke API (itu yang meracuni seluruh UI).
+const LANG_CODE_MAP = {
+  "auto": "auto", "Auto-detect": "auto",
+  "en": "en", "English (US)": "en",
+  "id": "id", "Bahasa Indonesia": "id",
+  "es": "es", "Español": "es",
+  "fr": "fr", "Français": "fr",
+  "de": "de", "Deutsch": "de",
+  "ja": "ja", "日本語": "ja"
+};
+
+// Ciri respons error MyMemory (dulu sempat ditulis ke seluruh UI + cache).
+const TRANSLATION_ERROR_RE = /invalid target language|invalid email|query length limit|no translation/i;
+
+function resolveTargetLang(value) {
+  const code = LANG_CODE_MAP[(value || "").trim()] || "auto";
+  return code === "auto" ? detectBrowserLang() : code;
+}
+
+function isBadTranslation(data, text) {
+  if (!data || data.responseStatus !== 200) return true;
+  const t = (data.responseData && data.responseData.translatedText) || "";
+  if (!t || t.trim() === "") return true;
+  return TRANSLATION_ERROR_RE.test(t);
+}
+
+// Hapus entri cache yang berisi pesan error (pemulihan otomatis untuk browser
+// yang sudah terlanjur keracunan sebelum fix ini dipasang).
+function purgeBadCache() {
+  try {
+    const cache = getCache();
+    let dirty = false;
+    Object.keys(cache).forEach(k => {
+      if (typeof cache[k] !== "string" || TRANSLATION_ERROR_RE.test(cache[k])) {
+        delete cache[k];
+        dirty = true;
+      }
+    });
+    if (dirty) saveCache(cache);
+  } catch (err) {}
+}
+
 // simpan teks asli tiap elemen, sekali aja, sebelum ada perubahan apapun
 function captureOriginalText() {
   document.querySelectorAll("[data-i18n]").forEach(el => {
@@ -643,13 +696,23 @@ async function translateText(text, targetLang) {
 
   const cache = getCache();
   const cacheKey = `${targetLang}:${text}`;
-  if (cache[cacheKey]) return cache[cacheKey];
+  if (cache[cacheKey]) {
+    // Jangan pernah pakai cache yang ternyata pesan error.
+    if (TRANSLATION_ERROR_RE.test(cache[cacheKey])) {
+      delete cache[cacheKey];
+      try { saveCache(cache); } catch (err) {}
+    } else {
+      return cache[cacheKey];
+    }
+  }
 
   try {
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${SOURCE_LANG}|${targetLang}`;
     const res = await fetch(url);
     const data = await res.json();
-    const translated = data?.responseData?.translatedText || text;
+    // Respons error API (status != 200 / pesan INVALID ...) jangan dipakai & jangan di-cache.
+    if (isBadTranslation(data, text)) return text;
+    const translated = data.responseData.translatedText;
 
     cache[cacheKey] = translated;
     saveCache(cache);
@@ -661,13 +724,14 @@ async function translateText(text, targetLang) {
 }
 
 async function applyLanguage(lang) {
-  const targetLang = lang === "auto" ? detectBrowserLang() : lang;
+  const targetLang = resolveTargetLang(lang);
   const nodes = document.querySelectorAll("[data-i18n]");
 
   document.body.style.opacity = "0.6"; // indikator loading ringan
 
   await Promise.all(
     Array.from(nodes).map(async el => {
+      if (!el.dataset.original) return;
       const translated = await translateText(el.dataset.original, targetLang);
       el.textContent = translated;
     })
@@ -679,15 +743,175 @@ async function applyLanguage(lang) {
 
 function initLanguage() {
   captureOriginalText();
-  const saved = localStorage.getItem(PREF_KEY) || "auto";
-  select.value = saved;
+  purgeBadCache();
+  let saved = null;
+  try {
+    saved = localStorage.getItem(PREF_KEY) || "auto";
+  } catch (err) {
+    saved = "auto";
+  }
+  if (!LANG_CODE_MAP[(saved || "").trim()]) saved = "auto";
+  if (select) {
+    const hasOption = Array.from(select.options).some(o => o.value === saved);
+    if (hasOption) select.value = saved;
+  }
   applyLanguage(saved);
 }
 
-select.addEventListener("change", (e) => {
-  const value = e.target.value;
-  localStorage.setItem(PREF_KEY, value);
-  applyLanguage(value);
-});
+if (select) {
+  select.addEventListener("change", (e) => {
+    const value = e.target.value;
+    try {
+      localStorage.setItem(PREF_KEY, value);
+    } catch (err) {}
+    applyLanguage(value);
+  });
+}
 
 initLanguage();
+
+// ====== Custom dropdown enhancer ======
+// Mengubah <select class="custom-select"> jadi dropdown custom bergaya gambar,
+// tanpa mengubah value/behavior JS lama (i18n, dsb) — select asli tetap disinkronkan.
+
+function enhanceSelect(select) {
+  const wrapper = select.closest('.select-wrapper');
+  if (!wrapper || wrapper.dataset.enhanced) return;
+  wrapper.dataset.enhanced = "true";
+
+  const options = Array.from(select.options);
+
+  // Trigger button
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'dd-trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+
+  const valueSpan = document.createElement('span');
+  valueSpan.className = 'select-value';
+
+  const arrow = document.createElement('i');
+  arrow.className = 'fa-solid fa-chevron-down select-arrow';
+
+  trigger.appendChild(valueSpan);
+  trigger.appendChild(arrow);
+
+  // Menu
+  const menu = document.createElement('ul');
+  menu.className = 'dd-menu';
+  menu.setAttribute('role', 'listbox');
+
+  function renderMenu() {
+    menu.innerHTML = '';
+    options.forEach(opt => {
+      const li = document.createElement('li');
+      li.className = 'dd-option';
+      li.setAttribute('role', 'option');
+      li.dataset.value = opt.value;
+      li.setAttribute('aria-selected', opt.value === select.value ? 'true' : 'false');
+
+      const label = document.createElement('span');
+      label.textContent = opt.textContent;
+
+      const check = document.createElement('i');
+      check.className = 'fa-solid fa-check check';
+
+      li.appendChild(label);
+      li.appendChild(check);
+      menu.appendChild(li);
+    });
+  }
+
+  function setValue(value, { silent = false } = {}) {
+    select.value = value;
+    const selectedOpt = options.find(o => o.value === value);
+    valueSpan.textContent = selectedOpt ? selectedOpt.textContent : '';
+    menu.querySelectorAll('.dd-option').forEach(li => {
+      li.setAttribute('aria-selected', li.dataset.value === value ? 'true' : 'false');
+    });
+    if (!silent) {
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  function openMenu() {
+    wrapper.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  function closeMenu() {
+    wrapper.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.select-wrapper.open').forEach(w => {
+      if (w !== wrapper) w.classList.remove('open');
+    });
+    wrapper.classList.contains('open') ? closeMenu() : openMenu();
+  });
+
+  menu.addEventListener('click', (e) => {
+    const li = e.target.closest('.dd-option');
+    if (!li) return;
+    setValue(li.dataset.value);
+    closeMenu();
+    trigger.focus();
+  });
+
+  // Keyboard support dasar
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      openMenu();
+      menu.querySelector('.dd-option')?.focus();
+    }
+  });
+  menu.setAttribute('tabindex', '-1');
+  menu.addEventListener('keydown', (e) => {
+    const items = Array.from(menu.querySelectorAll('.dd-option'));
+    const idx = items.findIndex(i => i === document.activeElement);
+    if (e.key === 'Escape') { closeMenu(); trigger.focus(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0]).focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1]).focus(); }
+    if (e.key === 'Enter') { document.activeElement.click(); }
+  });
+  menu.querySelectorAll('.dd-option').forEach(li => li.tabIndex = -1);
+
+  document.addEventListener('click', (e) => {
+    if (!wrapper.contains(e.target)) closeMenu();
+  });
+
+  renderMenu();
+  setValue(select.value, { silent: true });
+
+  wrapper.appendChild(trigger);
+  wrapper.appendChild(menu);
+}
+
+function enhanceAllSelects() {
+  document.querySelectorAll('select.custom-select').forEach(enhanceSelect);
+}
+
+document.addEventListener('DOMContentLoaded', enhanceAllSelects);
+
+function initSettingsMenu() {
+  const items = document.querySelectorAll('#settingsMenuList .settings-menu-item');
+  const panels = document.querySelectorAll('#settingsPanels .settings-panel');
+
+  items.forEach(item => {
+    item.addEventListener('click', () => {
+      const target = item.dataset.panel;
+
+      items.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+
+      panels.forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.panel === target);
+      });
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initSettingsMenu);

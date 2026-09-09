@@ -106,10 +106,7 @@
             
             <div class="topbar-spacer"></div>
             <div class="topbar-right">
-                <button class="btn-icon" id="btnThemeToggle" aria-label="Toggle theme">
-                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                </button>
+
                 <button class="btn-icon" id="btnOpenSettings" aria-label="Settings">
                     <i class="fa-solid fa-gear"></i>
                 </button>
@@ -252,110 +249,343 @@
                 </div>
 
                 <ul class="settings-menu-list" id="settingsMenuList">
-                    <li class="settings-menu-item active" data-title="General"><i class="fa-solid fa-gear"></i> General</li>
-                    <li class="settings-menu-item" data-title="Notifications"><i class="fa-regular fa-bell"></i> Notifications</li>
-                    <li class="settings-menu-item" data-title="Personalization"><i class="fa-solid fa-wand-magic-sparkles"></i> Personalization</li>
-                    <li class="settings-menu-item" data-title="Plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
-                    <li class="settings-menu-item" data-title="Voice"><i class="fa-solid fa-microphone"></i> Voice</li>
-                    <li class="settings-menu-item" data-title="Billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
-                    <li class="settings-menu-item" data-title="Usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
-                    <li class="settings-menu-item" data-title="Analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
-                    <li class="settings-menu-item" data-title="Data controls"><i class="fa-solid fa-database"></i> Data controls</li>
-                    <li class="settings-menu-item" data-title="Storage"><i class="fa-solid fa-hard-drive"></i> Storage</li>
-                    <li class="settings-menu-item" data-title="Safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
-                    <li class="settings-menu-item" data-title="Security and login"><i class="fa-solid fa-key"></i> Security and login</li>
-                    <li class="settings-menu-item" data-title="Parental controls"><i class="fa-solid fa-user-group"></i> Parental controls</li>
-                    <li class="settings-menu-item" data-title="Account"><i class="fa-regular fa-circle-user"></i> Account</li>
+                    <li class="settings-menu-item active" data-title="General" data-panel="general"><i class="fa-solid fa-gear"></i> General</li>
+                    <li class="settings-menu-item" data-title="Notifications" data-panel="notifications"><i class="fa-regular fa-bell"></i> Notifications</li>
+                    <li class="settings-menu-item" data-title="Personalization" data-panel="personalization"><i class="fa-solid fa-wand-magic-sparkles"></i> Personalization</li>
+                    <li class="settings-menu-item" data-title="Plugins" data-panel="plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
+                    <li class="settings-menu-item" data-title="Voice" data-panel="voice"><i class="fa-solid fa-microphone"></i> Voice</li>
+                    <li class="settings-menu-item" data-title="Billing" data-panel="billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
+                    <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
+                    <li class="settings-menu-item" data-title="Analytics" data-panel="analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
+                    <li class="settings-menu-item" data-title="Data controls" data-panel="data-controls"><i class="fa-solid fa-database"></i> Data controls</li>
+                    <li class="settings-menu-item" data-title="Storage" data-panel="storage"><i class="fa-solid fa-hard-drive"></i> Storage</li>
+                    <li class="settings-menu-item" data-title="Safety" data-panel="safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
+                    <li class="settings-menu-item" data-title="Security and login" data-panel="security-login"><i class="fa-solid fa-key"></i> Security and login</li>
+                    <li class="settings-menu-item" data-title="Parental controls" data-panel="parental-controls"><i class="fa-solid fa-user-group"></i> Parental controls</li>
+                    <li class="settings-menu-item" data-title="Account" data-panel="account"><i class="fa-regular fa-circle-user"></i> Account</li>
                 </ul>
             </div>
 
             <!-- Settings Content Panel -->
-            <div class="settings-content-panel">
-                <h2 class="settings-page-title" id="settingsPageTitle">General</h2>
+<div class="settings-panels" id="settingsPanels">
+    <div class="settings-panel active" data-panel="general">
+      <h2>General</h2>
 
-                <!-- MFA Security Banner -->
-                <div class="mfa-banner" id="mfaBanner">
-                    <button class="btn-banner-close" id="btnCloseBanner" title="Dismiss">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                    <div class="mfa-icon-wrap">
-                        <i class="fa-solid fa-shield-halved mfa-icon"></i>
-                    </div>
-                    <div class="mfa-title">Secure your account</div>
-                    <div class="mfa-desc">
-                        Add multi-factor authentication (MFA), like a text message or authenticator app, to help protect your account when logging in.
-                    </div>
-                    <button class="btn-mfa" id="btnSetupMfa">Set up MFA</button>
-                </div>
 
-                <!-- Settings Items -->
-                <div class="setting-row">
-                    <span class="setting-label">Appearance</span>
-                    <div class="select-wrapper">
-            <select class="custom-select" id="appearanceSelect">
-                <option value="Dark">Dark</option>
-                <option value="Light">Light</option>
-                </select>
-                <i class="fa-solid fa-chevron-down select-arrow"></i>
-                </div>
-                </div>
 
-                <div class="setting-row">
-                    <span class="setting-label">Contrast</span>
-                    <div class="select-wrapper">
-                        <select class="custom-select" id="contrastSelect">
-                            <option value="System">System</option>
-                            <option value="Standard">Standard</option>
-                            <option value="High">High</option>
-                        </select>
-                        <i class="fa-solid fa-chevron-down select-arrow"></i>
-                    </div>
-                </div>
+      <div class="setting-row">
+        <span class="setting-label">Appearance</span>
+        <div class="select-wrapper">
+          <select class="custom-select" id="appearanceSelect">
+            <option value="Dark">Dark</option>
+            <option value="Light">Light</option>
+          </select>
+          <i class="fa-solid fa-chevron-down select-arrow"></i>
+        </div>
+      </div>
 
-                <div class="setting-row">
-                    <span class="setting-label">Accent color</span>
-                    <div class="accent-select-wrap">
-                        <span class="accent-dot" id="accentDot"></span>
-                        <div class="select-wrapper">
-                            <select class="custom-select" id="accentColorSelect">
-                                <option value="Default">Default</option>
-                                <option value="Blue">Blue</option>
-                                <option value="Green">Green</option>
-                                <option value="Purple">Purple</option>
-                                <option value="Orange">Orange</option>
-                            </select>
-                            <i class="fa-solid fa-chevron-down select-arrow"></i>
-                        </div>
-                    </div>
-                </div>
+      <div class="setting-row">
+        <span class="setting-label">Contrast</span>
+        <div class="select-wrapper">
+          <select class="custom-select" id="contrastSelect">
+            <option value="System">System</option>
+            <option value="Standard">Standard</option>
+            <option value="High">High</option>
+          </select>
+          <i class="fa-solid fa-chevron-down select-arrow"></i>
+        </div>
+      </div>
 
-                <div class="setting-row">
-                    <span class="setting-label">Language</span>
-                    <div class="select-wrapper">
-                        <select class="custom-select" id="languageSelect">
-                        <option value="auto">Auto-detect</option>
-                    <option value="en">English (US)</option>
-                    <option value="id">Bahasa Indonesia</option>
-                    <option value="es">Español</option>
-                    <option value="fr">Français</option>
-                    <option value="de">Deutsch</option>
-                    <option value="ja">日本語</option>
-                    </select>
-                        <i class="fa-solid fa-chevron-down select-arrow"></i>
-                    </div>
-                </div>
+      <div class="setting-row">
+        <span class="setting-label">Accent color</span>
+        <div class="accent-select-wrap">
+          <span class="accent-dot" id="accentDot"></span>
+          <div class="select-wrapper">
+            <select class="custom-select" id="accentColorSelect">
+              <option value="Default">Default</option>
+              <option value="Blue">Blue</option>
+              <option value="Green">Green</option>
+              <option value="Purple">Purple</option>
+              <option value="Orange">Orange</option>
+            </select>
+            <i class="fa-solid fa-chevron-down select-arrow"></i>
+          </div>
+        </div>
+      </div>
 
-                <div class="setting-row" style="border-bottom: none;">
-                    <div class="setting-info">
-                        <span class="setting-label">Higher intelligence</span>
-                        <span class="setting-sublabel">ChatGPT can automatically use a higher intelligence setting when you ask a complex question.</span>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="higherIntelligenceToggle" checked>
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
+      <div class="setting-row">
+        <span class="setting-label">Language</span>
+        <div class="select-wrapper">
+          <select class="custom-select" id="languageSelect">
+            <option value="Auto-detect">Auto-detect</option>
+            <option value="English (US)">English (US)</option>
+            <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+            <option value="Español">Español</option>
+            <option value="Français">Français</option>
+            <option value="Deutsch">Deutsch</option>
+            <option value="日本語">日本語</option>
+          </select>
+          <i class="fa-solid fa-chevron-down select-arrow"></i>
+        </div>
+      </div>
+
+
+    </div>
+
+<div class="settings-panel" data-panel="notifications">
+      <h2>Notifications</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Email notifications</div>
+          <div class="setting-desc">Get updates and summaries sent to your email.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Push notifications</div>
+          <div class="setting-desc">Receive alerts on this device.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Product announcements</div>
+          <div class="setting-desc">News about new features and updates.</div>
+        </div>
+        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <!-- PERSONALIZATION -->
+    <div class="settings-panel" data-panel="personalization">
+      <h2>Personalization</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Memory</div>
+          <div class="setting-desc">Let the assistant remember details across conversations.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Custom instructions</div>
+          <div class="setting-desc">Set how responses should sound and what to keep in mind.</div>
+        </div>
+        <button class="btn">Edit</button>
+      </div>
+    </div>
+
+    <!-- PLUGINS -->
+    <div class="settings-panel" data-panel="plugins">
+      <h2>Plugins</h2>
+      <div class="plugin-row">
+        <div>
+          <div class="plugin-name">Web Search</div>
+          <div class="plugin-desc">Search the web for current information.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="plugin-row">
+        <div>
+          <div class="plugin-name">Code Interpreter</div>
+          <div class="plugin-desc">Run code and analyze files.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="plugin-row">
+        <div>
+          <div class="plugin-name">Image Generation</div>
+          <div class="plugin-desc">Create images from text prompts.</div>
+        </div>
+        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <!-- VOICE -->
+    <div class="settings-panel" data-panel="voice">
+      <h2>Voice</h2>
+      <div class="setting-row">
+        <span class="setting-label">Voice</span>
+        <div class="select-wrapper">
+          <select class="custom-select" id="voiceSelect">
+            <option value="Ember">Ember</option>
+            <option value="Sky">Sky</option>
+            <option value="Sol">Sol</option>
+            <option value="Nova">Nova</option>
+          </select>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Playback speed</span>
+        <div class="select-wrapper">
+          <select class="custom-select" id="speedSelect">
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLING -->
+    <div class="settings-panel" data-panel="billing">
+      <h2>Billing</h2>
+      <div class="plan-card">
+        <div>
+          <div class="plan-name">Free plan</div>
+          <div class="plan-sub">Basic access with limited usage.</div>
+        </div>
+        <button class="btn primary">Upgrade</button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Payment method</span>
+        <button class="btn">Add payment method</button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Billing history</span>
+        <button class="btn">View invoices</button>
+      </div>
+    </div>
+
+    <!-- USAGE -->
+    <div class="settings-panel" data-panel="usage">
+      <h2>Usage</h2>
+      <div class="setting-row" style="display:block;">
+        <span class="setting-label">Messages this month</span>
+        <div class="usage-bar-track"><div class="usage-bar-fill" style="width:42%;"></div></div>
+        <div class="setting-desc" style="margin-top:6px;">420 / 1,000 messages used</div>
+      </div>
+      <div class="setting-row" style="display:block;">
+        <span class="setting-label">Storage used</span>
+        <div class="usage-bar-track"><div class="usage-bar-fill" style="width:18%;"></div></div>
+        <div class="setting-desc" style="margin-top:6px;">1.8 GB / 10 GB used</div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div class="settings-panel" data-panel="analytics">
+      <h2>Analytics</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Share usage analytics</div>
+          <div class="setting-desc">Help improve the product by sharing anonymous usage data.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Crash reports</div>
+          <div class="setting-desc">Automatically send crash logs when something breaks.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <!-- DATA CONTROLS -->
+    <div class="settings-panel" data-panel="data-controls">
+      <h2>Data controls</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Improve the model for everyone</div>
+          <div class="setting-desc">Allow your conversations to be used for training.</div>
+        </div>
+        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Export data</span>
+        <button class="btn">Export</button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Delete all chats</span>
+        <button class="btn danger">Delete all</button>
+      </div>
+    </div>
+
+    <!-- STORAGE -->
+    <div class="settings-panel" data-panel="storage">
+      <h2>Storage</h2>
+      <div class="setting-row" style="display:block;">
+        <span class="setting-label">Total storage</span>
+        <div class="usage-bar-track"><div class="usage-bar-fill" style="width:65%;"></div></div>
+        <div class="setting-desc" style="margin-top:6px;">6.5 GB / 10 GB used</div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Clear cached files</span>
+        <button class="btn">Clear cache</button>
+      </div>
+    </div>
+
+    <!-- SAFETY -->
+    <div class="settings-panel" data-panel="safety">
+      <h2>Safety</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Sensitive content filter</div>
+          <div class="setting-desc">Blur or block potentially sensitive images and text.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Report a concern</span>
+        <button class="btn">Report</button>
+      </div>
+    </div>
+
+    <!-- SECURITY AND LOGIN -->
+    <div class="settings-panel" data-panel="security-login">
+      <h2>Security and login</h2>
+      <div class="setting-row">
+        <span class="setting-label">Password</span>
+        <button class="btn">Change password</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Two-factor authentication</div>
+          <div class="setting-desc">Add an extra layer of security to your account.</div>
+        </div>
+        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Active sessions</span>
+        <button class="btn">Manage sessions</button>
+      </div>
+    </div>
+
+    <!-- PARENTAL CONTROLS -->
+    <div class="settings-panel" data-panel="parental-controls">
+      <h2>Parental controls</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Restricted mode</div>
+          <div class="setting-desc">Limit access to mature or sensitive content.</div>
+        </div>
+        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Linked accounts</span>
+        <button class="btn">Manage</button>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div class="settings-panel" data-panel="account">
+      <h2>Account</h2>
+      <div class="setting-row">
+        <span class="setting-label">Email</span>
+        <span class="setting-desc">user@example.com</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Sign out of all devices</span>
+        <button class="btn">Sign out everywhere</button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Delete account</span>
+        <button class="btn danger">Delete account</button>
+      </div>
+    </div>
+</div>
         </div>
     </div>
 
