@@ -13,6 +13,11 @@
 
 <body>
 
+    <!-- Sidebar Toggle (single fixed icon, top-left, like Gemini) -->
+    <button class="btn-toggle-sidebar" id="btnOpenSidebar" aria-label="Toggle sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+    </button>
+
     <!-- Sidebar Overlay (mobile/tablet) -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
@@ -20,21 +25,17 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-top">
-                <button class="btn-new-chat" id="btnNewChat">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                    <span data-i18n="newChat">New chat</span>
-                </button>
-                <button class="btn-icon" id="btnCloseSidebar" aria-label="Close sidebar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
-                </button>
+                <span class="sidebar-brand" data-i18n="brandName">ChatBot</span>
+                <div class="sidebar-top-actions">
+                    <button class="btn-header-action" id="btnSearchPopup" aria-label="Search conversations">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="search-box">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="searchInput" placeholder="Search conversations..." data-i18n-ph="searchConversations" aria-label="Search conversations">
-                <button class="btn-clear-search" id="btnClearSearch" aria-label="Clear search" hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-            </div>
+            <button class="btn-new-chat" id="btnNewChat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span data-i18n="newChat">New chat</span>
+            </button>
         </div>
 
         <nav class="chat-history" id="chatHistory" aria-label="Chat history">
@@ -82,7 +83,6 @@
                         </div>
                     </div>
                 </div>
-            <div class="no-results" id="noResults">No conversations found</div>
         </nav>
 
         <div class="sidebar-footer">
@@ -96,14 +96,23 @@
         </div>
     </aside>
 
+    <!-- Search Popup -->
+    <div class="search-popup" id="searchPopup" hidden>
+        <div class="search-popup-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="searchPopupInput" placeholder="Search conversations..." data-i18n-ph="searchConversations" aria-label="Search conversations" autocomplete="off">
+            <button class="btn-clear-search" id="btnPopupClear" aria-label="Clear search" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="search-popup-list" id="searchPopupList"></div>
+        <div class="search-popup-empty" id="searchPopupEmpty" hidden>No conversations found</div>
+    </div>
+
     <!-- Main -->
     <main class="main" id="main">
         <!-- Top Bar -->
         <div class="topbar">
-            <button class="btn-toggle-sidebar" id="btnOpenSidebar" aria-label="Open sidebar">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
-            </button>
-            
             <div class="topbar-spacer"></div>
             <div class="topbar-right">
 
@@ -167,6 +176,7 @@
             
             <div class="input-wrapper">
     <div class="input-box">
+        <div class="file-preview-area" id="filePreviewArea" hidden></div>
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Message ChatBot AI..." data-i18n-ph="inputPlaceholder" aria-label="Message input"></textarea>
         <div class="input-bottom">
             <div class="input-tools">

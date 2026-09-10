@@ -5,7 +5,6 @@
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
             const btnOpen = document.getElementById('btnOpenSidebar');
-            const btnClose = document.getElementById('btnCloseSidebar');
             const btnNewChat = document.getElementById('btnNewChat');
             const chatInput = document.getElementById('chatInput');
             const btnSend = document.getElementById('btnSend');
@@ -15,14 +14,10 @@
             const typingIndicator = document.getElementById('typingIndicator');
             const historyItems = document.querySelectorAll('.history-item');
             const quickActions = document.querySelectorAll('.quick-action');
-            const searchInput = document.getElementById('searchInput');
-            const btnClearSearch = document.getElementById('btnClearSearch');
-            const btnThemeToggle = document.getElementById('btnThemeToggle');
             const btnModelDropdown = document.getElementById('btnModelDropdown');
             const modelDropdown = document.getElementById('modelDropdown');
             const modelOptions = document.querySelectorAll('.model-option');
             const currentModel = document.getElementById('currentModel');
-            const chatHistory = document.getElementById('chatHistory');
             const btnSignIn = document.getElementById('btnSignIn');
             const account = document.getElementById('account');
             const accountName = document.getElementById('accountName');
@@ -34,6 +29,7 @@
             let chatStarted = false;
             let currentConversationId = null;
             let inFlight = null;
+            const attachedFiles = [];
 
             // ===== BACKEND =====
             const API_BASE = '/api';
@@ -149,7 +145,6 @@
             }
 
             btnOpen.addEventListener('click', toggleSidebar);
-            btnClose.addEventListener('click', closeSidebar);
             overlay.addEventListener('click', closeSidebar);
 
             // Initialize sidebar state: closed by default on first open
@@ -177,7 +172,7 @@
 
             // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
             function updateSendState() {
-                const hasText = chatInput.value.trim() !== '';
+                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0;
                 btnSend.disabled = !hasText;
                 btnSend.classList.toggle('active', hasText);
             }
@@ -190,7 +185,7 @@
 
             // ===== SEND MESSAGE =====
             function sendMessage(text) {
-                if (!text || text.trim() === '') return;
+                if ((!text || text.trim() === '') && attachedFiles.length === 0) return;
 
                 if (!chatStarted) {
                     chatStarted = true;
@@ -198,12 +193,24 @@
                     messagesWrapper.classList.add('visible');
                 }
 
-                // Add user message
-                addMessage('user', text.trim());
+                let outText = (text || '').trim();
+                if (attachedFiles.length > 0) {
+                    const names = attachedFiles.map(function(f) { return f.name; }).join(', ');
+                    outText = (outText ? outText + '\n' : '') + '[Attached files: ' + names + ']';
+                }
 
-                // Clear input
+                // Add user message
+                addMessage('user', outText);
+
+                // Clear input + attachments
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
+                attachedFiles.length = 0;
+                const filePreviewArea = document.getElementById('filePreviewArea');
+                if (filePreviewArea) {
+                    filePreviewArea.innerHTML = '';
+                    filePreviewArea.hidden = true;
+                }
                 updateSendState();
 
                 // Show typing
@@ -212,7 +219,7 @@
 
                 let reply = null;
                 streamChat(
-                    text.trim(),
+                    outText,
                     function onMeta(meta) {
                         currentConversationId = meta.conversationId;
                     },
@@ -386,52 +393,88 @@
                 chatInput.focus();
             });
 
-            // ===== SEARCH CONVERSATIONS =====
-            function filterHistory(query) {
-                query = query.trim().toLowerCase();
-                const sections = document.querySelectorAll('.history-section');
-                let anyMatch = false;
+            // ===== SEARCH POPUP (icon -> popup bar + conversation list) =====
+            const btnSearchPopup = document.getElementById('btnSearchPopup');
+            const searchPopup = document.getElementById('searchPopup');
+            const searchPopupInput = document.getElementById('searchPopupInput');
+            const searchPopupList = document.getElementById('searchPopupList');
+            const searchPopupEmpty = document.getElementById('searchPopupEmpty');
+            const btnPopupClear = document.getElementById('btnPopupClear');
 
-                sections.forEach(function(section) {
-                    let sectionMatch = false;
-                    const items = section.querySelectorAll('.history-item');
-                    items.forEach(function(item) {
-                        const text = item.querySelector('.history-item-text').textContent.toLowerCase();
-                        const match = !query || text.indexOf(query) !== -1;
-                        item.classList.toggle('hidden', !match);
-                        if (match) sectionMatch = true;
-                    });
-                    section.classList.toggle('has-matches', sectionMatch);
-                    if (sectionMatch) anyMatch = true;
-                });
-
-                chatHistory.classList.toggle('searching', !!query);
-                btnClearSearch.hidden = !query;
-                const noResults = document.querySelector('.no-results');
-                if (noResults) {
-                    noResults.classList.toggle('visible', !!query && !anyMatch);
-                }
+            function closeSearchPopup() {
+                if (searchPopup) searchPopup.hidden = true;
             }
 
-            if (searchInput) {
-                searchInput.addEventListener('input', function() {
-                    filterHistory(this.value);
+            function renderSearchResults(query) {
+                query = (query || '').trim().toLowerCase();
+                if (!searchPopupList) return;
+                searchPopupList.innerHTML = '';
+                const items = Array.from(document.querySelectorAll('.history-item'));
+                const matches = items.filter(function(item) {
+                    const t = item.querySelector('.history-item-text');
+                    return t && (!query || t.textContent.toLowerCase().indexOf(query) !== -1);
                 });
-                searchInput.addEventListener('keydown', function(e) {
-                    if (e.key === 'Escape') {
-                        this.value = '';
-                        filterHistory('');
-                        this.blur();
+                if (btnPopupClear) btnPopupClear.hidden = !query;
+                if (searchPopupEmpty) searchPopupEmpty.hidden = matches.length !== 0;
+                matches.forEach(function(item) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'search-popup-item' + (item.classList.contains('active') ? ' active' : '');
+                    const label = document.createElement('span');
+                    label.className = 'search-popup-item-text';
+                    label.textContent = item.querySelector('.history-item-text').textContent;
+                    btn.appendChild(label);
+                    btn.addEventListener('click', function() {
+                        item.click();
+                        closeSearchPopup();
+                    });
+                    searchPopupList.appendChild(btn);
+                });
+            }
+
+            function openSearchPopup() {
+                if (!searchPopup) return;
+                searchPopup.hidden = false;
+                renderSearchResults(searchPopupInput ? searchPopupInput.value : '');
+                if (searchPopupInput) searchPopupInput.focus();
+            }
+
+            if (btnSearchPopup) {
+                btnSearchPopup.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (searchPopup && !searchPopup.hidden) {
+                        closeSearchPopup();
+                    } else {
+                        openSearchPopup();
                     }
                 });
             }
 
-            if (btnClearSearch) {
-                btnClearSearch.addEventListener('click', function() {
-                    if (searchInput) {
-                        searchInput.value = '';
-                        filterHistory('');
-                        searchInput.focus();
+            if (searchPopup) {
+                searchPopup.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+            }
+
+            if (searchPopupInput) {
+                searchPopupInput.addEventListener('input', function() {
+                    renderSearchResults(this.value);
+                });
+                searchPopupInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        this.value = '';
+                        renderSearchResults('');
+                        closeSearchPopup();
+                    }
+                });
+            }
+
+            if (btnPopupClear) {
+                btnPopupClear.addEventListener('click', function() {
+                    if (searchPopupInput) {
+                        searchPopupInput.value = '';
+                        renderSearchResults('');
+                        searchPopupInput.focus();
                     }
                 });
             }
@@ -451,13 +494,6 @@
                 try {
                     sessionStorage.setItem('chatbot-theme', theme);
                 } catch (e) {}
-            }
-
-            if (btnThemeToggle) {
-                btnThemeToggle.addEventListener('click', function() {
-                    const isLight = document.body.classList.contains('light');
-                    applyTheme(isLight ? 'dark' : 'light');
-                });
             }
 
             if (appearanceSelect) {
@@ -492,6 +528,7 @@
                     const isOpen = !modelDropdown.hidden;
                     closeModelDropdown();
                     closePlusDropdown();
+                    closeSearchPopup();
                     if (!isOpen) {
                         modelDropdown.hidden = false;
                         btnModelDropdown.parentElement.classList.add('open');
@@ -514,20 +551,34 @@
             const btnPlus = document.getElementById('btnPlus');
             const plusDropdown = document.getElementById('plusDropdown');
 
-            function openPlusDropdown() {
-                plusDropdown.hidden = false;
-                btnPlus.classList.add('open');
-            }
-
             function plusDropdownIsOpen() {
                 return plusDropdown && !plusDropdown.hidden;
+            }
+
+            function closeAllSubmenus() {
+                if (!plusDropdown) return;
+                plusDropdown.querySelectorAll('.plus-submenu.open').forEach(function(m) {
+                    m.classList.remove('open');
+                });
+                plusDropdown.querySelectorAll('.plus-option-wrapper.open').forEach(function(w) {
+                    w.classList.remove('open');
+                });
             }
 
             function closePlusDropdown() {
                 if (plusDropdown) {
                     plusDropdown.hidden = true;
-                    btnPlus.classList.remove('open');
+                    if (btnPlus) btnPlus.classList.remove('open');
+                    closeAllSubmenus();
                 }
+            }
+
+            function handlePlusChoice(item) {
+                const label = (item.textContent || '').trim();
+                if (!label) return;
+                chatInput.value = (chatInput.value ? chatInput.value.replace(/\s+$/, '') + ' ' : '') + '[' + label + '] ';
+                updateSendState();
+                chatInput.focus();
             }
 
             if (btnPlus && plusDropdown) {
@@ -535,6 +586,7 @@
                     e.stopPropagation();
                     const isOpen = !plusDropdown.hidden;
                     closeModelDropdown();
+                    closeSearchPopup();
                     closePlusDropdown();
                     if (!isOpen) {
                         plusDropdown.hidden = false;
@@ -544,13 +596,132 @@
 
                 plusDropdown.addEventListener('click', function(e) {
                     e.stopPropagation();
+                    const submenuTrigger = e.target.closest('[data-submenu]');
+                    if (submenuTrigger && plusDropdown.contains(submenuTrigger)) {
+                        const menu = document.getElementById(submenuTrigger.getAttribute('data-submenu'));
+                        const wrapper = submenuTrigger.closest('.plus-option-wrapper');
+                        const willOpen = menu && !menu.classList.contains('open');
+                        closeAllSubmenus();
+                        if (menu && wrapper && willOpen) {
+                            menu.classList.add('open');
+                            wrapper.classList.add('open');
+                        }
+                        return;
+                    }
+                    if (e.target.closest('.dropdown-item')) {
+                        handlePlusChoice(e.target.closest('.dropdown-item'));
+                        closePlusDropdown();
+                        return;
+                    }
+                    // Leaf actions (upload / voice / create image) have their own
+                    // handlers below; just close the menu here.
                     closePlusDropdown();
+                });
+            }
+
+            // ===== PLUS ACTIONS: upload / voice / create image =====
+            const uploadBtn = document.getElementById('btnUploadFile');
+            const fileInput = document.getElementById('fileInput');
+
+            if (uploadBtn && fileInput) {
+                uploadBtn.addEventListener('click', function() {
+                    fileInput.click();
+                });
+            }
+
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    const files = Array.from(e.target.files || []);
+                    files.forEach(function(file) {
+                        fileToBase64(file).then(function(base64) {
+                            attachedFiles.push({
+                                name: file.name,
+                                type: file.type,
+                                data: base64
+                            });
+                            renderFilePreview(file);
+                        }).catch(function() {});
+                    });
+                    fileInput.value = '';
+                });
+            }
+
+            function fileToBase64(file) {
+                return new Promise(function(resolve, reject) {
+                    const reader = new FileReader();
+                    reader.onload = function() { resolve(reader.result.split(',')[1]); };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            function renderFilePreview(file) {
+                const filePreviewArea = document.getElementById('filePreviewArea');
+                if (!filePreviewArea) return;
+                filePreviewArea.hidden = false;
+                const chip = document.createElement('div');
+                chip.className = 'file-chip';
+                const name = document.createElement('span');
+                name.textContent = file.name;
+                name.title = file.name;
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'file-chip-remove';
+                remove.setAttribute('aria-label', 'Remove attachment');
+                remove.textContent = '×';
+                remove.addEventListener('click', function() {
+                    const idx = attachedFiles.findIndex(function(f) { return f.name === file.name; });
+                    if (idx !== -1) attachedFiles.splice(idx, 1);
+                    chip.remove();
+                    if (!filePreviewArea.hasChildNodes()) filePreviewArea.hidden = true;
+                    updateSendState();
+                });
+                chip.appendChild(name);
+                chip.appendChild(remove);
+                filePreviewArea.appendChild(chip);
+                updateSendState();
+            }
+
+            const btnVoiceInput = document.getElementById('btnVoiceInput');
+            if (btnVoiceInput) {
+                btnVoiceInput.addEventListener('click', function() {
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (!SR) {
+                        chatInput.focus();
+                        return;
+                    }
+                    try {
+                        const rec = new SR();
+                        rec.lang = (navigator.language || 'en-US');
+                        rec.interimResults = false;
+                        rec.maxAlternatives = 1;
+                        rec.onresult = function(ev) {
+                            const transcript = Array.from(ev.results).map(function(r) { return r[0].transcript; }).join(' ');
+                            chatInput.value = (chatInput.value ? chatInput.value.replace(/\s+$/, '') + ' ' : '') + transcript;
+                            updateSendState();
+                            chatInput.focus();
+                        };
+                        rec.start();
+                    } catch (err) {}
+                });
+            }
+
+            const btnCreateImage = document.getElementById('btnCreateImage');
+            if (btnCreateImage) {
+                btnCreateImage.addEventListener('click', function() {
+                    const prefix = '/image ';
+                    if (chatInput.value.indexOf(prefix) !== 0) {
+                        chatInput.value = prefix + chatInput.value;
+                    }
+                    updateSendState();
+                    chatInput.focus();
                 });
             }
 
             document.addEventListener('click', function() {
                 if (modelDropdown && !modelDropdown.hidden) closeModelDropdown();
                 if (plusDropdownIsOpen()) closePlusDropdown();
+                closeSearchPopup();
             });
 
             // ===== KEYBOARD SHORTCUT =====
@@ -1030,42 +1201,4 @@ function initSettingsMenu() {
 }
 
 document.addEventListener('DOMContentLoaded', initSettingsMenu);
-
-const uploadBtn = document.querySelector('.plus-option[aria-label="Attach file"]');
-const fileInput = document.getElementById('fileInput');
-
-uploadBtn.addEventListener('click', () => {
-  fileInput.click();
-});
-
-fileInput.addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files);
-  for (const file of files) {
-    const base64 = await fileToBase64(file);
-    // simpan di state biar ikut terkirim pas user submit pesan
-    attachedFiles.push({
-      name: file.name,
-      type: file.type,
-      data: base64
-    });
-    renderFilePreview(file);
-  }
-});
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]); // buang prefix data:...;base64,
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function renderFilePreview(file) {
-  // tampilkan chip/thumbnail nama file di atas input chat
-  const preview = document.createElement('div');
-  preview.className = 'file-chip';
-  preview.textContent = file.name;
-  document.querySelector('.file-preview-area')?.appendChild(preview);
-}
 
