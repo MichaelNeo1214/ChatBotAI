@@ -60,6 +60,10 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
                         <span data-i18n="menuSignIn">Sign in</span>
                     </button>
+                    <button class="user-menu-item" id="menuProfile" role="menuitem" type="button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span data-i18n="menuProfile">Profile</span>
+                    </button>
                     <button class="user-menu-item" id="menuSettings" role="menuitem" type="button">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                         <span data-i18n="menuSettings">Settings</span>
@@ -723,6 +727,41 @@
             <div class="key-alert-actions">
                 <button class="btn primary" id="btnKeyAlertSettings" type="button">Open API Key Settings</button>
                 <button class="btn" id="btnKeyAlertClose" type="button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Popup -->
+    <div class="profile-overlay" id="profileOverlay" hidden>
+        <div class="profile-card" role="dialog" aria-labelledby="profileTitle">
+            <div class="profile-title" id="profileTitle" data-i18n="profileTitle">Profile</div>
+            <div class="profile-error" id="profileError" hidden></div>
+            <div id="profileMain">
+                <div class="profile-photo-wrap">
+                    <div class="profile-photo" id="profilePhoto">U</div>
+                    <button class="profile-photo-edit" id="btnPhotoEdit" type="button" aria-label="Change profile picture">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                    <input type="file" id="photoInput" accept="image/*" hidden>
+                </div>
+                <div class="profile-name-row">
+                    <span class="profile-name" id="profileName">User</span>
+                    <button class="profile-rename-btn" id="btnRenameProfile" type="button">
+                        <span data-i18n="profileRename">Rename</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                </div>
+                <div class="profile-email" id="profileEmail">Not signed in</div>
+                <button class="btn primary profile-close-btn" id="btnProfileClose" type="button">Close</button>
+            </div>
+            <div id="profileCrop" hidden>
+                <canvas class="profile-crop-canvas" id="cropCanvas" width="440" height="440"></canvas>
+                <input class="profile-crop-zoom" id="cropZoom" type="range" min="1" max="3" step="0.01" value="1" aria-label="Zoom">
+                <div class="setting-desc" data-i18n="profileCropHint">Drag to position • slide to zoom</div>
+                <div class="profile-crop-actions">
+                    <button class="btn primary" id="btnCropSave" type="button">Save</button>
+                    <button class="btn" id="btnCropCancel" type="button">Cancel</button>
+                </div>
             </div>
         </div>
     </div>
