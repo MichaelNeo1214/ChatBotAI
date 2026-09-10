@@ -1,3 +1,58 @@
+        // ===== LOCAL PERSISTENT STORE (conversations + provider keys) =====
+        // Shared by the chat engine and the settings panel. localStorage survives
+        // refresh and browser restart; entries disappear only when deleted.
+        window.ChatBotStore = (function() {
+            const CONV_KEY = 'chatbot.conversations.v1';
+            const KEYS_KEY = 'chatbot.apikeys.v1';
+
+            function read(key, fallback) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (!raw) return fallback;
+                    return JSON.parse(raw);
+                } catch (e) {
+                    return fallback;
+                }
+            }
+
+            function write(key, value) {
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function defaultKeys() {
+                return { openai: '', gemini: '', claude: '', deepseek: '', defaultBaseUrl: '', defaultModel: '' };
+            }
+
+            return {
+                loadConversations: function() {
+                    const list = read(CONV_KEY, []);
+                    return Array.isArray(list) ? list : [];
+                },
+                saveConversations: function(list) {
+                    return write(CONV_KEY, list);
+                },
+                loadKeys: function() {
+                    const saved = read(KEYS_KEY, {});
+                    const keys = defaultKeys();
+                    Object.keys(keys).forEach(function(k) {
+                        if (typeof saved[k] === 'string') keys[k] = saved[k];
+                    });
+                    return keys;
+                },
+                saveKeys: function(keys) {
+                    return write(KEYS_KEY, keys || defaultKeys());
+                },
+                makeId: function() {
+                    return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                }
+            };
+        })();
+
         (function() {
             'use strict';
 
@@ -12,7 +67,7 @@
             const messagesWrapper = document.getElementById('messagesWrapper');
             const welcomeScreen = document.getElementById('welcomeScreen');
             const typingIndicator = document.getElementById('typingIndicator');
-            const historyItems = document.querySelectorAll('.history-item');
+            const chatHistoryNav = document.getElementById('chatHistory');
             const quickActions = document.querySelectorAll('.quick-action');
             const btnModelDropdown = document.getElementById('btnModelDropdown');
             const modelDropdown = document.getElementById('modelDropdown');
@@ -27,69 +82,324 @@
             
             // State
             let chatStarted = false;
-            let currentConversationId = null;
-            let inFlight = null;
             const attachedFiles = [];
+            let conversations = window.ChatBotStore.loadConversations();
+            let activeConversationId = null;
+            let currentModelKey = 'default';
 
-            // ===== BACKEND =====
-            const API_BASE = '/api';
+            // ===== MODELS =====
+            const MODEL_DEFS = [
+                { key: 'default',  label: 'ChatBot AI', provider: 'local',     model: '' },
+                { key: 'openai',   label: 'GPT-4o',     provider: 'openai',    model: 'gpt-4o' },
+                { key: 'gemini',   label: 'Gemini',     provider: 'gemini',    model: 'gemini-2.0-flash' },
+                { key: 'claude',   label: 'Claude',     provider: 'anthropic', model: 'claude-3-5-sonnet-latest' },
+                { key: 'deepseek', label: 'DeepSeek',   provider: 'deepseek',  model: 'deepseek-chat' }
+            ];
 
-            /**
-             * POSTs a message and yields assistant text as it streams back.
-             * The server speaks Server-Sent Events: meta, delta*, then done|error.
-             */
-            async function streamChat(text, onMeta, onDelta) {
-                const controller = new AbortController();
-                inFlight = controller;
-
-                const response = await fetch(API_BASE + '/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    signal: controller.signal,
-                    body: JSON.stringify(
-                        currentConversationId
-                            ? { message: text, conversationId: currentConversationId, model: currentModel.textContent.trim() }
-                            : { message: text, model: currentModel.textContent.trim() }
-                    )
-                });
-
-                if (!response.ok) {
-                    const detail = await response.json().catch(function() { return null; });
-                    throw new Error((detail && detail.error && detail.error.message) || ('Request failed with status ' + response.status));
+            function modelDef(key) {
+                for (let i = 0; i < MODEL_DEFS.length; i++) {
+                    if (MODEL_DEFS[i].key === key) return MODEL_DEFS[i];
                 }
+                return MODEL_DEFS[0];
+            }
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = '';
+            function modelKeyFromLabel(label) {
+                for (let i = 0; i < MODEL_DEFS.length; i++) {
+                    if (MODEL_DEFS[i].label === label) return MODEL_DEFS[i].key;
+                }
+                return 'default';
+            }
 
-                for (;;) {
-                    const chunk = await reader.read();
-                    if (chunk.done) break;
-                    buffer += decoder.decode(chunk.value, { stream: true });
+            function setModelPicker(key) {
+                const def = modelDef(key);
+                currentModelKey = def.key;
+                modelOptions.forEach(function(o) {
+                    o.classList.toggle('active', o.getAttribute('data-model') === def.label);
+                });
+                if (currentModel) currentModel.textContent = def.label;
+            }
 
-                    // Events are separated by a blank line and can split across chunks.
-                    let boundary = buffer.indexOf('\n\n');
-                    while (boundary !== -1) {
-                        const raw = buffer.slice(0, boundary);
-                        buffer = buffer.slice(boundary + 2);
-                        boundary = buffer.indexOf('\n\n');
+            function getApiKeys() {
+                return window.ChatBotStore.loadKeys();
+            }
 
-                        let name = 'message';
-                        let data = '';
-                        raw.split('\n').forEach(function(line) {
-                            if (line.indexOf('event:') === 0) name = line.slice(6).trim();
-                            else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
-                        });
-                        if (!data) continue;
+            function modelHasKey(key) {
+                if (key === 'default') return true;
+                const keys = getApiKeys();
+                return !!(keys[key] && keys[key].trim());
+            }
 
-                        const payload = JSON.parse(data);
-                        if (name === 'meta') onMeta(payload);
-                        else if (name === 'delta') onDelta(payload.text);
-                        else if (name === 'error') throw new Error(payload.message);
-                    }
+            // ===== PROVIDERS (local Jan + cloud APIs, direct from browser) =====
+            function fetchWithTimeout(url, options, ms) {
+                const controller = new AbortController();
+                const timer = setTimeout(function() { controller.abort(); }, ms || 120000);
+                options = options || {};
+                options.signal = controller.signal;
+                return fetch(url, options).then(
+                    function(res) { clearTimeout(timer); return res; },
+                    function(err) { clearTimeout(timer); throw err; }
+                );
+            }
+
+            function requestFailed(url, e) {
+                if (e && e.name === 'AbortError') {
+                    return 'Request to ' + url + ' timed out. The model may still be loading — please try again.';
+                }
+                return 'Cannot reach ' + url + ' (' + ((e && e.message) ? e.message : 'network error') + ').';
+            }
+
+            function base64ToText(b64) {
+                try {
+                    const bin = atob(b64);
+                    const bytes = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    return new TextDecoder().decode(bytes);
+                } catch (e) {
+                    return '';
                 }
             }
+
+            function isTextFile(file) {
+                const type = file.type || '';
+                const name = file.name || '';
+                if (type.indexOf('text/') === 0) return true;
+                if (/json|csv|xml|javascript|markdown/.test(type)) return true;
+                return /\.(txt|md|csv|json|js|ts|py|html|css|log)$/i.test(name);
+            }
+
+            function truncateMiddle(s, max) {
+                if (s.length <= max) return s;
+                return s.slice(0, max) + '\n...[truncated, file too long]...';
+            }
+
+            // Plain stored messages + current attachments -> OpenAI-style messages.
+            function buildOpenAiMessages(history, files) {
+                const msgs = history.map(function(m) {
+                    return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
+                });
+                if (!files || !files.length) return msgs;
+                let lastUser = -1;
+                for (let i = msgs.length - 1; i >= 0; i--) {
+                    if (msgs[i].role === 'user') { lastUser = i; break; }
+                }
+                if (lastUser === -1) return msgs;
+                const parts = [{ type: 'text', text: msgs[lastUser].content }];
+                files.forEach(function(f) {
+                    const type = f.type || '';
+                    if (type.indexOf('image/') === 0) {
+                        parts.push({ type: 'image_url', image_url: { url: 'data:' + type + ';base64,' + f.data } });
+                    } else if (isTextFile(f)) {
+                        parts.push({ type: 'text', text: '\n\n[File: ' + f.name + ']\n' + truncateMiddle(base64ToText(f.data), 12000) });
+                    } else {
+                        parts.push({ type: 'text', text: '\n[Attached file: ' + f.name + ' (' + (type || 'unknown type') + ')]' });
+                    }
+                });
+                msgs[lastUser].content = parts;
+                return msgs;
+            }
+
+            // Local text models: strip vision parts to plain-text notes.
+            function stripImagesForLocal(msgs) {
+                return msgs.map(function(m) {
+                    if (typeof m.content === 'string') return m;
+                    let text = '';
+                    let images = 0;
+                    m.content.forEach(function(p) {
+                        if (p.type === 'text') text += (text ? '\n' : '') + p.text;
+                        else if (p.type === 'image_url') images++;
+                    });
+                    if (images > 0) text += '\n[' + images + ' image(s) attached — vision is not supported by this local model]';
+                    return { role: m.role, content: text };
+                });
+            }
+
+            function openAiContentToGeminiParts(content) {
+                if (typeof content === 'string') return [{ text: content }];
+                return content.map(function(p) {
+                    if (p.type === 'text') return { text: p.text };
+                    if (p.type === 'image_url') {
+                        const m = /^data:(.*?);base64,([\s\S]*)$/.exec(p.image_url.url || '');
+                        return { inline_data: { mime_type: m ? m[1] : 'image/png', data: m ? m[2] : '' } };
+                    }
+                    return { text: '' };
+                });
+            }
+
+            function toGeminiContents(openAiMsgs) {
+                return openAiMsgs.map(function(m) {
+                    return {
+                        role: m.role === 'assistant' ? 'model' : 'user',
+                        parts: openAiContentToGeminiParts(m.content)
+                    };
+                });
+            }
+
+            function openAiContentToAnthropic(content) {
+                if (typeof content === 'string') return content;
+                return content.map(function(p) {
+                    if (p.type === 'text') return { type: 'text', text: p.text };
+                    if (p.type === 'image_url') {
+                        const m = /^data:(.*?);base64,([\s\S]*)$/.exec(p.image_url.url || '');
+                        return { type: 'image', source: { type: 'base64', media_type: m ? m[1] : 'image/png', data: m ? m[2] : '' } };
+                    }
+                    return { type: 'text', text: '' };
+                });
+            }
+
+            function toAnthropicMessages(openAiMsgs) {
+                return openAiMsgs.map(function(m) {
+                    return {
+                        role: m.role === 'assistant' ? 'assistant' : 'user',
+                        content: openAiContentToAnthropic(m.content)
+                    };
+                });
+            }
+
+            function extractOpenAiText(data) {
+                try {
+                    const text = data.choices[0].message.content;
+                    if (typeof text === 'string' && text.trim()) return text;
+                    if (Array.isArray(text)) {
+                        return text.filter(function(p) { return p.type === 'text'; }).map(function(p) { return p.text; }).join('');
+                    }
+                } catch (e) {}
+                return '';
+            }
+
+            async function throwForBadStatus(res, keyName) {
+                let msg = 'HTTP ' + res.status;
+                try {
+                    const detail = await res.json();
+                    if (detail && detail.error && detail.error.message) msg = detail.error.message;
+                } catch (e) {}
+                if (res.status === 401 || res.status === 403) {
+                    msg += ' — check your API key in Settings → API Key.';
+                }
+                throw new Error(msg);
+            }
+
+            async function detectJanModel(base) {
+                let res;
+                try {
+                    res = await fetchWithTimeout(base + '/models', {}, 15000);
+                } catch (e) {
+                    throw new Error("Couldn't reach Jan at " + base + '. Open Jan, start the Local API Server, and load a model first.');
+                }
+                if (!res.ok) {
+                    throw new Error("Jan server at " + base + ' answered HTTP ' + res.status + '. Load a model in Jan first.');
+                }
+                const data = await res.json().catch(function() { return null; });
+                const list = data && data.data;
+                if (list && list.length && list[0].id) return list[0].id;
+                throw new Error('No model is loaded in Jan. Load a model first, or set a Model ID in Settings → API Key.');
+            }
+
+            async function chatWithLocal(keys, openAiMsgs) {
+                const base = ((keys.defaultBaseUrl || '').trim() || 'http://localhost:1337/v1').replace(/\/+$/, '');
+                let model = (keys.defaultModel || '').trim();
+                if (!model) model = await detectJanModel(base);
+                let res;
+                try {
+                    res = await fetchWithTimeout(base + '/chat/completions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: model, messages: stripImagesForLocal(openAiMsgs), stream: false })
+                    }, 180000);
+                } catch (e) {
+                    throw new Error(requestFailed(base, e));
+                }
+                if (!res.ok) await throwForBadStatus(res);
+                const text = extractOpenAiText(await res.json().catch(function() { return null; }));
+                if (!text) throw new Error('Jan returned an empty reply. Try another prompt or model.');
+                return text;
+            }
+
+            async function chatOpenAiCompatible(base, key, model, openAiMsgs) {
+                let res;
+                try {
+                    res = await fetchWithTimeout(base + '/chat/completions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+                        body: JSON.stringify({ model: model, messages: openAiMsgs, stream: false })
+                    }, 120000);
+                } catch (e) {
+                    throw new Error(requestFailed(base, e));
+                }
+                if (!res.ok) await throwForBadStatus(res);
+                const text = extractOpenAiText(await res.json().catch(function() { return null; }));
+                if (!text) throw new Error('The model returned an empty reply.');
+                return text;
+            }
+
+            async function chatWithGemini(key, model, openAiMsgs) {
+                const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(key);
+                let res;
+                try {
+                    res = await fetchWithTimeout(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: toGeminiContents(openAiMsgs) })
+                    }, 120000);
+                } catch (e) {
+                    throw new Error(requestFailed('generativelanguage.googleapis.com', e));
+                }
+                if (!res.ok) await throwForBadStatus(res);
+                const data = await res.json().catch(function() { return null; });
+                let text = '';
+                try {
+                    text = data.candidates[0].content.parts.filter(function(p) { return p.text; }).map(function(p) { return p.text; }).join('');
+                } catch (e) {}
+                if (!text) throw new Error('Gemini returned an empty reply.');
+                return text;
+            }
+
+            async function chatWithClaude(key, model, openAiMsgs) {
+                let res;
+                try {
+                    res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': key,
+                            'anthropic-version': '2023-06-01',
+                            'anthropic-dangerous-direct-browser-access': 'true'
+                        },
+                        body: JSON.stringify({ model: model, max_tokens: 2048, messages: toAnthropicMessages(openAiMsgs) })
+                    }, 120000);
+                } catch (e) {
+                    throw new Error(requestFailed('api.anthropic.com', e));
+                }
+                if (!res.ok) await throwForBadStatus(res);
+                const data = await res.json().catch(function() { return null; });
+                let text = '';
+                try {
+                    text = data.content.filter(function(b) { return b.type === 'text'; }).map(function(b) { return b.text; }).join('');
+                } catch (e) {}
+                if (!text) throw new Error('Claude returned an empty reply.');
+                return text;
+            }
+
+            async function callAssistant(modelKey, keys, history, files) {
+                const def = modelDef(modelKey);
+                const openAiMsgs = buildOpenAiMessages(history, files);
+                switch (def.provider) {
+                    case 'local':
+                        return chatWithLocal(keys, openAiMsgs);
+                    case 'openai':
+                        return chatOpenAiCompatible('https://api.openai.com/v1', keys.openai, def.model, openAiMsgs);
+                    case 'deepseek':
+                        return chatOpenAiCompatible('https://api.deepseek.com', keys.deepseek, def.model, openAiMsgs);
+                    case 'gemini':
+                        return chatWithGemini(keys.gemini, def.model, openAiMsgs);
+                    case 'anthropic':
+                        return chatWithClaude(keys.claude, def.model, openAiMsgs);
+                    default:
+                        throw new Error('Unknown model.');
+                }
+            }
+
+            // ===== BACKEND (optional account service) =====
+            const API_BASE = '/api';
 
             // ===== ACCOUNT =====
             function renderAccount(user) {
@@ -183,9 +493,255 @@
                 updateSendState();
             });
 
+            // ===== CONVERSATION STORE (synced + persisted) =====
+            function getActiveConversation() {
+                for (let i = 0; i < conversations.length; i++) {
+                    if (conversations[i].id === activeConversationId) return conversations[i];
+                }
+                return null;
+            }
+
+            function persistConversations() {
+                window.ChatBotStore.saveConversations(conversations);
+                renderHistory();
+            }
+
+            function makeTitle(raw) {
+                const clean = (raw || '').replace(/\s+/g, ' ').trim();
+                if (!clean) return 'Attached files';
+                return clean.length > 42 ? clean.slice(0, 42) + '…' : clean;
+            }
+
+            function escHtml(s) {
+                return String(s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function conversationGroup(ts) {
+                const startOfDay = function(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+                const diff = Math.round((startOfDay(new Date()) - startOfDay(new Date(ts))) / 86400000);
+                if (diff <= 0) return 'Today';
+                if (diff === 1) return 'Yesterday';
+                if (diff < 7) return 'Previous 7 days';
+                return 'Older';
+            }
+
+            const EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+            const DELETE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+
+            function renderHistory() {
+                if (!chatHistoryNav) return;
+                chatHistoryNav.innerHTML = '';
+                if (!conversations.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'history-empty';
+                    empty.textContent = 'No conversations yet';
+                    chatHistoryNav.appendChild(empty);
+                    return;
+                }
+                const order = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
+                const buckets = { 'Today': [], 'Yesterday': [], 'Previous 7 days': [], 'Older': [] };
+                conversations.forEach(function(c) {
+                    buckets[conversationGroup(c.updatedAt || c.createdAt || Date.now())].push(c);
+                });
+                order.forEach(function(label) {
+                    const items = buckets[label];
+                    if (!items.length) return;
+                    const section = document.createElement('div');
+                    section.className = 'history-section';
+                    const head = document.createElement('div');
+                    head.className = 'history-label';
+                    head.textContent = label;
+                    section.appendChild(head);
+                    items.forEach(function(convo) {
+                        const item = document.createElement('div');
+                        item.className = 'history-item' + (convo.id === activeConversationId ? ' active' : '');
+                        item.setAttribute('data-id', convo.id);
+                        const text = document.createElement('span');
+                        text.className = 'history-item-text';
+                        text.textContent = convo.title || 'Untitled';
+                        const actions = document.createElement('div');
+                        actions.className = 'history-item-actions';
+                        const editBtn = document.createElement('button');
+                        editBtn.className = 'btn-item-action';
+                        editBtn.setAttribute('aria-label', 'Rename');
+                        editBtn.title = 'Rename';
+                        editBtn.innerHTML = EDIT_SVG;
+                        const delBtn = document.createElement('button');
+                        delBtn.className = 'btn-item-action';
+                        delBtn.setAttribute('aria-label', 'Delete');
+                        delBtn.title = 'Delete';
+                        delBtn.innerHTML = DELETE_SVG;
+                        actions.appendChild(editBtn);
+                        actions.appendChild(delBtn);
+                        item.appendChild(text);
+                        item.appendChild(actions);
+                        section.appendChild(item);
+                    });
+                    chatHistoryNav.appendChild(section);
+                });
+            }
+
+            function loadConversation(id) {
+                let convo = null;
+                for (let i = 0; i < conversations.length; i++) {
+                    if (conversations[i].id === id) convo = conversations[i];
+                }
+                if (!convo) return;
+                activeConversationId = id;
+                setModelPicker(convo.model || 'default');
+                messagesWrapper.innerHTML = '';
+                (convo.messages || []).forEach(function(m) {
+                    addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content);
+                });
+                if (convo.messages && convo.messages.length) {
+                    chatStarted = true;
+                    welcomeScreen.style.display = 'none';
+                    messagesWrapper.classList.add('visible');
+                } else {
+                    chatStarted = false;
+                    welcomeScreen.style.display = '';
+                    messagesWrapper.classList.remove('visible');
+                }
+                renderHistory();
+                scrollToBottom();
+            }
+
+            function startNewChat() {
+                activeConversationId = null;
+                chatStarted = false;
+                welcomeScreen.style.display = '';
+                messagesWrapper.classList.remove('visible');
+                messagesWrapper.innerHTML = '';
+                renderHistory();
+                if (getBreakpoint() !== 'desktop') {
+                    closeSidebar();
+                }
+                chatInput.focus();
+            }
+
+            function deleteConversation(id) {
+                conversations = conversations.filter(function(c) { return c.id !== id; });
+                if (activeConversationId === id) {
+                    startNewChat();
+                } else {
+                    persistConversations();
+                }
+            }
+
+            function startRename(item, id) {
+                let convo = null;
+                for (let i = 0; i < conversations.length; i++) {
+                    if (conversations[i].id === id) convo = conversations[i];
+                }
+                const textSpan = item.querySelector('.history-item-text');
+                if (!convo || !textSpan || item.querySelector('.history-rename-input')) return;
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'history-rename-input';
+                input.value = convo.title || '';
+                input.setAttribute('aria-label', 'Rename conversation');
+                let done = false;
+                function commit(save) {
+                    if (done) return;
+                    done = true;
+                    if (save) {
+                        const v = input.value.trim();
+                        if (v) {
+                            convo.title = v;
+                            convo.updatedAt = Date.now();
+                        }
+                    }
+                    persistConversations();
+                }
+                input.addEventListener('click', function(ev) { ev.stopPropagation(); });
+                input.addEventListener('keydown', function(ev) {
+                    ev.stopPropagation();
+                    if (ev.key === 'Enter') commit(true);
+                    else if (ev.key === 'Escape') commit(false);
+                });
+                input.addEventListener('blur', function() { commit(true); });
+                textSpan.textContent = '';
+                textSpan.appendChild(input);
+                input.focus();
+                input.select();
+            }
+
+            // ===== API KEY REQUIRED POPUP =====
+            const keyAlertOverlay = document.getElementById('keyAlertOverlay');
+            const keyAlertDesc = document.getElementById('keyAlertDesc');
+            const btnKeyAlertSettings = document.getElementById('btnKeyAlertSettings');
+            const btnKeyAlertClose = document.getElementById('btnKeyAlertClose');
+
+            function closeKeyAlert() {
+                if (keyAlertOverlay) keyAlertOverlay.hidden = true;
+            }
+
+            function showKeyAlert(modelKey) {
+                const def = modelDef(modelKey);
+                if (keyAlertDesc) {
+                    keyAlertDesc.textContent = def.label + ' needs an API key before it can be used. Add it in Settings → API Key, then try again.';
+                }
+                if (keyAlertOverlay) keyAlertOverlay.hidden = false;
+            }
+
+            if (btnKeyAlertClose) {
+                btnKeyAlertClose.addEventListener('click', closeKeyAlert);
+            }
+            if (keyAlertOverlay) {
+                keyAlertOverlay.addEventListener('click', function(e) {
+                    if (e.target === keyAlertOverlay) closeKeyAlert();
+                });
+            }
+            if (btnKeyAlertSettings) {
+                btnKeyAlertSettings.addEventListener('click', function() {
+                    closeKeyAlert();
+                    if (window.ChatBotSettings && typeof window.ChatBotSettings.openPanel === 'function') {
+                        window.ChatBotSettings.openPanel('api-key');
+                    }
+                });
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && keyAlertOverlay && !keyAlertOverlay.hidden) {
+                    closeKeyAlert();
+                }
+            });
+
             // ===== SEND MESSAGE =====
-            function sendMessage(text) {
-                if ((!text || text.trim() === '') && attachedFiles.length === 0) return;
+            async function sendMessage(text) {
+                const raw = (text || '').trim();
+                const hasFiles = attachedFiles.length > 0;
+                if (!raw && !hasFiles) return;
+
+                // Gate: cloud models require a saved API key.
+                if (!modelHasKey(currentModelKey)) {
+                    showKeyAlert(currentModelKey);
+                    setModelPicker('default');
+                    const gated = getActiveConversation();
+                    if (gated) {
+                        gated.model = 'default';
+                        persistConversations();
+                    }
+                    return;
+                }
+
+                let convo = getActiveConversation();
+                if (!convo) {
+                    convo = {
+                        id: window.ChatBotStore.makeId(),
+                        title: makeTitle(raw),
+                        model: currentModelKey,
+                        messages: [],
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    };
+                    conversations.unshift(convo);
+                    activeConversationId = convo.id;
+                }
+                convo.model = currentModelKey;
 
                 if (!chatStarted) {
                     chatStarted = true;
@@ -193,55 +749,50 @@
                     messagesWrapper.classList.add('visible');
                 }
 
-                let outText = (text || '').trim();
-                if (attachedFiles.length > 0) {
+                let displayText = raw;
+                if (hasFiles) {
                     const names = attachedFiles.map(function(f) { return f.name; }).join(', ');
-                    outText = (outText ? outText + '\n' : '') + '[Attached files: ' + names + ']';
+                    displayText = (displayText ? displayText + '\n' : '') + '[Attached files: ' + names + ']';
                 }
+                convo.messages.push({ role: 'user', content: displayText, ts: Date.now() });
 
-                // Add user message
-                addMessage('user', outText);
-
-                // Clear input + attachments
-                chatInput.value = '';
-                chatInput.style.height = 'auto';
+                const filesSnapshot = attachedFiles.map(function(f) {
+                    return { name: f.name, type: f.type, data: f.data };
+                });
                 attachedFiles.length = 0;
                 const filePreviewArea = document.getElementById('filePreviewArea');
                 if (filePreviewArea) {
                     filePreviewArea.innerHTML = '';
                     filePreviewArea.hidden = true;
                 }
+
+                // Add user message
+                addMessage('user', displayText);
+                persistConversations();
+
+                // Clear input
+                chatInput.value = '';
+                chatInput.style.height = 'auto';
                 updateSendState();
 
                 // Show typing
                 typingIndicator.classList.add('visible');
                 scrollToBottom();
 
-                let reply = null;
-                streamChat(
-                    outText,
-                    function onMeta(meta) {
-                        currentConversationId = meta.conversationId;
-                    },
-                    function onDelta(chunk) {
-                        if (reply === null) {
-                            typingIndicator.classList.remove('visible');
-                            reply = addMessage('assistant', '');
-                        }
-                        reply.append(chunk);
-                        scrollToBottom();
-                    }
-                ).catch(function(error) {
+                try {
+                    const reply = await callAssistant(currentModelKey, getApiKeys(), convo.messages, filesSnapshot);
                     typingIndicator.classList.remove('visible');
-                    const message = 'Sorry — ' + error.message;
-                    if (reply === null) addMessage('assistant', message);
-                    else reply.setText(message);
-                    scrollToBottom();
-                }).finally(function() {
+                    addMessage('assistant', reply);
+                    convo.messages.push({ role: 'assistant', content: reply, ts: Date.now() });
+                } catch (error) {
                     typingIndicator.classList.remove('visible');
-                    inFlight = null;
-                    scrollToBottom();
-                });
+                    const message = 'Sorry — ' + ((error && error.message) ? error.message : 'request failed.');
+                    addMessage('assistant', message);
+                    convo.messages.push({ role: 'assistant', content: message, ts: Date.now() });
+                }
+                convo.updatedAt = Date.now();
+                persistConversations();
+                scrollToBottom();
             }
 
             function addMessage(role, text) {
@@ -354,44 +905,38 @@
             });
             updateSendState();
 
-            // ===== HISTORY ITEMS =====
-            historyItems.forEach(function(item) {
-                item.addEventListener('click', function(e) {
-                    if (e.target.closest('.btn-item-action')) return;
-                    historyItems.forEach(function(i) { i.classList.remove('active'); });
-                    this.classList.add('active');
+            // ===== HISTORY: select / rename / delete (delegated, persisted) =====
+            if (chatHistoryNav) {
+                chatHistoryNav.addEventListener('click', function(e) {
+                    if (e.target.closest('.history-rename-input')) return;
+                    const item = e.target.closest('.history-item');
+                    if (!item) return;
+                    const id = item.getAttribute('data-id');
+                    const actionBtn = e.target.closest('.btn-item-action');
+                    if (actionBtn) {
+                        e.stopPropagation();
+                        if (actionBtn.getAttribute('aria-label') === 'Delete') {
+                            deleteConversation(id);
+                        } else {
+                            startRename(item, id);
+                        }
+                        return;
+                    }
+                    loadConversation(id);
                     if (getBreakpoint() !== 'desktop') {
                         closeSidebar();
                     }
                 });
+            }
 
-                // Delete button
-                const delBtn = item.querySelector('.btn-item-action[aria-label="Delete"]');
-                if (delBtn) {
-                    delBtn.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        item.style.transition = 'opacity 0.2s, transform 0.2s';
-                        item.style.opacity = '0';
-                        item.style.transform = 'translateX(-10px)';
-                        setTimeout(function() { item.remove(); }, 200);
-                    });
-                }
-            });
-
-            // ===== NEW CHAT =====
+            // ===== NEW CHAT (real: resets view, next message starts a new thread) =====
             btnNewChat.addEventListener('click', function() {
-                if (inFlight) inFlight.abort();
-                currentConversationId = null;
-                chatStarted = false;
-                welcomeScreen.style.display = '';
-                messagesWrapper.classList.remove('visible');
-                messagesWrapper.innerHTML = '';
-                historyItems.forEach(function(i) { i.classList.remove('active'); });
-                if (getBreakpoint() !== 'desktop') {
-                    closeSidebar();
-                }
-                chatInput.focus();
+                startNewChat();
             });
+
+            // Initial paint from persisted store.
+            setModelPicker('default');
+            renderHistory();
 
             // ===== SEARCH POPUP (icon -> popup bar + conversation list) =====
             const btnSearchPopup = document.getElementById('btnSearchPopup');
@@ -539,9 +1084,19 @@
             if (modelDropdown) {
                 modelOptions.forEach(function(opt) {
                     opt.addEventListener('click', function() {
-                        modelOptions.forEach(function(o) { o.classList.remove('active'); });
-                        this.classList.add('active');
-                        currentModel.textContent = this.getAttribute('data-model');
+                        const key = modelKeyFromLabel(this.getAttribute('data-model'));
+                        // Gate: keyless cloud models cannot be used.
+                        if (!modelHasKey(key)) {
+                            closeModelDropdown();
+                            showKeyAlert(key);
+                            return;
+                        }
+                        setModelPicker(key);
+                        const convo = getActiveConversation();
+                        if (convo) {
+                            convo.model = currentModelKey;
+                            persistConversations();
+                        }
                         closeModelDropdown();
                     });
                 });
@@ -800,6 +1355,17 @@
                 });
             });
 
+            // Public bridge: open the modal directly on a panel
+            // (used by the API-key gate in the chat engine).
+            window.ChatBotSettings = window.ChatBotSettings || {};
+            window.ChatBotSettings.openPanel = function(key) {
+                if (settingsModalOverlay) settingsModalOverlay.classList.add('active');
+                settingsMenuItems.forEach(function(el) {
+                    el.classList.toggle('active', el.getAttribute('data-panel') === key);
+                });
+                showSettingsPanel(key);
+            };
+
             // Sidebar Menu Search Filter
             if (settingsMenuSearch) {
                 settingsMenuSearch.addEventListener('input', (e) => {
@@ -903,6 +1469,92 @@
                     } catch (err) {}
                 });
             }
+
+            // ===== API KEY SETTINGS (5 providers, persisted in ChatBotStore) =====
+            function refreshApiStatus(card, has) {
+                const st = card.querySelector('[data-api-status]');
+                if (!st) return;
+                if (card.getAttribute('data-provider') === 'default') {
+                    st.textContent = 'Ready';
+                    st.classList.add('saved');
+                    return;
+                }
+                st.textContent = has ? 'Saved' : 'Not set';
+                st.classList.toggle('saved', !!has);
+            }
+
+            function initApiKeys() {
+                const panel = document.querySelector('.settings-panel[data-panel="api-key"]');
+                if (!panel || !window.ChatBotStore) return;
+                const keys = window.ChatBotStore.loadKeys();
+                panel.querySelectorAll('.api-card').forEach(function(card) {
+                    const provider = card.getAttribute('data-provider');
+                    const keyInput = card.querySelector('[data-api-field="key"]');
+                    const baseInput = card.querySelector('[data-api-field="baseUrl"]');
+                    const modelInput = card.querySelector('[data-api-field="model"]');
+                    if (keyInput) keyInput.value = keys[provider] || '';
+                    if (baseInput) baseInput.value = keys.defaultBaseUrl || '';
+                    if (modelInput) modelInput.value = keys.defaultModel || '';
+                    refreshApiStatus(card, provider === 'default' ? true : !!(keys[provider] && keys[provider].trim()));
+
+                    const toggle = card.querySelector('[data-api-toggle]');
+                    if (toggle && keyInput) {
+                        toggle.addEventListener('click', function() {
+                            keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
+                        });
+                    }
+
+                    const saveBtn = card.querySelector('[data-api-save]');
+                    function doSave() {
+                        const all = window.ChatBotStore.loadKeys();
+                        if (provider === 'default') {
+                            all.defaultBaseUrl = baseInput ? baseInput.value.trim() : '';
+                            all.defaultModel = modelInput ? modelInput.value.trim() : '';
+                        } else if (keyInput) {
+                            all[provider] = keyInput.value.trim();
+                        }
+                        const ok = window.ChatBotStore.saveKeys(all);
+                        refreshApiStatus(card, provider === 'default' ? true : !!(keyInput && keyInput.value.trim()));
+                        if (saveBtn) {
+                            saveBtn.textContent = ok ? 'Saved ✓' : 'Save failed';
+                            setTimeout(function() { saveBtn.textContent = 'Save'; }, 1500);
+                        }
+                    }
+                    if (saveBtn) {
+                        saveBtn.addEventListener('click', doSave);
+                    }
+                    [keyInput, baseInput, modelInput].forEach(function(inp) {
+                        if (inp) {
+                            inp.addEventListener('keydown', function(e) {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    doSave();
+                                }
+                            });
+                        }
+                    });
+
+                    const clearBtn = card.querySelector('[data-api-clear]');
+                    if (clearBtn) {
+                        clearBtn.addEventListener('click', function() {
+                            const all = window.ChatBotStore.loadKeys();
+                            if (provider === 'default') {
+                                all.defaultBaseUrl = '';
+                                all.defaultModel = '';
+                                if (baseInput) baseInput.value = '';
+                                if (modelInput) modelInput.value = '';
+                            } else {
+                                all[provider] = '';
+                                if (keyInput) keyInput.value = '';
+                            }
+                            window.ChatBotStore.saveKeys(all);
+                            refreshApiStatus(card, provider === 'default');
+                        });
+                    }
+                });
+            }
+
+            initApiKeys();
         })();
 
 

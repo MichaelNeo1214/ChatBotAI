@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChatBot AI</title>
     <meta name="description" content="ChatBot AI - Your intelligent assistant">
+    <meta name="keywords" content="ChatBot, AI, Assistant, Chat, OpenAI, GPT-4, Gemini, Claude">
+    <meta name="author" content="Marvel-Michael-Yere">
+    <meta name="embedder" content="ChatBot AI">
+    <meta property="og:image" content="https://4kwallpapers.com/images/walls/thumbs_2t/25439.jpg
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -39,50 +43,7 @@
         </div>
 
         <nav class="chat-history" id="chatHistory" aria-label="Chat history">
-            <div class="history-section">
-                <div class="history-label" data-i18n="labelToday">Today</div>
-                <div class="history-item active" data-id="1">
-                    <span class="history-item-text">Welcome conversation</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-            </div>
-            <div class="history-section">
-                <div class="history-label" data-i18n="labelYesterday">Yesterday</div>
-                <div class="history-item" data-id="2">
-                    <span class="history-item-text">How to learn JavaScript</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-                <div class="history-item" data-id="3">
-                    <span class="history-item-text">Building REST API with Python</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-            </div>
-            <div class="history-section">
-                <div class="history-label" data-i18n="labelPrev7">Previous 7 days</div>
-                <div class="history-item" data-id="4">
-                    <span class="history-item-text">CSS Grid layout tutorial</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-                    <div class="history-item" data-id="5">
-                        <span class="history-item-text">Debugging Node.js memory leak</span>
-                        <div class="history-item-actions">
-                            <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                            <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                        </div>
-                    </div>
-                </div>
+            <!-- Conversation list is rendered by js/script.js and persisted in localStorage -->
         </nav>
 
         <div class="sidebar-footer">
@@ -294,7 +255,7 @@
                     <li class="settings-menu-item" data-title="Notifications" data-panel="notifications"><i class="fa-regular fa-bell"></i> Notifications</li>
                     <li class="settings-menu-item" data-title="Personalization" data-panel="personalization"><i class="fa-solid fa-wand-magic-sparkles"></i> Personalization</li>
                     <li class="settings-menu-item" data-title="Plugins" data-panel="plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
-                    <li class="settings-menu-item" data-title="Api Key" data-panel="api-key"><i class="fa-solid fa-key"></i> Api Key</li>
+                    <li class="settings-menu-item" data-title="API Key" data-panel="api-key"><i class="fa-solid fa-key"></i> API Key</li>
                     <li class="settings-menu-item" data-title="Voice" data-panel="voice"><i class="fa-solid fa-microphone"></i> Voice</li>
                     <li class="settings-menu-item" data-title="Billing" data-panel="billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
                     <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
@@ -312,9 +273,6 @@
 <div class="settings-panels" id="settingsPanels">
     <div class="settings-panel active" data-panel="general">
       <h2>General</h2>
-
-
-
       <div class="setting-row">
         <span class="setting-label">Appearance</span>
         <div class="select-wrapper">
@@ -446,10 +404,113 @@
 
     <!-- API KEY -->
     <div class="settings-panel" data-panel="api-key">
-      <h2>Api Key</h2>
-      <div class="setting-row">
-        <span class="setting-label">API Key</span>
-        <input type="password" class="form-control" placeholder="Enter your API key">
+      <h2>API Key</h2>
+      <div class="setting-desc" style="margin-bottom:14px;" data-i18n="apiKeyIntro">Connect your AI providers here. Keys are stored only in this browser and reused automatically, even after refresh or restart. Models without a key cannot be used.</div>
+
+      <div class="api-card" data-provider="openai">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">OpenAI</div>
+            <div class="setting-desc" data-i18n="apiOpenAiDesc">Powers the GPT-4o model option.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="gemini">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Gemini</div>
+            <div class="setting-desc" data-i18n="apiGeminiDesc">Powers the Gemini model option. Get a key from Google AI Studio.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="AIza..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="claude">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Claude</div>
+            <div class="setting-desc" data-i18n="apiClaudeDesc">Powers the Claude model option. Get a key from Anthropic Console.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="deepseek">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">DeepSeek</div>
+            <div class="setting-desc" data-i18n="apiDeepseekDesc">Powers the DeepSeek model option. Get a key from DeepSeek Platform.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="default">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Default <span class="api-badge" data-i18n="apiLocalBadge">Local</span></div>
+            <div class="setting-desc" data-i18n="apiDefaultDesc">Your own model via Jan (Local API Server). No key needed.</div>
+          </div>
+          <span class="api-status saved" data-api-status>Ready</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Base URL</span>
+        </div>
+        <div class="api-key-row">
+          <input type="text" class="api-key-input" data-api-field="baseUrl" placeholder="http://localhost:1337/v1" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Model ID</span>
+        </div>
+        <div class="api-key-row">
+          <input type="text" class="api-key-input" data-api-field="model" placeholder="Empty = auto-detect from Jan" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Reset</button>
+        </div>
       </div>
     </div>
 
@@ -637,6 +698,21 @@
       </div>
     </div>
 </div>
+        </div>
+    </div>
+
+    <!-- API Key Required Popup -->
+    <div class="key-alert-overlay" id="keyAlertOverlay" hidden>
+        <div class="key-alert-card" role="alertdialog" aria-labelledby="keyAlertTitle">
+            <div class="key-alert-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div class="key-alert-title" id="keyAlertTitle">API key required</div>
+            <div class="key-alert-desc" id="keyAlertDesc">This model needs an API key before it can be used.</div>
+            <div class="key-alert-actions">
+                <button class="btn primary" id="btnKeyAlertSettings" type="button">Open API Key Settings</button>
+                <button class="btn" id="btnKeyAlertClose" type="button">Close</button>
+            </div>
         </div>
     </div>
 
