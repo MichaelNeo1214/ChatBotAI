@@ -6,10 +6,15 @@
         window.ChatBotStore = (function() {
             const CONV_BASE = 'chatbot.conversations.v1';
             const KEYS_KEY = 'chatbot.apikeys.v1';
+            const PROF_BASE = 'chatbot.profile.v1';
             let owner = 'guest';
 
             function convKey() {
                 return CONV_BASE + ':' + owner;
+            }
+
+            function profKey() {
+                return PROF_BASE + ':' + owner;
             }
 
             function read(key, fallback) {
@@ -65,6 +70,24 @@
                 saveKeys: function(keys) {
                     return write(KEYS_KEY, keys || defaultKeys());
                 },
+                loadProfile: function() {
+                    const saved = read(profKey(), {});
+                    return {
+                        name: typeof saved.name === 'string' ? saved.name : '',
+                        photo: typeof saved.photo === 'string' ? saved.photo : ''
+                    };
+                },
+                saveProfile: function(profile) {
+                    return write(profKey(), {
+                        name: profile && typeof profile.name === 'string' ? profile.name : '',
+                        photo: profile && typeof profile.photo === 'string' ? profile.photo : ''
+                    });
+                },
+                clearProfile: function(which) {
+                    try {
+                        localStorage.removeItem(PROF_BASE + ':' + ((which && String(which)) || owner));
+                    } catch (e) {}
+                },
                 makeId: function() {
                     return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
                 }
@@ -97,6 +120,7 @@
             const userName = document.getElementById('userName');
             const userPlan = document.getElementById('userPlan');
             const menuSignIn = document.getElementById('menuSignIn');
+            const menuProfile = document.getElementById('menuProfile');
             const menuSettings = document.getElementById('menuSettings');
             const menuHelp = document.getElementById('menuHelp');
             const menuSignOut = document.getElementById('menuSignOut');
@@ -436,10 +460,34 @@
                 conversations = window.ChatBotStore.loadConversations();
             }
 
+            // Display name/photo: local per-owner profile overrides account data.
+            function resolveProfile() {
+                const stored = window.ChatBotStore.loadProfile();
+                const baseName = currentUser ? (currentUser.name || currentUser.email || 'User') : 'User';
+                return {
+                    name: (stored.name && stored.name.trim()) ? stored.name.trim() : baseName,
+                    photo: stored.photo || ''
+                };
+            }
+
+            function paintAvatar(el, photo, initial) {
+                if (!el) return;
+                if (photo) {
+                    el.textContent = '';
+                    const img = document.createElement('img');
+                    img.src = photo;
+                    img.alt = '';
+                    el.appendChild(img);
+                } else {
+                    el.textContent = initial;
+                }
+            }
+
             function renderFooter() {
-                const name = currentUser ? (currentUser.name || currentUser.email || 'User') : 'User';
-                if (userAvatar) userAvatar.textContent = (name.trim().charAt(0) || 'U').toUpperCase();
-                if (userName) userName.textContent = name;
+                const profile = resolveProfile();
+                const initial = (profile.name.trim().charAt(0) || 'U').toUpperCase();
+                paintAvatar(userAvatar, profile.photo, initial);
+                if (userName) userName.textContent = profile.name;
                 if (userPlan) userPlan.textContent = currentUser ? (currentUser.email || 'Free Plan') : 'Free Plan';
                 if (menuSignIn) menuSignIn.hidden = !!currentUser;
                 if (menuSignOut) menuSignOut.hidden = !currentUser;
@@ -591,6 +639,293 @@
                 menuSignOut.addEventListener('click', function() {
                     closeUserMenu();
                     doSignOut(false);
+                });
+            }
+
+            // ===== PROFILE POPUP (photo + rename + email) =====
+            const profileOverlay = document.getElementById('profileOverlay');
+            const profileMain = document.getElementById('profileMain');
+            const profileCropView = document.getElementById('profileCrop');
+            const profilePhoto = document.getElementById('profilePhoto');
+            const profileName = document.getElementById('profileName');
+            const profileEmail = document.getElementById('profileEmail');
+            const profileError = document.getElementById('profileError');
+            const btnPhotoEdit = document.getElementById('btnPhotoEdit');
+            const photoInput = document.getElementById('photoInput');
+            const btnRenameProfile = document.getElementById('btnRenameProfile');
+            const btnProfileClose = document.getElementById('btnProfileClose');
+            const cropCanvas = document.getElementById('cropCanvas');
+            const cropZoom = document.getElementById('cropZoom');
+            const btnCropSave = document.getElementById('btnCropSave');
+            const btnCropCancel = document.getElementById('btnCropCancel');
+
+            function showProfileError(msg) {
+                if (!profileError) return;
+                if (!msg) {
+                    profileError.hidden = true;
+                    profileError.textContent = '';
+                } else {
+                    profileError.textContent = msg;
+                    profileError.hidden = false;
+                }
+            }
+
+            function refreshProfileView() {
+                const profile = resolveProfile();
+                const initial = (profile.name.trim().charAt(0) || 'U').toUpperCase();
+                paintAvatar(profilePhoto, profile.photo, initial);
+                if (profileName) profileName.textContent = profile.name;
+                if (profileEmail) {
+                    profileEmail.textContent = currentUser ? (currentUser.email || 'Signed in') : 'Not signed in';
+                }
+            }
+
+            function openProfile() {
+                if (!profileOverlay) return;
+                showProfileError(null);
+                exitCropMode();
+                refreshProfileView();
+                profileOverlay.hidden = false;
+            }
+
+            function closeProfile() {
+                if (profileOverlay) profileOverlay.hidden = true;
+                exitCropMode();
+                if (photoInput) photoInput.value = '';
+            }
+
+            if (menuProfile) {
+                menuProfile.addEventListener('click', function() {
+                    closeUserMenu();
+                    openProfile();
+                });
+            }
+
+            if (btnProfileClose) {
+                btnProfileClose.addEventListener('click', closeProfile);
+            }
+
+            if (profileOverlay) {
+                profileOverlay.addEventListener('click', function(e) {
+                    if (e.target === profileOverlay) closeProfile();
+                });
+            }
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && profileOverlay && !profileOverlay.hidden) {
+                    if (profileOverlay.querySelector('.profile-name-input')) return;
+                    closeProfile();
+                }
+            });
+
+            // Rename display name (stored per owner, overrides account name).
+            if (btnRenameProfile) {
+                btnRenameProfile.addEventListener('click', function() {
+                    if (!profileName || profileName.querySelector('.profile-name-input')) return;
+                    const stored = window.ChatBotStore.loadProfile();
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'profile-name-input';
+                    input.value = stored.name || '';
+                    input.placeholder = resolveProfile().name;
+                    input.setAttribute('aria-label', 'Display name');
+                    input.maxLength = 40;
+                    let done = false;
+                    function commit(save) {
+                        if (done) return;
+                        done = true;
+                        if (save) {
+                            const v = input.value.trim();
+                            const next = window.ChatBotStore.loadProfile();
+                            next.name = v;
+                            if (!window.ChatBotStore.saveProfile(next)) {
+                                showProfileError('Could not save name (browser storage is unavailable).');
+                            } else {
+                                showProfileError(null);
+                            }
+                            refreshProfileView();
+                            renderFooter();
+                        } else {
+                            refreshProfileView();
+                        }
+                    }
+                    input.addEventListener('click', function(ev) { ev.stopPropagation(); });
+                    input.addEventListener('keydown', function(ev) {
+                        ev.stopPropagation();
+                        if (ev.key === 'Enter') commit(true);
+                        else if (ev.key === 'Escape') commit(false);
+                    });
+                    input.addEventListener('blur', function() { commit(true); });
+                    profileName.textContent = '';
+                    profileName.appendChild(input);
+                    input.focus();
+                    input.select();
+                });
+            }
+
+            // Photo crop engine: drag to pan, slider to zoom, save 256px JPEG.
+            const cropState = { img: null, zoom: 1, ox: 0, oy: 0, dragging: false, sx: 0, sy: 0, sox: 0, soy: 0 };
+
+            function cropBaseScale() {
+                if (!cropState.img || !cropCanvas) return 1;
+                return Math.max(cropCanvas.width / cropState.img.naturalWidth, cropCanvas.height / cropState.img.naturalHeight);
+            }
+
+            function clampCropOffset() {
+                if (!cropState.img || !cropCanvas) return;
+                const s = cropBaseScale() * cropState.zoom;
+                const dw = cropState.img.naturalWidth * s;
+                const dh = cropState.img.naturalHeight * s;
+                const maxX = Math.max(0, (dw - cropCanvas.width) / 2);
+                const maxY = Math.max(0, (dh - cropCanvas.height) / 2);
+                cropState.ox = Math.min(maxX, Math.max(-maxX, cropState.ox));
+                cropState.oy = Math.min(maxY, Math.max(-maxY, cropState.oy));
+            }
+
+            function drawCrop() {
+                if (!cropState.img || !cropCanvas) return;
+                const ctx = cropCanvas.getContext('2d');
+                if (!ctx) return;
+                clampCropOffset();
+                const s = cropBaseScale() * cropState.zoom;
+                const dw = cropState.img.naturalWidth * s;
+                const dh = cropState.img.naturalHeight * s;
+                ctx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+                ctx.drawImage(cropState.img, (cropCanvas.width - dw) / 2 + cropState.ox, (cropCanvas.height - dh) / 2 + cropState.oy, dw, dh);
+            }
+
+            function enterCropMode() {
+                if (profileMain) profileMain.hidden = true;
+                if (profileCropView) profileCropView.hidden = false;
+                showProfileError(null);
+                drawCrop();
+            }
+
+            function exitCropMode() {
+                cropState.img = null;
+                cropState.zoom = 1;
+                cropState.ox = 0;
+                cropState.oy = 0;
+                cropState.dragging = false;
+                if (cropZoom) cropZoom.value = '1';
+                if (profileCropView) profileCropView.hidden = true;
+                if (profileMain) profileMain.hidden = false;
+            }
+
+            if (btnPhotoEdit && photoInput) {
+                btnPhotoEdit.addEventListener('click', function() {
+                    photoInput.click();
+                });
+                photoInput.addEventListener('change', function() {
+                    const file = photoInput.files && photoInput.files[0];
+                    if (!file) return;
+                    if (!file.type || file.type.indexOf('image/') !== 0) {
+                        showProfileError('Please choose an image file.');
+                        photoInput.value = '';
+                        return;
+                    }
+                    if (file.size > 8 * 1024 * 1024) {
+                        showProfileError('Image is too large (max 8 MB).');
+                        photoInput.value = '';
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = function() {
+                        const img = new Image();
+                        img.onload = function() {
+                            cropState.img = img;
+                            cropState.zoom = 1;
+                            cropState.ox = 0;
+                            cropState.oy = 0;
+                            if (cropZoom) cropZoom.value = '1';
+                            enterCropMode();
+                        };
+                        img.onerror = function() {
+                            showProfileError('Could not read that image.');
+                            photoInput.value = '';
+                        };
+                        img.src = reader.result;
+                    };
+                    reader.onerror = function() {
+                        showProfileError('Could not read that file.');
+                        photoInput.value = '';
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            if (cropZoom) {
+                cropZoom.addEventListener('input', function() {
+                    cropState.zoom = parseFloat(cropZoom.value) || 1;
+                    drawCrop();
+                });
+            }
+
+            if (cropCanvas) {
+                cropCanvas.addEventListener('pointerdown', function(e) {
+                    if (!cropState.img) return;
+                    cropState.dragging = true;
+                    cropState.sx = e.clientX;
+                    cropState.sy = e.clientY;
+                    cropState.sox = cropState.ox;
+                    cropState.soy = cropState.oy;
+                    try { cropCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+                });
+                cropCanvas.addEventListener('pointermove', function(e) {
+                    if (!cropState.dragging || !cropState.img) return;
+                    const rect = cropCanvas.getBoundingClientRect();
+                    const scale = cropCanvas.width / rect.width;
+                    cropState.ox = cropState.sox + (e.clientX - cropState.sx) * scale;
+                    cropState.oy = cropState.soy + (e.clientY - cropState.sy) * scale;
+                    drawCrop();
+                });
+                function endDrag() { cropState.dragging = false; }
+                cropCanvas.addEventListener('pointerup', endDrag);
+                cropCanvas.addEventListener('pointercancel', endDrag);
+            }
+
+            if (btnCropCancel) {
+                btnCropCancel.addEventListener('click', function() {
+                    exitCropMode();
+                    if (photoInput) photoInput.value = '';
+                });
+            }
+
+            if (btnCropSave) {
+                btnCropSave.addEventListener('click', function() {
+                    if (!cropState.img) {
+                        exitCropMode();
+                        return;
+                    }
+                    try {
+                        const out = document.createElement('canvas');
+                        out.width = 256;
+                        out.height = 256;
+                        const ctx = out.getContext('2d');
+                        const s = cropBaseScale() * cropState.zoom;
+                        const k = 256 / cropCanvas.width;
+                        const dw = cropState.img.naturalWidth * s * k;
+                        const dh = cropState.img.naturalHeight * s * k;
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, 256, 256);
+                        ctx.drawImage(cropState.img, (256 - dw) / 2 + cropState.ox * k, (256 - dh) / 2 + cropState.oy * k, dw, dh);
+                        const dataUrl = out.toDataURL('image/jpeg', 0.85);
+                        const next = window.ChatBotStore.loadProfile();
+                        next.photo = dataUrl;
+                        if (!window.ChatBotStore.saveProfile(next)) {
+                            showProfileError('Could not save photo (browser storage is full or unavailable).');
+                            return;
+                        }
+                        showProfileError(null);
+                        refreshProfileView();
+                        renderFooter();
+                        exitCropMode();
+                        if (photoInput) photoInput.value = '';
+                    } catch (err) {
+                        showProfileError('Could not save photo.');
+                    }
                 });
             }
 
