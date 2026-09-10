@@ -1030,3 +1030,42 @@ function initSettingsMenu() {
 }
 
 document.addEventListener('DOMContentLoaded', initSettingsMenu);
+
+const uploadBtn = document.querySelector('.plus-option[aria-label="Attach file"]');
+const fileInput = document.getElementById('fileInput');
+
+uploadBtn.addEventListener('click', () => {
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  for (const file of files) {
+    const base64 = await fileToBase64(file);
+    // simpan di state biar ikut terkirim pas user submit pesan
+    attachedFiles.push({
+      name: file.name,
+      type: file.type,
+      data: base64
+    });
+    renderFilePreview(file);
+  }
+});
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]); // buang prefix data:...;base64,
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderFilePreview(file) {
+  // tampilkan chip/thumbnail nama file di atas input chat
+  const preview = document.createElement('div');
+  preview.className = 'file-chip';
+  preview.textContent = file.name;
+  document.querySelector('.file-preview-area')?.appendChild(preview);
+}
+
