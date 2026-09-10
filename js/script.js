@@ -1,9 +1,16 @@
         // ===== LOCAL PERSISTENT STORE (conversations + provider keys) =====
         // Shared by the chat engine and the settings panel. localStorage survives
         // refresh and browser restart; entries disappear only when deleted.
+        // Conversations are namespaced per owner: 'guest' when signed out,
+        // 'user:<id|email>' when signed in, so each account keeps its own history.
         window.ChatBotStore = (function() {
-            const CONV_KEY = 'chatbot.conversations.v1';
+            const CONV_BASE = 'chatbot.conversations.v1';
             const KEYS_KEY = 'chatbot.apikeys.v1';
+            let owner = 'guest';
+
+            function convKey() {
+                return CONV_BASE + ':' + owner;
+            }
 
             function read(key, fallback) {
                 try {
@@ -29,12 +36,23 @@
             }
 
             return {
+                setOwner: function(next) {
+                    owner = (next && String(next)) || 'guest';
+                },
+                getOwner: function() {
+                    return owner;
+                },
                 loadConversations: function() {
-                    const list = read(CONV_KEY, []);
+                    const list = read(convKey(), []);
                     return Array.isArray(list) ? list : [];
                 },
                 saveConversations: function(list) {
-                    return write(CONV_KEY, list);
+                    return write(convKey(), list);
+                },
+                clearConversations: function(which) {
+                    try {
+                        localStorage.removeItem(CONV_BASE + ':' + ((which && String(which)) || owner));
+                    } catch (e) {}
                 },
                 loadKeys: function() {
                     const saved = read(KEYS_KEY, {});
@@ -73,10 +91,15 @@
             const modelDropdown = document.getElementById('modelDropdown');
             const modelOptions = document.querySelectorAll('.model-option');
             const currentModel = document.getElementById('currentModel');
-            const btnSignIn = document.getElementById('btnSignIn');
-            const account = document.getElementById('account');
-            const accountName = document.getElementById('accountName');
-            const btnSignOut = document.getElementById('btnSignOut');
+            const userBtn = document.getElementById('userBtn');
+            const userMenu = document.getElementById('userMenu');
+            const userAvatar = document.getElementById('userAvatar');
+            const userName = document.getElementById('userName');
+            const userPlan = document.getElementById('userPlan');
+            const menuSignIn = document.getElementById('menuSignIn');
+            const menuSettings = document.getElementById('menuSettings');
+            const menuHelp = document.getElementById('menuHelp');
+            const menuSignOut = document.getElementById('menuSignOut');
 
 
             
@@ -401,24 +424,175 @@
             // ===== BACKEND (optional account service) =====
             const API_BASE = '/api';
 
-            // ===== ACCOUNT =====
-            function renderAccount(user) {
-                const signedIn = !!user;
-                account.hidden = !signedIn;
-                btnSignIn.hidden = signedIn;
-                accountName.textContent = signedIn ? user.name : '';
-                accountName.title = signedIn ? user.email : '';
+            // ===== AUTH (session via /api backend when present; guest otherwise) =====
+            let currentUser = null;
+
+            function ownerKey() {
+                return currentUser ? ('user:' + (currentUser.id || currentUser.email)) : 'guest';
             }
 
-            fetch(API_BASE + '/auth/me', { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(d) { renderAccount(d.user); })
-                .catch(function() { renderAccount(null); });
+            function applyOwner() {
+                window.ChatBotStore.setOwner(ownerKey());
+                conversations = window.ChatBotStore.loadConversations();
+            }
 
-            btnSignOut.addEventListener('click', function() {
-                fetch(API_BASE + '/auth/logout', { method: 'POST', credentials: 'same-origin' })
-                    .finally(function() { window.location.reload(); });
-            });
+            function renderFooter() {
+                const name = currentUser ? (currentUser.name || currentUser.email || 'User') : 'User';
+                if (userAvatar) userAvatar.textContent = (name.trim().charAt(0) || 'U').toUpperCase();
+                if (userName) userName.textContent = name;
+                if (userPlan) userPlan.textContent = currentUser ? (currentUser.email || 'Free Plan') : 'Free Plan';
+                if (menuSignIn) menuSignIn.hidden = !!currentUser;
+                if (menuSignOut) menuSignOut.hidden = !currentUser;
+            }
+
+            function closeUserMenu() {
+                if (userMenu) userMenu.hidden = true;
+                if (userBtn) userBtn.setAttribute('aria-expanded', 'false');
+            }
+
+            function resetChatView() {
+                activeConversationId = null;
+                chatStarted = false;
+                welcomeScreen.style.display = '';
+                messagesWrapper.classList.remove('visible');
+                messagesWrapper.innerHTML = '';
+                chatInput.value = '';
+                chatInput.style.height = 'auto';
+                attachedFiles.length = 0;
+                const filePreviewArea = document.getElementById('filePreviewArea');
+                if (filePreviewArea) {
+                    filePreviewArea.innerHTML = '';
+                    filePreviewArea.hidden = true;
+                }
+                updateSendState();
+                renderHistory();
+            }
+
+            function notifyAccountPanel() {
+                if (window.ChatBotAuth && typeof window.ChatBotAuth.refreshAccountPanel === 'function') {
+                    window.ChatBotAuth.refreshAccountPanel();
+                }
+            }
+
+            async function refreshAuth() {
+                let user = null;
+                try {
+                    const r = await fetch(API_BASE + '/auth/me', { credentials: 'same-origin' });
+                    const d = await r.json();
+                    user = d && d.user ? d.user : null;
+                } catch (e) {
+                    user = null;
+                }
+                currentUser = user;
+                applyOwner();
+                renderFooter();
+                notifyAccountPanel();
+                // Always reset the view after auth resolves so the history
+                // shown always matches the active owner (guest or account).
+                resetChatView();
+                return user;
+            }
+
+            async function doSignOut(everywhere) {
+                try {
+                    await fetch(API_BASE + '/auth/logout', { method: 'POST', credentials: 'same-origin' });
+                } catch (e) {}
+                if (everywhere) {
+                    try {
+                        await fetch(API_BASE + '/auth/logout-all', { method: 'POST', credentials: 'same-origin' });
+                    } catch (e) {}
+                }
+                currentUser = null;
+                // Signed-out view is always empty: wipe the guest scratch store.
+                window.ChatBotStore.clearConversations('guest');
+                applyOwner();
+                renderFooter();
+                notifyAccountPanel();
+                resetChatView();
+            }
+
+            async function deleteAccount() {
+                if (!currentUser) return false;
+                const owner = ownerKey();
+                try {
+                    await fetch(API_BASE + '/auth/account', { method: 'DELETE', credentials: 'same-origin' });
+                } catch (e) {}
+                window.ChatBotStore.clearConversations(owner);
+                await doSignOut(false);
+                return true;
+            }
+
+            window.ChatBotAuth = window.ChatBotAuth || {};
+            window.ChatBotAuth.getUser = function() { return currentUser; };
+            window.ChatBotAuth.signOut = function(everywhere) { return doSignOut(!!everywhere); };
+            window.ChatBotAuth.deleteAccount = function() { return deleteAccount(); };
+
+            refreshAuth();
+
+            // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
+            const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
+                + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
+                + '**History** — every chat is saved automatically. Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
+                + '**Models** — pick a model from the dropdown in the input box. Default uses your local Jan model. Cloud models (GPT-4o, Gemini, Claude, DeepSeek) need an API key in Settings → API Key.\n\n'
+                + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Attached files are sent to the model together with your message.\n\n'
+                + '**Account** — sign in to keep a personal chat history on this device. Signing out clears the view; signing back in reloads your saved chats.';
+
+            function showHelpChat() {
+                activeConversationId = null;
+                chatStarted = true;
+                welcomeScreen.style.display = 'none';
+                messagesWrapper.classList.add('visible');
+                messagesWrapper.innerHTML = '';
+                addMessage('assistant', HELP_TEXT);
+                renderHistory();
+                scrollToBottom();
+                if (getBreakpoint() !== 'desktop') {
+                    closeSidebar();
+                }
+                chatInput.focus();
+            }
+
+            if (userBtn && userMenu) {
+                userBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const willOpen = userMenu.hidden;
+                    userMenu.hidden = !willOpen;
+                    userBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                });
+                userMenu.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+            }
+
+            if (menuSignIn) {
+                menuSignIn.addEventListener('click', function() {
+                    closeUserMenu();
+                    window.location.assign('./components/login/signup.html');
+                });
+            }
+
+            if (menuSettings) {
+                menuSettings.addEventListener('click', function() {
+                    closeUserMenu();
+                    if (window.ChatBotSettings && typeof window.ChatBotSettings.openPanel === 'function') {
+                        window.ChatBotSettings.openPanel('general');
+                    }
+                });
+            }
+
+            if (menuHelp) {
+                menuHelp.addEventListener('click', function() {
+                    closeUserMenu();
+                    showHelpChat();
+                });
+            }
+
+            if (menuSignOut) {
+                menuSignOut.addEventListener('click', function() {
+                    closeUserMenu();
+                    doSignOut(false);
+                });
+            }
 
             // ===== SIDEBAR TOGGLE =====
             function getBreakpoint() {
@@ -1277,6 +1451,7 @@
                 if (modelDropdown && !modelDropdown.hidden) closeModelDropdown();
                 if (plusDropdownIsOpen()) closePlusDropdown();
                 closeSearchPopup();
+                closeUserMenu();
             });
 
             // ===== KEYBOARD SHORTCUT =====
@@ -1364,7 +1539,39 @@
                     el.classList.toggle('active', el.getAttribute('data-panel') === key);
                 });
                 showSettingsPanel(key);
+                if (key === 'account') refreshAccountPanel();
             };
+
+            // ===== ACCOUNT PANEL (email + sign out everywhere + delete) =====
+            const accountEmail = document.getElementById('accountEmail');
+            const btnSignOutAll = document.getElementById('btnSignOutAll');
+            const btnDeleteAccount = document.getElementById('btnDeleteAccount');
+
+            function refreshAccountPanel() {
+                const user = window.ChatBotAuth ? window.ChatBotAuth.getUser() : null;
+                if (accountEmail) {
+                    accountEmail.textContent = user ? (user.email || user.name || 'Signed in') : 'Not signed in';
+                }
+                if (btnSignOutAll) btnSignOutAll.disabled = !user;
+                if (btnDeleteAccount) btnDeleteAccount.disabled = !user;
+            }
+
+            if (window.ChatBotAuth) window.ChatBotAuth.refreshAccountPanel = refreshAccountPanel;
+            refreshAccountPanel();
+
+            if (btnSignOutAll) {
+                btnSignOutAll.addEventListener('click', function() {
+                    if (window.ChatBotAuth) window.ChatBotAuth.signOut(true);
+                });
+            }
+
+            if (btnDeleteAccount) {
+                btnDeleteAccount.addEventListener('click', function() {
+                    if (confirm('Delete your account permanently? Its saved conversations will be removed from this device.')) {
+                        if (window.ChatBotAuth) window.ChatBotAuth.deleteAccount();
+                    }
+                });
+            }
 
             // Sidebar Menu Search Filter
             if (settingsMenuSearch) {

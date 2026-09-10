@@ -2230,44 +2230,78 @@
 .plan-card .plan-name{ font-size:15px; color:#fff; font-weight:600; }
 .plan-card .plan-sub{ font-size:12.5px; color:#8a8a92; margin-top:4px; }
 
-        /* ===== ACCOUNT (top bar) ===== */
-        .account {
+        /* ===== USER MENU (sidebar footer, opens upward) ===== */
+        .user-menu-wrap {
+            position: relative;
+        }
+
+        .user-btn {
+            text-align: left;
+        }
+
+        .user-menu {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: calc(100% + 8px);
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 6px;
+            z-index: 130;
+            animation: dropdownUp 0.15s ease;
+        }
+
+        .user-menu[hidden] {
+            display: none;
+        }
+
+        .user-menu-item {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-        }
-
-        .account-name {
-            font-size: 0.8125rem;
-            color: var(--text-secondary);
-            max-width: 14ch;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .btn-account {
-            font: inherit;
-            font-size: 0.8125rem;
-            line-height: 1;
-            padding: 0.4rem 0.7rem;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border-color);
+            gap: 10px;
+            width: 100%;
+            padding: 9px 10px;
             background: transparent;
+            border: none;
+            border-radius: var(--radius-md);
             color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
             cursor: pointer;
-            text-decoration: none;
-            white-space: nowrap;
-            transition: background 0.15s, border-color 0.15s;
+            transition: background-color 0.18s ease;
+            text-align: left;
         }
 
-        .btn-account:hover {
+        .user-menu-item:hover {
             background: var(--bg-hover);
         }
 
-        .account[hidden],
-        .btn-account[hidden] {
+        .user-menu-item svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            transition: color 0.18s ease;
+        }
+
+        .user-menu-item:hover svg {
+            color: var(--text-primary);
+        }
+
+        .user-menu-item.danger,
+        .user-menu-item.danger svg {
+            color: #ff6b6b;
+        }
+
+        .user-menu-item[hidden] {
             display: none;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         /* ===== HISTORY RENAME + EMPTY STATE ===== */
