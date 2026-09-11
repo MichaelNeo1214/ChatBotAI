@@ -246,3 +246,5 @@ No license has been specified yet. Add a license before distributing or acceptin
 ## 🌟 Final Thought
 
 Great assistants do more than generate answers—they listen, adapt, and help people move forward. ChatBotAI is a starting point for building that kind of experience, one thoughtful conversation at a time.
+
+## Big Thanks for Yer and Max
