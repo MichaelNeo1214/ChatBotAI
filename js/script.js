@@ -615,7 +615,7 @@
             if (menuSignIn) {
                 menuSignIn.addEventListener('click', function() {
                     closeUserMenu();
-                    window.location.assign('./components/login/signup.html');
+                    window.location.assign('./components/auth/signup.html');
                 });
             }
 
