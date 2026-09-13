@@ -91,6 +91,8 @@ All endpoints live under `/api`. Conversations are scoped to the caller by an
 | `POST` | `/api/auth/signup` | Create an account and start a session. |
 | `POST` | `/api/auth/login` | Start a session. |
 | `POST` | `/api/auth/logout` | End the current session. |
+| `POST` | `/api/auth/logout-all` | End every session for the account. |
+| `DELETE` | `/api/auth/account` | Delete the account and its conversations. |
 | `GET` | `/api/auth/me` | The signed-in user, or `null`. |
 | `POST` | `/api/chat` | Send a message; streams the reply. |
 | `GET` | `/api/conversations` | List conversations, most recent first. |
@@ -121,6 +123,33 @@ data: {"messageId":"...","content":"Hello there"}
 
 A failure mid-stream arrives as `event: error` instead of `event: done`; any
 text generated before the failure is still saved.
+
+### Bring your own key
+
+The model picker's `ChatBot AI` option uses the server's own provider and
+`.env` key. Every other label uses the caller's key, sent per request:
+
+| Header | Required | Purpose |
+| --- | --- | --- |
+| `X-Provider-Key` | yes, for non-default labels | The user's own API key. |
+| `X-Provider-Base-Url` | no | Overrides the preset base URL. |
+| `X-Provider-Model` | no | Overrides the preset model id. |
+
+Presets live in `src/providers/presets.ts`:
+
+| Label | Adapter | Base URL | Model |
+| --- | --- | --- | --- |
+| `GPT-4o` | openai-compatible | `https://api.openai.com/v1` | `gpt-4o` |
+| `Gemini` | openai-compatible | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
+| `DeepSeek` | openai-compatible | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| `Claude` | anthropic | — | `claude-opus-5` |
+
+The headers are ignored for `ChatBot AI`. An unknown label returns
+`400 {"code":"unknown_model"}`; a known label with no key returns
+`400 {"code":"missing_api_key","model":"<label>"}`.
+
+**The key is never stored.** It lives only for the duration of the request: not
+written to the database, not logged, and never echoed in a response or error.
 
 ## 🗄️ Data
 
