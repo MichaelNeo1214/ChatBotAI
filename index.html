@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChatBot AI</title>
     <meta name="description" content="ChatBot AI - Your intelligent assistant">
+    <meta name="keywords" content="ChatBot, AI, Assistant, Chat, OpenAI, GPT-4, Gemini, Claude">
+    <meta name="author" content="Marvel-Michael-Yere">
+    <meta name="embedder" content="ChatBot AI">
+    <meta property="og:image" content="https://4kwallpapers.com/images/walls/thumbs_2t/25439.jpg>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -13,6 +17,11 @@
 
 <body>
 
+    <!-- Sidebar Toggle (single fixed icon, top-left, like Gemini) -->
+    <button class="btn-toggle-sidebar" id="btnOpenSidebar" aria-label="Toggle sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+    </button>
+
     <!-- Sidebar Overlay (mobile/tablet) -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
@@ -20,104 +29,80 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="sidebar-top">
-                <button class="btn-new-chat" id="btnNewChat">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                    <span data-i18n="newChat">New chat</span>
-                </button>
-                <button class="btn-icon" id="btnCloseSidebar" aria-label="Close sidebar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
-                </button>
+                <span class="sidebar-brand" data-i18n="brandName">ChatBot</span>
+                <div class="sidebar-top-actions">
+                    <button class="btn-header-action" id="btnSearchPopup" aria-label="Search conversations">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="search-box">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input type="text" id="searchInput" placeholder="Search conversations..." data-i18n-ph="searchConversations" aria-label="Search conversations">
-                <button class="btn-clear-search" id="btnClearSearch" aria-label="Clear search" hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-            </div>
+            <button class="btn-new-chat" id="btnNewChat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span data-i18n="newChat">New chat</span>
+            </button>
         </div>
 
         <nav class="chat-history" id="chatHistory" aria-label="Chat history">
-            <div class="history-section">
-                <div class="history-label" data-i18n="labelToday">Today</div>
-                <div class="history-item active" data-id="1">
-                    <span class="history-item-text">Welcome conversation</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-            </div>
-            <div class="history-section">
-                <div class="history-label" data-i18n="labelYesterday">Yesterday</div>
-                <div class="history-item" data-id="2">
-                    <span class="history-item-text">How to learn JavaScript</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-                <div class="history-item" data-id="3">
-                    <span class="history-item-text">Building REST API with Python</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-            </div>
-            <div class="history-section">
-                <div class="history-label" data-i18n="labelPrev7">Previous 7 days</div>
-                <div class="history-item" data-id="4">
-                    <span class="history-item-text">CSS Grid layout tutorial</span>
-                    <div class="history-item-actions">
-                        <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                        <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                    </div>
-                </div>
-                    <div class="history-item" data-id="5">
-                        <span class="history-item-text">Debugging Node.js memory leak</span>
-                        <div class="history-item-actions">
-                            <button class="btn-item-action" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
-                            <button class="btn-item-action" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                        </div>
-                    </div>
-                </div>
-            <div class="no-results" id="noResults">No conversations found</div>
+            <!-- Conversation list is rendered by js/script.js and persisted in localStorage -->
         </nav>
 
         <div class="sidebar-footer">
-            <a class="user-btn" href="components/login/signup.html" style="text-decoration: none;">
-                <div class="user-avatar">U</div>
-                <div class="user-info">
-                    <div class="user-name" data-i18n="userName">User</div>
-                    <div class="user-plan" data-i18n="freePlan">Free Plan</div>
+            <div class="user-menu-wrap">
+                <button class="user-btn" id="userBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-info">
+                        <div class="user-name" id="userName">User</div>
+                        <div class="user-plan" id="userPlan">Free Plan</div>
+                    </div>
+                </button>
+                <div class="user-menu" id="userMenu" role="menu" hidden>
+                    <button class="user-menu-item" id="menuSignIn" role="menuitem" type="button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                        <span data-i18n="menuSignIn">Sign in</span>
+                    </button>
+                    <button class="user-menu-item" id="menuProfile" role="menuitem" type="button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span data-i18n="menuProfile">Profile</span>
+                    </button>
+                    <button class="user-menu-item" id="menuSettings" role="menuitem" type="button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        <span data-i18n="menuSettings">Settings</span>
+                    </button>
+                    <button class="user-menu-item" id="menuHelp" role="menuitem" type="button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span data-i18n="menuHelp">Help</span>
+                    </button>
+                    <button class="user-menu-item danger" id="menuSignOut" role="menuitem" type="button" hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span data-i18n="menuSignOut">Sign out</span>
+                    </button>
                 </div>
-            </a>
+            </div>
         </div>
     </aside>
+
+    <!-- Search Popup -->
+    <div class="search-popup" id="searchPopup" hidden>
+        <div class="search-popup-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="searchPopupInput" placeholder="Search conversations..." data-i18n-ph="searchConversations" aria-label="Search conversations" autocomplete="off">
+            <button class="btn-clear-search" id="btnPopupClear" aria-label="Clear search" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="search-popup-list" id="searchPopupList"></div>
+        <div class="search-popup-empty" id="searchPopupEmpty" hidden>No conversations found</div>
+    </div>
 
     <!-- Main -->
     <main class="main" id="main">
         <!-- Top Bar -->
         <div class="topbar">
-            <button class="btn-toggle-sidebar" id="btnOpenSidebar" aria-label="Open sidebar">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
-            </button>
-            
             <div class="topbar-spacer"></div>
             <div class="topbar-right">
-
-                <button class="btn-icon" id="btnOpenSettings" aria-label="Settings">
-                    <i class="fa-solid fa-gear"></i>
-                </button>
-                <button class="btn-icon" aria-label="Share">
+                <button class="btn-icon" id="btnShareChat" aria-label="Share">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
                 </button>
-                <a class="btn-account" id="btnSignIn" href="/components/login/signup.html" hidden>Sign in</a>
-                <div class="account" id="account" hidden>
-                    <span class="account-name" id="accountName"></span>
-                    <button class="btn-account" id="btnSignOut">Sign out</button>
-                </div>
             </div>
         </div>
 
@@ -166,73 +151,100 @@
         <div class="input-area">
             
             <div class="input-wrapper">
-                <div class="input-box">
-                    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Message ChatBot AI..." data-i18n-ph="inputPlaceholder" aria-label="Message input"></textarea>
-                    <div class="input-bottom">
-                        <div class="input-tools">
-                            <div class="tool-plus-wrap">
-                                <button class="btn-tool btn-plus" id="btnPlus" aria-label="More options">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                                </button>
-                                <div class="plus-dropdown" id="plusDropdown" hidden>
-                                    <button class="plus-option" aria-label="Attach file">
-                                        <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
-                                        <span class="plus-name" data-i18n="uploadFile">Upload file</span>
-                                    </button>
-                                    <button class="plus-option" aria-label="Voice input">
-                                        <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span>
-                                        <span class="plus-name" data-i18n="voiceMessage">Voice message</span>
-                                    </button>
-                                    <button class="plus-option" aria-label="Add image">
-                                        <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
-                                        <span class="plus-name" data-i18n="addImage">Add image</span>
-                                    </button>
-                                </div>
+    <div class="input-box">
+        <div class="file-preview-area" id="filePreviewArea" hidden></div>
+        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Message ChatBot AI..." data-i18n-ph="inputPlaceholder" aria-label="Message input"></textarea>
+        <div class="input-bottom">
+            <div class="input-tools">
+                <div class="tool-plus-wrap">
+                    <button class="btn-tool btn-plus" id="btnPlus" aria-label="More options">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                    <div class="plus-dropdown" id="plusDropdown" hidden>
+                        <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.csv" hidden multiple>
+
+                        <button class="plus-option" aria-label="Attach file" id="btnUploadFile">
+                            <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
+                            <span class="plus-name" data-i18n="uploadFile">Upload file</span>
+                        </button>
+
+                        <button class="plus-option" aria-label="Voice input" id="btnVoiceInput">
+                            <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></span>
+                            <span class="plus-name" data-i18n="voiceMessage">Voice message</span>
+                        </button>
+
+                        <button class="plus-option" aria-label="Create Image" id="btnCreateImage">
+                            <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                            <span class="plus-name" data-i18n="createImage">Create Image</span>
+                        </button>
+
+                        <div class="plus-option-wrapper">
+                            <button class="plus-option" aria-label="Plugin" data-submenu="pluginSubmenu">
+                                <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></span>
+                                <span class="plus-name" data-i18n="plugin">Plugin</span>
+                                <svg class="plus-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                            <div class="plus-submenu" id="pluginSubmenu">
+                                <button class="dropdown-item" data-value="plugin-1">Plugin A</button>
+                                <button class="dropdown-item" data-value="plugin-2">Plugin B</button>
                             </div>
                         </div>
-                        <div class="input-actions-right">
-                            <div class="model-selector-wrap input-model-wrap">
-                                <button class="model-selector input-model-selector" id="btnModelDropdown">
-                                    <span class="model-selector-label" id="currentModel">ChatBot AI</span>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                                </button>
-                                <div class="model-dropdown" id="modelDropdown" hidden>
-                                    <button class="model-option active" data-model="ChatBot AI">
-                                        <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                                        <span class="model-name">ChatBot AI</span>
-                                        <span class="model-desc" data-i18n="modelDescChatbot">Default assistant</span>
-                                    </button>
-                                    <button class="model-option" data-model="GPT-4o">
-                                        <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                                        <span class="model-name">GPT-4o</span>
-                                        <span class="model-desc" data-i18n="modelDescGpt">OpenAI flagship</span>
-                                    </button>
-                                    <button class="model-option" data-model="Gemini">
-                                        <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                                        <span class="model-name">Gemini</span>
-                                        <span class="model-desc" data-i18n="modelDescGemini">Google multimodal</span>
-                                    </button>
-                                    <button class="model-option" data-model="Claude">
-                                        <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                                        <span class="model-name">Claude</span>
-                                        <span class="model-desc" data-i18n="modelDescClaude">Anthropic AI</span>
-                                    </button>
-                                    <button class="model-option" data-model="DeepSeek">
-                                        <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                                        <span class="model-name">DeepSeek</span>
-                                        <span class="model-desc" data-i18n="modelDescDeepseek">DeepSeek reasoning</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <button class="btn-send" id="btnSend" disabled aria-label="Send message">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+
+                        <div class="plus-option-wrapper">
+                            <button class="plus-option" aria-label="Skill" data-submenu="skillSubmenu">
+                                <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+                                <span class="plus-name" data-i18n="skill">Skill</span>
+                                <svg class="plus-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                             </button>
+                            <div class="plus-submenu" id="skillSubmenu">
+                                <button class="dropdown-item" data-value="skill-1">Skill A</button>
+                                <button class="dropdown-item" data-value="skill-2">Skill B</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-                
-
             </div>
+            <div class="input-actions-right">
+                <div class="model-selector-wrap input-model-wrap">
+                    <button class="model-selector input-model-selector" id="btnModelDropdown">
+                        <span class="model-selector-label" id="currentModel">ChatBot AI</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="model-dropdown" id="modelDropdown" hidden>
+                        <button class="model-option active" data-model="ChatBot AI">
+                            <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <span class="model-name">ChatBot AI</span>
+                            <span class="model-desc" data-i18n="modelDescChatbot">Default assistant</span>
+                        </button>
+                        <button class="model-option" data-model="GPT-4o">
+                            <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <span class="model-name">GPT-4o</span>
+                            <span class="model-desc" data-i18n="modelDescGpt">OpenAI flagship</span>
+                        </button>
+                        <button class="model-option" data-model="Gemini">
+                            <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <span class="model-name">Gemini</span>
+                            <span class="model-desc" data-i18n="modelDescGemini">Google multimodal</span>
+                        </button>
+                        <button class="model-option" data-model="Claude">
+                            <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <span class="model-name">Claude</span>
+                            <span class="model-desc" data-i18n="modelDescClaude">Anthropic AI</span>
+                        </button>
+                        <button class="model-option" data-model="DeepSeek">
+                            <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <span class="model-name">DeepSeek</span>
+                            <span class="model-desc" data-i18n="modelDescDeepseek">DeepSeek reasoning</span>
+                        </button>
+                    </div>
+                </div>
+                <button class="btn-send" id="btnSend" disabled aria-label="Send message">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
             <div class="input-footer">ChatBot AI can make mistakes. Check important info.</div>
         </div>
     </main>
@@ -258,15 +270,12 @@
                     <li class="settings-menu-item" data-title="Notifications" data-panel="notifications"><i class="fa-regular fa-bell"></i> Notifications</li>
                     <li class="settings-menu-item" data-title="Personalization" data-panel="personalization"><i class="fa-solid fa-wand-magic-sparkles"></i> Personalization</li>
                     <li class="settings-menu-item" data-title="Plugins" data-panel="plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
+                    <li class="settings-menu-item" data-title="API Key" data-panel="api-key"><i class="fa-solid fa-key"></i> API Key</li>
                     <li class="settings-menu-item" data-title="Voice" data-panel="voice"><i class="fa-solid fa-microphone"></i> Voice</li>
                     <li class="settings-menu-item" data-title="Billing" data-panel="billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
                     <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
                     <li class="settings-menu-item" data-title="Analytics" data-panel="analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
-                    <li class="settings-menu-item" data-title="Data controls" data-panel="data-controls"><i class="fa-solid fa-database"></i> Data controls</li>
-                    <li class="settings-menu-item" data-title="Storage" data-panel="storage"><i class="fa-solid fa-hard-drive"></i> Storage</li>
-                    <li class="settings-menu-item" data-title="Safety" data-panel="safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
-                    <li class="settings-menu-item" data-title="Security and login" data-panel="security-login"><i class="fa-solid fa-key"></i> Security and login</li>
-                    <li class="settings-menu-item" data-title="Parental controls" data-panel="parental-controls"><i class="fa-solid fa-user-group"></i> Parental controls</li>
+                    <li class="settings-menu-item" data-title="Security and login" data-panel="security-login"><i class="fa-solid fa-lock"></i> Security and login</li>
                     <li class="settings-menu-item" data-title="Account" data-panel="account"><i class="fa-regular fa-circle-user"></i> Account</li>
                 </ul>
             </div>
@@ -275,9 +284,6 @@
 <div class="settings-panels" id="settingsPanels">
     <div class="settings-panel active" data-panel="general">
       <h2>General</h2>
-
-
-
       <div class="setting-row">
         <span class="setting-label">Appearance</span>
         <div class="select-wrapper">
@@ -407,6 +413,118 @@
       </div>
     </div>
 
+    <!-- API KEY -->
+    <div class="settings-panel" data-panel="api-key">
+      <h2>API Key</h2>
+      <div class="setting-desc" style="margin-bottom:14px;" data-i18n="apiKeyIntro">Connect your AI providers here. Keys are stored only in this browser and reused automatically, even after refresh or restart. Models without a key cannot be used.</div>
+
+      <div class="api-card" data-provider="openai">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">OpenAI</div>
+            <div class="setting-desc" data-i18n="apiOpenAiDesc">Powers the GPT-4o model option.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="gemini">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Gemini</div>
+            <div class="setting-desc" data-i18n="apiGeminiDesc">Powers the Gemini model option. Get a key from Google AI Studio.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="AIza..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="claude">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Claude</div>
+            <div class="setting-desc" data-i18n="apiClaudeDesc">Powers the Claude model option. Get a key from Anthropic Console.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="deepseek">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">DeepSeek</div>
+            <div class="setting-desc" data-i18n="apiDeepseekDesc">Powers the DeepSeek model option. Get a key from DeepSeek Platform.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="default">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Default <span class="api-badge" data-i18n="apiLocalBadge">Local</span></div>
+            <div class="setting-desc" data-i18n="apiDefaultDesc">Your own model via Jan (Local API Server). No key needed.</div>
+          </div>
+          <span class="api-status saved" data-api-status>Ready</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Base URL</span>
+        </div>
+        <div class="api-key-row">
+          <input type="text" class="api-key-input" data-api-field="baseUrl" placeholder="http://localhost:1337/v1" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Model ID</span>
+        </div>
+        <div class="api-key-row">
+          <input type="text" class="api-key-input" data-api-field="model" placeholder="Empty = auto-detect from Jan" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Reset</button>
+        </div>
+      </div>
+    </div>
+
     <!-- VOICE -->
     <div class="settings-panel" data-panel="voice">
       <h2>Voice</h2>
@@ -488,40 +606,6 @@
       </div>
     </div>
 
-    <!-- DATA CONTROLS -->
-    <div class="settings-panel" data-panel="data-controls">
-      <h2>Data controls</h2>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Improve the model for everyone</div>
-          <div class="setting-desc">Allow your conversations to be used for training.</div>
-        </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Export data</span>
-        <button class="btn">Export</button>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Delete all chats</span>
-        <button class="btn danger">Delete all</button>
-      </div>
-    </div>
-
-    <!-- STORAGE -->
-    <div class="settings-panel" data-panel="storage">
-      <h2>Storage</h2>
-      <div class="setting-row" style="display:block;">
-        <span class="setting-label">Total storage</span>
-        <div class="usage-bar-track"><div class="usage-bar-fill" style="width:65%;"></div></div>
-        <div class="setting-desc" style="margin-top:6px;">6.5 GB / 10 GB used</div>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Clear cached files</span>
-        <button class="btn">Clear cache</button>
-      </div>
-    </div>
-
     <!-- SAFETY -->
     <div class="settings-panel" data-panel="safety">
       <h2>Safety</h2>
@@ -558,39 +642,73 @@
       </div>
     </div>
 
-    <!-- PARENTAL CONTROLS -->
-    <div class="settings-panel" data-panel="parental-controls">
-      <h2>Parental controls</h2>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Restricted mode</div>
-          <div class="setting-desc">Limit access to mature or sensitive content.</div>
-        </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Linked accounts</span>
-        <button class="btn">Manage</button>
-      </div>
-    </div>
-
     <!-- ACCOUNT -->
     <div class="settings-panel" data-panel="account">
       <h2>Account</h2>
       <div class="setting-row">
         <span class="setting-label">Email</span>
-        <span class="setting-desc">user@example.com</span>
+        <span class="setting-desc" id="accountEmail">Not signed in</span>
       </div>
       <div class="setting-row">
         <span class="setting-label">Sign out of all devices</span>
-        <button class="btn">Sign out everywhere</button>
+        <button class="btn" id="btnSignOutAll" type="button">Sign out everywhere</button>
       </div>
       <div class="setting-row">
         <span class="setting-label">Delete account</span>
-        <button class="btn danger">Delete account</button>
+        <button class="btn danger" id="btnDeleteAccount" type="button">Delete account</button>
       </div>
     </div>
 </div>
+        </div>
+    </div>
+
+    <!-- API Key Required Popup -->
+    <div class="key-alert-overlay" id="keyAlertOverlay" hidden>
+        <div class="key-alert-card" role="alertdialog" aria-labelledby="keyAlertTitle">
+            <div class="key-alert-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <div class="key-alert-title" id="keyAlertTitle">API key required</div>
+            <div class="key-alert-desc" id="keyAlertDesc">This model needs an API key before it can be used.</div>
+            <div class="key-alert-actions">
+                <button class="btn primary" id="btnKeyAlertSettings" type="button">Open API Key Settings</button>
+                <button class="btn" id="btnKeyAlertClose" type="button">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Popup -->
+    <div class="profile-overlay" id="profileOverlay" hidden>
+        <div class="profile-card" role="dialog" aria-labelledby="profileTitle">
+            <div class="profile-title" id="profileTitle" data-i18n="profileTitle">Profile</div>
+            <div class="profile-error" id="profileError" hidden></div>
+            <div id="profileMain">
+                <div class="profile-photo-wrap">
+                    <div class="profile-photo" id="profilePhoto">U</div>
+                    <button class="profile-photo-edit" id="btnPhotoEdit" type="button" aria-label="Change profile picture">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                    <input type="file" id="photoInput" accept="image/*" hidden>
+                </div>
+                <div class="profile-name-row">
+                    <span class="profile-name" id="profileName">User</span>
+                    <button class="profile-rename-btn" id="btnRenameProfile" type="button">
+                        <span data-i18n="profileRename">Rename</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                </div>
+                <div class="profile-email" id="profileEmail">Not signed in</div>
+                <button class="btn primary profile-close-btn" id="btnProfileClose" type="button">Close</button>
+            </div>
+            <div id="profileCrop" hidden>
+                <canvas class="profile-crop-canvas" id="cropCanvas" width="440" height="440"></canvas>
+                <input class="profile-crop-zoom" id="cropZoom" type="range" min="1" max="3" step="0.01" value="1" aria-label="Zoom">
+                <div class="setting-desc" data-i18n="profileCropHint">Drag to position • slide to zoom</div>
+                <div class="profile-crop-actions">
+                    <button class="btn primary" id="btnCropSave" type="button">Save</button>
+                    <button class="btn" id="btnCropCancel" type="button">Cancel</button>
+                </div>
+            </div>
         </div>
     </div>
 
