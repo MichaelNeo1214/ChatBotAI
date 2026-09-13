@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatBot AI — Intelligent Conversations. Zero Friction.</title>
+    <meta name="description" content="AI chatbot with Opencode integration for seamless conversations">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --void-black: #000000;
+            --white: #ffffff;
+            --bone-white: #f0f0f0;
+            --ash-gray: #a1a4a5;
+            --iris-violet: #9281f7;
+            --pulse-green: #3ad389;
+            --graphite-hairline: #292d30;
+            
+            --hero-display: 'Playfair Display', serif;
+            --section-heading: 'Inter', sans-serif;
+            --body: 'Inter', sans-serif;
+            --code: 'JetBrains Mono', 'Courier New', monospace;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+        }
+
+        body {
+            background: var(--void-black);
+            color: var(--bone-white);
+            font-family: var(--body);
+            overflow-x: hidden;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        button {
+            cursor: pointer;
+            font-family: inherit;
+            border: none;
+        }
+
+        .max-width-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* ===== NAVIGATION ===== */
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            background: transparent;
+            border-bottom: 1px solid var(--graphite-hairline);
+            padding: 0 24px;
+        }
+
+        .nav-logo {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--white);
+            letter-spacing: -0.5px;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .nav-links a {
+            font-size: 14px;
+            color: var(--bone-white);
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--iris-violet);
+        }
+
+        .nav-cta {
+            margin-left: auto;
+        }
+
+        /* ===== BUTTONS ===== */
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--graphite-hairline);
+            color: var(--white);
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--ash-gray);
+            color: var(--bone-white);
+        }
+
+        .btn-primary {
+            background: transparent;
+            border: 1px solid var(--graphite-hairline);
+            color: var(--white);
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: rgba(146, 129, 247, 0.1);
+            border-color: var(--iris-violet);
+        }
+
+        /* ===== ANNOUNCEMENT PILL ===== */
+        .announcement-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: transparent;
+            border: 1px solid var(--graphite-hairline);
+            border-radius: 9999px;
+            padding: 8px 12px;
+            color: var(--bone-white);
+            font-size: 14px;
+            margin-bottom: 24px;
+            width: fit-content;
+        }
+
+        .announcement-pill::after {
+            content: "→";
+            font-size: 12px;
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: center;
+            padding: 120px 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .hero-content {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .hero-headline {
+            font-family: var(--hero-display);
+            font-size: 96px;
+            font-weight: 400;
+            line-height: 1;
+            letter-spacing: -0.01em;
+            color: var(--white);
+        }
+
+        .hero-subheadline {
+            font-size: 18px;
+            color: var(--ash-gray);
+            line-height: 1.6;
+            max-width: 500px;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .hero-actions .btn-primary {
+            min-width: 140px;
+        }
+
+        .hero-docs-link {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            color: var(--bone-white);
+            border: none;
+            background: none;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .hero-docs-link:hover {
+            color: var(--iris-violet);
+        }
+
+        .hero-docs-link::after {
+            content: "→";
+        }
+
+        /* ===== 3D CUBE ===== */
+        .hero-visual {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+        }
+
+        .cube-container {
+            width: 300px;
+            height: 300px;
+            perspective: 1000px;
+        }
+
+        .cube {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: rotateCube 10s infinite linear;
+        }
+
+        .cube-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 1px solid var(--graphite-hairline);
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: var(--iris-violet);
+            font-family: var(--code);
+        }
+
+        .cube-face:nth-child(1) { transform: translateZ(150px); }
+        .cube-face:nth-child(2) { transform: rotateY(90deg) translateZ(150px); }
+        .cube-face:nth-child(3) { transform: rotateY(180deg) translateZ(150px); }
+        .cube-face:nth-child(4) { transform: rotateY(-90deg) translateZ(150px); }
+        .cube-face:nth-child(5) { transform: rotateX(90deg) translateZ(150px); }
+        .cube-face:nth-child(6) { transform: rotateX(-90deg) translateZ(150px); }
+
+        @keyframes rotateCube {
+            from { transform: rotateX(0deg) rotateY(0deg); }
+            to { transform: rotateX(360deg) rotateY(360deg); }
+        }
+
+        /* ===== TERMINAL SECTION ===== */
+        .terminal-section {
+            padding: 120px 24px;
+            background: var(--void-black);
+        }
+
+        .terminal-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .terminal-window {
+            background: var(--void-black);
+            border: 1px solid var(--graphite-hairline);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--graphite-hairline);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f57; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #28c840; }
+
+        .terminal-body {
+            padding: 24px;
+            font-family: var(--code);
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--bone-white);
+            overflow-x: auto;
+        }
+
+        .terminal-line {
+            display: flex;
+            gap: 8px;
+        }
+
+        .terminal-prompt {
+            color: var(--iris-violet);
+            flex-shrink: 0;
+        }
+
+        .terminal-key {
+            color: var(--iris-violet);
+        }
+
+        .terminal-string {
+            color: var(--pulse-green);
+        }
+
+        .terminal-value {
+            color: var(--bone-white);
+        }
+
+        /* ===== FEATURES GRID ===== */
+        .features-section {
+            padding: 120px 24px;
+            background: var(--void-black);
+        }
+
+        .features-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .features-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+
+        .features-heading {
+            font-family: var(--section-heading);
+            font-size: 56px;
+            font-weight: 400;
+            letter-spacing: -0.05em;
+            color: var(--white);
+            margin-bottom: 16px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+        }
+
+        .feature-card {
+            background: var(--void-black);
+            border: 1px solid var(--graphite-hairline);
+            border-radius: 16px;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--iris-violet);
+        }
+
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--bone-white);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bone-white);
+        }
+
+        .feature-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--white);
+        }
+
+        .feature-description {
+            font-size: 14px;
+            color: var(--ash-gray);
+            line-height: 1.6;
+        }
+
+        /* ===== STATUS INDICATOR ===== */
+        .status-section {
+            display: flex;
+            justify-content: center;
+            padding: 40px 24px;
+            background: var(--void-black);
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: transparent;
+            border: 1px solid var(--graphite-hairline);
+            border-radius: 9999px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: var(--bone-white);
+            font-family: var(--code);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--pulse-green);
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ===== FOOTER ===== */
+        footer {
+            padding: 32px 24px;
+            border-top: 1px solid var(--graphite-hairline);
+            background: var(--void-black);
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .footer-links a {
+            font-size: 14px;
+            color: var(--ash-gray);
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: var(--white);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .hero {
+                grid-template-columns: 1fr;
+                gap: 48px;
+                padding: 80px 24px;
+            }
+
+            .hero-visual {
+                height: 300px;
+            }
+
+            .cube {
+                width: 250px;
+                height: 250px;
+            }
+
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .hero-headline {
+                font-size: 64px;
+            }
+
+            .features-heading {
+                font-size: 40px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            nav {
+                flex-wrap: wrap;
+                height: auto;
+                padding: 12px 16px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+                padding: 60px 16px;
+            }
+
+            .hero-headline {
+                font-size: 48px;
+            }
+
+            .hero-subheadline {
+                font-size: 16px;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .features-heading {
+                font-size: 32px;
+            }
+
+            .terminal-section {
+                padding: 80px 16px;
+            }
+
+            .features-section {
+                padding: 80px 16px;
+            }
+
+            .hero-visual {
+                height: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .announcement-pill {
+                font-size: 12px;
+                padding: 6px 10px;
+                margin-bottom: 16px;
+            }
+
+            .hero-headline {
+                font-size: 36px;
+            }
+
+            .hero-actions {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .hero-actions .btn-primary {
+                width: 100%;
+                text-align: center;
+            }
+
+            .features-heading {
+                font-size: 28px;
+            }
+
+            .terminal-body {
+                padding: 16px;
+                font-size: 12px;
+            }
+
+            .status-pill {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-logo">ChatBot AI</div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#demo">Demo</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#docs">Docs</a>
+        </div>
+        <div class="nav-cta">
+            <button class="btn-ghost">Get started</button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="announcement-pill">Introducing our Opencode AI integration</div>
+            <h1 class="hero-headline">Intelligent conversations. Zero friction.</h1>
+            <p class="hero-subheadline">Build powerful AI-driven applications with seamless Opencode integration. Real-time processing, custom logic, and unlimited conversations.</p>
+            <div class="hero-actions">
+                <button class="btn-primary">Start building</button>
+                <button class="hero-docs-link">Read the docs</button>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <div class="cube-container">
+                <div class="cube">
+                    <div class="cube-face">FRONT</div>
+                    <div class="cube-face">RIGHT</div>
+                    <div class="cube-face">BACK</div>
+                    <div class="cube-face">LEFT</div>
+                    <div class="cube-face">TOP</div>
+                    <div class="cube-face">BOTTOM</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Terminal/Demo Section -->
+    <section class="terminal-section" id="demo">
+        <div class="terminal-wrapper">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                    </div>
+                </div>
+                <div class="terminal-body">
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">$</span>
+                        <span class="terminal-value">curl -X POST https://api.chatbot.ai/v1/messages</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">&gt;</span>
+                        <span class="terminal-key">"role"</span>: <span class="terminal-string">"user"</span>,
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">&gt;</span>
+                        <span class="terminal-key">"content"</span>: <span class="terminal-string">"Explain quantum computing"</span>
+                    </div>
+                    <div class="terminal-line" style="margin-top: 16px;">
+                        <span class="terminal-prompt">&lt;</span>
+                        <span class="terminal-key">"status"</span>: <span class="terminal-string">"success"</span>,
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">&lt;</span>
+                        <span class="terminal-key">"response"</span>: <span class="terminal-string">"Quantum computing leverages..."</span>
+                    </div>
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">&lt;</span>
+                        <span class="terminal-key">"latency_ms"</span>: <span class="terminal-value">234</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section" id="features">
+        <div class="features-wrapper">
+            <div class="features-header">
+                <h2 class="features-heading">Powerful features</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">Real-time Processing</h3>
+                    <p class="feature-description">Sub-100ms latency responses with streaming support and intelligent request batching.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <h3 class="feature-title">Opencode Sync</h3>
+                    <p class="feature-description">Native integration with Opencode for seamless workflow automation and context awareness.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚙️</div>
+                    <h3 class="feature-title">Custom Logic</h3>
+                    <p class="feature-description">Build advanced workflows with conditional branching, custom prompts, and dynamic parameters.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Status Indicator -->
+    <section class="status-section">
+        <div class="status-pill">
+            <span class="status-dot"></span>
+            <span>Systems Operational</span>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div></div>
+            <div class="footer-links">
+                <a href="#privacy">Privacy</a>
+                <a href="#terms">Terms</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
