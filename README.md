@@ -187,7 +187,7 @@ ChatBotAI: Absolutely. Tell me your top priorities, available time, and any fixe
 and I’ll help you turn them into a practical schedule.
 ```
 
-## 🎾 FUnction and Feature
+## 🎾 Function and Feature
 
 - Sign In and Sign Up
 - Security and Best Usage for Daily and Task
