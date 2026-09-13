@@ -187,6 +187,17 @@ ChatBotAI: Absolutely. Tell me your top priorities, available time, and any fixe
 and I’ll help you turn them into a practical schedule.
 ```
 
+## 🎾 FUnction and Feature
+
+- Sign In and Sign Up
+- Security and Best Usage for Daily and Task
+- Saved API Key in Account (If you logout in your browser, your api key will be blank and safety. Can't be leak or abuse)
+- Saved History Conversation in Account
+- Personalization
+- Upload Your Picture Profile and Rename Username
+- Support for OpenAI, Gemini, Claude, Deepseek and Your Local Model)
+
+
 ## 🔒 Security and Privacy
 
 When deploying ChatBotAI:
