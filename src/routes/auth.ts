@@ -6,6 +6,8 @@ import {
   claimConversations,
   createSession,
   createUser,
+  deleteAccount,
+  destroyAllSessions,
   destroySession,
   findUserByEmail,
   findUserById,
@@ -13,6 +15,7 @@ import {
   toPublicUser,
 } from '../db/users.ts';
 import { badRequest, HttpError } from '../middleware/errors.ts';
+import { requireAuth } from '../middleware/owner.ts';
 
 export const authRouter = Router();
 
@@ -113,6 +116,45 @@ authRouter.post('/logout', (req, res) => {
   if (token) destroySession(token);
   clearSessionCookie(res);
   res.status(204).end();
+});
+
+/**
+ * POST /api/auth/logout-all
+ *
+ * Drops every session for the signed-in account, so other browsers and devices
+ * are signed out too. The cookie on this browser is cleared as well.
+ */
+authRouter.post('/logout-all', requireAuth, (req, res, next) => {
+  try {
+    const userId = req.userId as string;
+    destroyAllSessions(userId);
+    clearSessionCookie(res);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/auth/account
+ *
+ * Permanently deletes the signed-in account and its conversations. The body
+ * must carry `{ "confirm": true }` so a stray request cannot wipe an account.
+ */
+authRouter.delete('/account', requireAuth, (req, res, next) => {
+  try {
+    const { confirm } = (req.body ?? {}) as Record<string, unknown>;
+    if (confirm !== true) {
+      throw badRequest('Account deletion requires { "confirm": true }');
+    }
+
+    const userId = req.userId as string;
+    deleteAccount(userId);
+    clearSessionCookie(res);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
 });
 
 authRouter.get('/me', (req, res) => {

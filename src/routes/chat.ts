@@ -8,7 +8,7 @@ import {
   titleFromMessage,
 } from '../db/conversations.ts';
 import { badRequest, notFound } from '../middleware/errors.ts';
-import { provider, type ChatMessage } from '../providers/index.ts';
+import { resolveProviderForRequest, type ChatMessage } from '../providers/index.ts';
 
 export const chatRouter = Router();
 
@@ -45,6 +45,13 @@ chatRouter.post('/', async (req, res, next) => {
     }
 
     const text = message.trim();
+
+    // Resolved before anything is written, so a bad model or a missing key
+    // fails as a normal JSON 400 instead of mid-stream.
+    const { provider: chatProvider, model: resolvedModel } = resolveProviderForRequest({
+      modelLabel: model,
+      headers: req.headers,
+    });
 
     const conversation = conversationId
       ? getConversation(conversationId, req.ownerId)
@@ -84,9 +91,9 @@ chatRouter.post('/', async (req, res, next) => {
 
     let answer = '';
     try {
-      for await (const chunk of provider.streamChat({
+      for await (const chunk of chatProvider.streamChat({
         messages: [...history, { role: 'user', content: text }],
-        model: model ?? conversation.model,
+        model: resolvedModel,
         signal: abort.signal,
       })) {
         answer += chunk;
