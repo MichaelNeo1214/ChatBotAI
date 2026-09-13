@@ -291,7 +291,7 @@
       <div class="setting-row">
         <span class="setting-label">Appearance</span>
         <div class="select-wrapper">
-          <select class="custom-select" id="appearanceSelect">
+          <select class="custom-select" id="appearanceSelect" aria-label="Appearance">
             <option value="Dark">Dark</option>
             <option value="Light">Light</option>
           </select>
@@ -302,7 +302,7 @@
       <div class="setting-row">
         <span class="setting-label">Contrast</span>
         <div class="select-wrapper">
-          <select class="custom-select" id="contrastSelect">
+          <select class="custom-select" id="contrastSelect" aria-label="Contrast">
             <option value="System">System</option>
             <option value="Standard">Standard</option>
             <option value="High">High</option>
@@ -316,7 +316,7 @@
         <div class="accent-select-wrap">
           <span class="accent-dot" id="accentDot"></span>
           <div class="select-wrapper">
-            <select class="custom-select" id="accentColorSelect">
+            <select class="custom-select" id="accentColorSelect" aria-label="Accent color">
               <option value="Default">Default</option>
               <option value="Blue">Blue</option>
               <option value="Green">Green</option>
@@ -331,7 +331,7 @@
       <div class="setting-row">
         <span class="setting-label">Language</span>
         <div class="select-wrapper">
-          <select class="custom-select" id="languageSelect">
+          <select class="custom-select" id="languageSelect" aria-label="Language">
             <option value="Auto-detect">Auto-detect</option>
             <option value="English (US)">English (US)</option>
             <option value="Bahasa Indonesia">Bahasa Indonesia</option>
@@ -354,21 +354,30 @@
           <div class="setting-label">Email notifications</div>
           <div class="setting-desc">Get updates and summaries sent to your email.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Email notifications toggle">
+          <input type="checkbox" checked aria-label="Email notifications">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label">Push notifications</div>
           <div class="setting-desc">Receive alerts on this device.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Push notifications toggle">
+          <input type="checkbox" checked aria-label="Push notifications">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label">Product announcements</div>
           <div class="setting-desc">News about new features and updates.</div>
         </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+        <label class="switch" aria-label="Product announcements toggle">
+          <input type="checkbox" aria-label="Product announcements">
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
@@ -380,7 +389,10 @@
           <div class="setting-label">Memory</div>
           <div class="setting-desc">Let the assistant remember details across conversations.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Memory toggle">
+          <input type="checkbox" checked aria-label="Memory">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <div>
@@ -399,21 +411,30 @@
           <div class="plugin-name">Web Search</div>
           <div class="plugin-desc">Search the web for current information.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Web Search toggle">
+          <input type="checkbox" checked aria-label="Web Search">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="plugin-row">
         <div>
           <div class="plugin-name">Code Interpreter</div>
           <div class="plugin-desc">Run code and analyze files.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Code Interpreter toggle">
+          <input type="checkbox" checked aria-label="Code Interpreter">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="plugin-row">
         <div>
           <div class="plugin-name">Image Generation</div>
           <div class="plugin-desc">Create images from text prompts.</div>
         </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+        <label class="switch" aria-label="Image Generation toggle">
+          <input type="checkbox" aria-label="Image Generation">
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
@@ -535,7 +556,7 @@
       <div class="setting-row">
         <span class="setting-label">Voice</span>
         <div class="select-wrapper">
-          <select class="custom-select" id="voiceSelect">
+          <select class="custom-select" id="voiceSelect" aria-label="Voice">
             <option value="Ember">Ember</option>
             <option value="Sky">Sky</option>
             <option value="Sol">Sol</option>
@@ -546,7 +567,7 @@
       <div class="setting-row">
         <span class="setting-label">Playback speed</span>
         <div class="select-wrapper">
-          <select class="custom-select" id="speedSelect">
+          <select class="custom-select" id="speedSelect" aria-label="Playback speed">
             <option value="0.75">0.75x</option>
             <option value="1" selected>1x</option>
             <option value="1.25">1.25x</option>
@@ -599,14 +620,20 @@
           <div class="setting-label">Share usage analytics</div>
           <div class="setting-desc">Help improve the product by sharing anonymous usage data.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Share usage analytics">
+          <input type="checkbox" checked aria-label="Share usage analytics">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <div>
           <div class="setting-label">Crash reports</div>
           <div class="setting-desc">Automatically send crash logs when something breaks.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Crash reports">
+          <input type="checkbox" checked aria-label="Crash reports">
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
@@ -618,7 +645,10 @@
           <div class="setting-label">Improve the model for everyone</div>
           <div class="setting-desc">Allow your conversations to be used for training.</div>
         </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+        <label class="switch" aria-label="Improve the model for everyone">
+          <input type="checkbox" aria-label="Improve the model for everyone">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <span class="setting-label">Export data</span>
@@ -652,7 +682,10 @@
           <div class="setting-label">Sensitive content filter</div>
           <div class="setting-desc">Blur or block potentially sensitive images and text.</div>
         </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+        <label class="switch" aria-label="Sensitive content filter">
+          <input type="checkbox" checked aria-label="Sensitive content filter">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <span class="setting-label">Report a concern</span>
@@ -672,7 +705,10 @@
           <div class="setting-label">Two-factor authentication</div>
           <div class="setting-desc">Add an extra layer of security to your account.</div>
         </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+        <label class="switch" aria-label="Two-factor authentication">
+          <input type="checkbox" aria-label="Two-factor authentication">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <span class="setting-label">Active sessions</span>
@@ -688,7 +724,10 @@
           <div class="setting-label">Restricted mode</div>
           <div class="setting-desc">Limit access to mature or sensitive content.</div>
         </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+        <label class="switch" aria-label="Restricted mode">
+          <input type="checkbox" aria-label="Restricted mode">
+          <span class="slider"></span>
+        </label>
       </div>
       <div class="setting-row">
         <span class="setting-label">Linked accounts</span>
