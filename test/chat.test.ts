@@ -114,8 +114,13 @@ describe('POST /api/chat — the SSE turn', () => {
     assert.notEqual(conversation.model, '', 'the conversation should record a model label');
   });
 
-  test('a model sent with the message is stored on the conversation', async () => {
-    const res = await chat(anon, { message: 'Pick a model please', model: 'local-test-model' });
+  test('the default model label sent with a message is stored on the conversation', async () => {
+    // 'ChatBot AI' is the server's own default label (DEFAULT_MODEL_LABEL), so
+    // it resolves to the boot-time provider. Any other label is a BYOK preset
+    // and needs an X-Provider-Key, which is why this is not a made-up string.
+    const res = await chat(anon, { message: 'Pick a model please', model: 'ChatBot AI' });
+    assert.equal(res.status, 200);
+
     const { conversationId } = payloadsOf<{ conversationId: string }>(
       await readSse(res),
       'meta',
@@ -123,7 +128,7 @@ describe('POST /api/chat — the SSE turn', () => {
 
     const detail = await anon.get(`/api/conversations/${conversationId}`);
     const { conversation } = (await detail.json()) as { conversation: { model: string } };
-    assert.equal(conversation.model, 'local-test-model');
+    assert.equal(conversation.model, 'ChatBot AI');
   });
 });
 

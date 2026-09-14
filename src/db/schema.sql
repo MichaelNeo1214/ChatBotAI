@@ -4,13 +4,18 @@ PRAGMA foreign_keys = ON;
 -- Conversations are scoped by owner_id. Until real auth lands, that is an
 -- anonymous client id carried in a cookie; afterwards it becomes the user id,
 -- so no schema change is needed to switch over.
+-- Timestamps are ISO-like UTC at millisecond resolution. datetime('now') only
+-- has one-second resolution, which made rows written in the same second tie and
+-- sort arbitrarily in the sidebar; strftime(...%f) keeps the same
+-- 'YYYY-MM-DD HH:MM:SS.SSS' shape, so it still sorts lexically and still parses
+-- with new Date().
 CREATE TABLE IF NOT EXISTS conversations (
   id          TEXT PRIMARY KEY,
   owner_id    TEXT NOT NULL,
   title       TEXT NOT NULL DEFAULT 'New chat',
   model       TEXT NOT NULL DEFAULT 'ChatBot AI',
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversations_owner
@@ -21,7 +26,7 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id  TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
   role             TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content          TEXT NOT NULL,
-  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation
