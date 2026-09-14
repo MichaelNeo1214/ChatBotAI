@@ -1,17 +1,13 @@
-        // ===== LOCAL PERSISTENT STORE (conversations + provider keys) =====
-        // Shared by the chat engine and the settings panel. localStorage survives
-        // refresh and browser restart; entries disappear only when deleted.
-        // Conversations are namespaced per owner: 'guest' when signed out,
-        // 'user:<id|email>' when signed in, so each account keeps its own history.
+        // ===== LOCAL STORE (provider keys + display profile) =====
+        // Only things that belong to this browser live here. Conversations are
+        // NOT stored client-side any more: the server owns them and the sidebar
+        // is rendered from GET /api/conversations.
+        // The display profile stays namespaced per owner: 'guest' when signed
+        // out, 'user:<id|email>' when signed in.
         window.ChatBotStore = (function() {
-            const CONV_BASE = 'chatbot.conversations.v1';
             const KEYS_KEY = 'chatbot.apikeys.v1';
             const PROF_BASE = 'chatbot.profile.v1';
             let owner = 'guest';
-
-            function convKey() {
-                return CONV_BASE + ':' + owner;
-            }
 
             function profKey() {
                 return PROF_BASE + ':' + owner;
@@ -37,7 +33,12 @@
             }
 
             function defaultKeys() {
-                return { openai: '', gemini: '', claude: '', deepseek: '', defaultBaseUrl: '', defaultModel: '' };
+                return {
+                    openai: '', gemini: '', claude: '', deepseek: '',
+                    openaiBaseUrl: '', geminiBaseUrl: '', claudeBaseUrl: '', deepseekBaseUrl: '',
+                    openaiModel: '', geminiModel: '', claudeModel: '', deepseekModel: '',
+                    defaultBaseUrl: '', defaultModel: ''
+                };
             }
 
             return {
@@ -46,18 +47,6 @@
                 },
                 getOwner: function() {
                     return owner;
-                },
-                loadConversations: function() {
-                    const list = read(convKey(), []);
-                    return Array.isArray(list) ? list : [];
-                },
-                saveConversations: function(list) {
-                    return write(convKey(), list);
-                },
-                clearConversations: function(which) {
-                    try {
-                        localStorage.removeItem(CONV_BASE + ':' + ((which && String(which)) || owner));
-                    } catch (e) {}
                 },
                 loadKeys: function() {
                     const saved = read(KEYS_KEY, {});
@@ -68,7 +57,12 @@
                     return keys;
                 },
                 saveKeys: function(keys) {
-                    return write(KEYS_KEY, keys || defaultKeys());
+                    const base = defaultKeys();
+                    const out = {};
+                    Object.keys(base).forEach(function(k) {
+                        out[k] = (keys && typeof keys[k] === 'string') ? keys[k] : base[k];
+                    });
+                    return write(KEYS_KEY, out);
                 },
                 loadProfile: function() {
                     const saved = read(profKey(), {});
@@ -87,9 +81,6 @@
                     try {
                         localStorage.removeItem(PROF_BASE + ':' + ((which && String(which)) || owner));
                     } catch (e) {}
-                },
-                makeId: function() {
-                    return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
                 }
             };
         })();
@@ -129,18 +120,21 @@
             
             // State
             let chatStarted = false;
+            let sending = false;
             const attachedFiles = [];
-            let conversations = window.ChatBotStore.loadConversations();
+            let conversations = [];
             let activeConversationId = null;
             let currentModelKey = 'default';
 
             // ===== MODELS =====
+            // `label` is the wire value: it is what the server routes on. The
+            // matching localStorage key for a BYOK model is `key`.
             const MODEL_DEFS = [
-                { key: 'default',  label: 'ChatBot AI', provider: 'local',     model: '' },
-                { key: 'openai',   label: 'GPT-4o',     provider: 'openai',    model: 'gpt-4o' },
-                { key: 'gemini',   label: 'Gemini',     provider: 'gemini',    model: 'gemini-2.0-flash' },
-                { key: 'claude',   label: 'Claude',     provider: 'anthropic', model: 'claude-3-5-sonnet-latest' },
-                { key: 'deepseek', label: 'DeepSeek',   provider: 'deepseek',  model: 'deepseek-chat' }
+                { key: 'default',  label: 'ChatBot AI', provider: 'default' },
+                { key: 'openai',   label: 'GPT-4o',     provider: 'openai' },
+                { key: 'gemini',   label: 'Gemini',     provider: 'gemini' },
+                { key: 'claude',   label: 'Claude',     provider: 'anthropic' },
+                { key: 'deepseek', label: 'DeepSeek',   provider: 'deepseek' }
             ];
 
             function modelDef(key) {
@@ -155,6 +149,19 @@
                     if (MODEL_DEFS[i].label === label) return MODEL_DEFS[i].key;
                 }
                 return 'default';
+            }
+
+            /**
+             * Human-readable name for a picker key or a server-sent label.
+             *
+             * The server reports a missing key against the label it was sent
+             * ("GPT-4o"), so lookups accept both spellings.
+             */
+            function modelLabelFor(value) {
+                for (let i = 0; i < MODEL_DEFS.length; i++) {
+                    if (MODEL_DEFS[i].key === value || MODEL_DEFS[i].label === value) return MODEL_DEFS[i].label;
+                }
+                return value ? String(value) : 'This model';
             }
 
             function setModelPicker(key) {
@@ -176,18 +183,32 @@
                 return !!(keys[key] && keys[key].trim());
             }
 
-            // ===== PROVIDERS (local Jan + cloud APIs, direct from browser) =====
-            function fetchWithTimeout(url, options, ms) {
-                const controller = new AbortController();
-                const timer = setTimeout(function() { controller.abort(); }, ms || 120000);
-                options = options || {};
-                options.signal = controller.signal;
-                return fetch(url, options).then(
-                    function(res) { clearTimeout(timer); return res; },
-                    function(err) { clearTimeout(timer); throw err; }
-                );
+            // The assistant bubble text for a turn: the message, plus a plain
+            // note naming the attachments. The backend takes no file bytes, so
+            // this line is all a model ever sees about them.
+            function buildUserText(text, files) {
+                const raw = (text || '').trim();
+                if (!files || !files.length) return raw;
+                const names = files.map(function(f) { return f.name; }).join(', ');
+                return (raw ? raw + '\n' : '') + '[Attached files: ' + names + ']';
             }
 
+            // Turns a non-2xx JSON body into an Error carrying the contract's
+            // code/model fields, so the caller can react to missing_api_key.
+            async function backendError(res) {
+                let detail = null;
+                try {
+                    detail = await res.json();
+                } catch (e) {}
+                const err = detail && detail.error ? detail.error : null;
+                const out = new Error((err && err.message) ? err.message : 'HTTP ' + res.status);
+                out.status = res.status;
+                out.code = err ? err.code : undefined;
+                out.model = err ? err.model : undefined;
+                return out;
+            }
+
+            // ===== PROVIDER REQUEST ERRORS =====
             function requestFailed(url, e) {
                 if (e && e.name === 'AbortError') {
                     return 'Request to ' + url + ' timed out. The model may still be loading — please try again.';
@@ -195,258 +216,161 @@
                 return 'Cannot reach ' + url + ' (' + ((e && e.message) ? e.message : 'network error') + ').';
             }
 
-            function base64ToText(b64) {
-                try {
-                    const bin = atob(b64);
-                    const bytes = new Uint8Array(bin.length);
-                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                    return new TextDecoder().decode(bytes);
-                } catch (e) {
-                    return '';
+            // ===== BACKEND CHAT =====
+            // Every assistant turn goes to POST /api/chat on this same origin.
+            // The browser never talks to a provider domain: the server holds the
+            // keys, picks the upstream, persists the conversation, and streams
+            // the answer back as SSE.
+            const API_BASE = '/api';
+
+            /**
+             * BYOK headers for a non-default model.
+             *
+             * The picker label is what the server routes on; the saved key and
+             * any base URL / model override for that provider travel alongside
+             * it, and are held only for the duration of the request.
+             */
+            function providerHeadersFor(key, keys) {
+                const def = modelDef(key);
+                const headers = {};
+                if (def.provider === 'default') return headers;
+
+                const apiKey = String(keys[def.key] || '').trim();
+                if (apiKey) headers['X-Provider-Key'] = apiKey;
+
+                const baseUrl = String(keys[def.key + 'BaseUrl'] || '').trim();
+                if (baseUrl) headers['X-Provider-Base-Url'] = baseUrl.replace(/\/+$/, '');
+
+                const model = String(keys[def.key + 'Model'] || '').trim();
+                if (model) headers['X-Provider-Model'] = model;
+
+                return headers;
+            }
+
+            /**
+             * Reads one SSE line into `state`, dispatching on a blank line.
+             *
+             * `state.event` / `state.data` accumulate a single event's fields.
+             * A blank line ends the event and hands it to `dispatch`.
+             */
+            function feedSseLine(line, state, dispatch) {
+                if (line === '') {
+                    if (state.data.length === 0 && state.event === '') return;
+                    dispatch(state.event, state.data.join('\n'));
+                    state.event = '';
+                    state.data = [];
+                    return;
                 }
+                if (line.charAt(0) === ':') return; // comment / keep-alive
+                const colon = line.indexOf(':');
+                const field = colon === -1 ? line : line.slice(0, colon);
+                let value = colon === -1 ? '' : line.slice(colon + 1);
+                if (value.charAt(0) === ' ') value = value.slice(1);
+
+                if (field === 'event') state.event = value;
+                else if (field === 'data') state.data.push(value);
             }
 
-            function isTextFile(file) {
-                const type = file.type || '';
-                const name = file.name || '';
-                if (type.indexOf('text/') === 0) return true;
-                if (/json|csv|xml|javascript|markdown/.test(type)) return true;
-                return /\.(txt|md|csv|json|js|ts|py|html|css|log)$/i.test(name);
-            }
-
-            function truncateMiddle(s, max) {
-                if (s.length <= max) return s;
-                return s.slice(0, max) + '\n...[truncated, file too long]...';
-            }
-
-            // Plain stored messages + current attachments -> OpenAI-style messages.
-            function buildOpenAiMessages(history, files) {
-                const msgs = history.map(function(m) {
-                    return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
-                });
-                if (!files || !files.length) return msgs;
-                let lastUser = -1;
-                for (let i = msgs.length - 1; i >= 0; i--) {
-                    if (msgs[i].role === 'user') { lastUser = i; break; }
-                }
-                if (lastUser === -1) return msgs;
-                const parts = [{ type: 'text', text: msgs[lastUser].content }];
-                files.forEach(function(f) {
-                    const type = f.type || '';
-                    if (type.indexOf('image/') === 0) {
-                        parts.push({ type: 'image_url', image_url: { url: 'data:' + type + ';base64,' + f.data } });
-                    } else if (isTextFile(f)) {
-                        parts.push({ type: 'text', text: '\n\n[File: ' + f.name + ']\n' + truncateMiddle(base64ToText(f.data), 12000) });
-                    } else {
-                        parts.push({ type: 'text', text: '\n[Attached file: ' + f.name + ' (' + (type || 'unknown type') + ')]' });
-                    }
-                });
-                msgs[lastUser].content = parts;
-                return msgs;
-            }
-
-            // Local text models: strip vision parts to plain-text notes.
-            function stripImagesForLocal(msgs) {
-                return msgs.map(function(m) {
-                    if (typeof m.content === 'string') return m;
-                    let text = '';
-                    let images = 0;
-                    m.content.forEach(function(p) {
-                        if (p.type === 'text') text += (text ? '\n' : '') + p.text;
-                        else if (p.type === 'image_url') images++;
-                    });
-                    if (images > 0) text += '\n[' + images + ' image(s) attached — vision is not supported by this local model]';
-                    return { role: m.role, content: text };
-                });
-            }
-
-            function openAiContentToGeminiParts(content) {
-                if (typeof content === 'string') return [{ text: content }];
-                return content.map(function(p) {
-                    if (p.type === 'text') return { text: p.text };
-                    if (p.type === 'image_url') {
-                        const m = /^data:(.*?);base64,([\s\S]*)$/.exec(p.image_url.url || '');
-                        return { inline_data: { mime_type: m ? m[1] : 'image/png', data: m ? m[2] : '' } };
-                    }
-                    return { text: '' };
-                });
-            }
-
-            function toGeminiContents(openAiMsgs) {
-                return openAiMsgs.map(function(m) {
-                    return {
-                        role: m.role === 'assistant' ? 'model' : 'user',
-                        parts: openAiContentToGeminiParts(m.content)
-                    };
-                });
-            }
-
-            function openAiContentToAnthropic(content) {
-                if (typeof content === 'string') return content;
-                return content.map(function(p) {
-                    if (p.type === 'text') return { type: 'text', text: p.text };
-                    if (p.type === 'image_url') {
-                        const m = /^data:(.*?);base64,([\s\S]*)$/.exec(p.image_url.url || '');
-                        return { type: 'image', source: { type: 'base64', media_type: m ? m[1] : 'image/png', data: m ? m[2] : '' } };
-                    }
-                    return { type: 'text', text: '' };
-                });
-            }
-
-            function toAnthropicMessages(openAiMsgs) {
-                return openAiMsgs.map(function(m) {
-                    return {
-                        role: m.role === 'assistant' ? 'assistant' : 'user',
-                        content: openAiContentToAnthropic(m.content)
-                    };
-                });
-            }
-
-            function extractOpenAiText(data) {
-                try {
-                    const text = data.choices[0].message.content;
-                    if (typeof text === 'string' && text.trim()) return text;
-                    if (Array.isArray(text)) {
-                        return text.filter(function(p) { return p.type === 'text'; }).map(function(p) { return p.text; }).join('');
-                    }
-                } catch (e) {}
-                return '';
-            }
-
-            async function throwForBadStatus(res, keyName) {
-                let msg = 'HTTP ' + res.status;
-                try {
-                    const detail = await res.json();
-                    if (detail && detail.error && detail.error.message) msg = detail.error.message;
-                } catch (e) {}
-                if (res.status === 401 || res.status === 403) {
-                    msg += ' — check your API key in Settings → API Key.';
-                }
-                throw new Error(msg);
-            }
-
-            async function detectJanModel(base) {
-                let res;
-                try {
-                    res = await fetchWithTimeout(base + '/models', {}, 15000);
-                } catch (e) {
-                    throw new Error("Couldn't reach Jan at " + base + '. Open Jan, start the Local API Server, and load a model first.');
-                }
-                if (!res.ok) {
-                    throw new Error("Jan server at " + base + ' answered HTTP ' + res.status + '. Load a model in Jan first.');
-                }
-                const data = await res.json().catch(function() { return null; });
-                const list = data && data.data;
-                if (list && list.length && list[0].id) return list[0].id;
-                throw new Error('No model is loaded in Jan. Load a model first, or set a Model ID in Settings → API Key.');
-            }
-
-            async function chatWithLocal(keys, openAiMsgs) {
-                const base = ((keys.defaultBaseUrl || '').trim() || 'http://localhost:1337/v1').replace(/\/+$/, '');
-                let model = (keys.defaultModel || '').trim();
-                if (!model) model = await detectJanModel(base);
-                let res;
-                try {
-                    res = await fetchWithTimeout(base + '/chat/completions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model: model, messages: stripImagesForLocal(openAiMsgs), stream: false })
-                    }, 180000);
-                } catch (e) {
-                    throw new Error(requestFailed(base, e));
-                }
-                if (!res.ok) await throwForBadStatus(res);
-                const text = extractOpenAiText(await res.json().catch(function() { return null; }));
-                if (!text) throw new Error('Jan returned an empty reply. Try another prompt or model.');
-                return text;
-            }
-
-            async function chatOpenAiCompatible(base, key, model, openAiMsgs) {
-                let res;
-                try {
-                    res = await fetchWithTimeout(base + '/chat/completions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-                        body: JSON.stringify({ model: model, messages: openAiMsgs, stream: false })
-                    }, 120000);
-                } catch (e) {
-                    throw new Error(requestFailed(base, e));
-                }
-                if (!res.ok) await throwForBadStatus(res);
-                const text = extractOpenAiText(await res.json().catch(function() { return null; }));
-                if (!text) throw new Error('The model returned an empty reply.');
-                return text;
-            }
-
-            async function chatWithGemini(key, model, openAiMsgs) {
-                const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(key);
-                let res;
-                try {
-                    res = await fetchWithTimeout(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: toGeminiContents(openAiMsgs) })
-                    }, 120000);
-                } catch (e) {
-                    throw new Error(requestFailed('generativelanguage.googleapis.com', e));
-                }
-                if (!res.ok) await throwForBadStatus(res);
-                const data = await res.json().catch(function() { return null; });
-                let text = '';
-                try {
-                    text = data.candidates[0].content.parts.filter(function(p) { return p.text; }).map(function(p) { return p.text; }).join('');
-                } catch (e) {}
-                if (!text) throw new Error('Gemini returned an empty reply.');
-                return text;
-            }
-
-            async function chatWithClaude(key, model, openAiMsgs) {
-                let res;
-                try {
-                    res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': key,
-                            'anthropic-version': '2023-06-01',
-                            'anthropic-dangerous-direct-browser-access': 'true'
-                        },
-                        body: JSON.stringify({ model: model, max_tokens: 2048, messages: toAnthropicMessages(openAiMsgs) })
-                    }, 120000);
-                } catch (e) {
-                    throw new Error(requestFailed('api.anthropic.com', e));
-                }
-                if (!res.ok) await throwForBadStatus(res);
-                const data = await res.json().catch(function() { return null; });
-                let text = '';
-                try {
-                    text = data.content.filter(function(b) { return b.type === 'text'; }).map(function(b) { return b.text; }).join('');
-                } catch (e) {}
-                if (!text) throw new Error('Claude returned an empty reply.');
-                return text;
-            }
-
-            async function callAssistant(modelKey, keys, history, files) {
+            /**
+             * Streams one assistant turn from POST /api/chat.
+             *
+             * `onDelta` receives every chunk of text as it arrives, so the
+             * caller can paint the reply incrementally. Resolves with
+             * { conversationId, content }; the caller adopts the id when the
+             * server created a new conversation for this turn.
+             */
+            async function callAssistant(modelKey, text, files, onDelta) {
                 const def = modelDef(modelKey);
-                const openAiMsgs = buildOpenAiMessages(history, files);
-                switch (def.provider) {
-                    case 'local':
-                        return chatWithLocal(keys, openAiMsgs);
-                    case 'openai':
-                        return chatOpenAiCompatible('https://api.openai.com/v1', keys.openai, def.model, openAiMsgs);
-                    case 'deepseek':
-                        return chatOpenAiCompatible('https://api.deepseek.com', keys.deepseek, def.model, openAiMsgs);
-                    case 'gemini':
-                        return chatWithGemini(keys.gemini, def.model, openAiMsgs);
-                    case 'anthropic':
-                        return chatWithClaude(keys.claude, def.model, openAiMsgs);
-                    default:
-                        throw new Error('Unknown model.');
+
+                const payload = {
+                    message: buildUserText(text, files),
+                    model: def.label
+                };
+                if (activeConversationId) payload.conversationId = activeConversationId;
+
+                const headers = Object.assign(
+                    { 'Content-Type': 'application/json' },
+                    providerHeadersFor(modelKey, getApiKeys())
+                );
+
+                let res;
+                try {
+                    res = await fetch(API_BASE + '/chat', {
+                        method: 'POST',
+                        headers: headers,
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload)
+                    });
+                } catch (e) {
+                    throw new Error(requestFailed('the server', e));
                 }
+
+                if (!res.ok) throw await backendError(res);
+                if (!res.body) throw new Error('Streaming is not supported by this browser.');
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                const state = { event: '', data: [] };
+                let buffer = '';
+                let conversationId = null;
+                let content = '';
+                let streamError = null;
+
+                const dispatch = function(event, data) {
+                    if (data === '' || data === '[DONE]') return;
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(data);
+                    } catch (e) {
+                        return; // a partial frame or a non-JSON keep-alive
+                    }
+                    if (event === 'meta') {
+                        if (parsed.conversationId) conversationId = parsed.conversationId;
+                    } else if (event === 'delta') {
+                        if (typeof parsed.text === 'string' && parsed.text !== '') {
+                            content += parsed.text;
+                            onDelta(parsed.text);
+                        }
+                    } else if (event === 'done') {
+                        if (typeof parsed.content === 'string') content = parsed.content;
+                    } else if (event === 'error') {
+                        streamError = new Error(parsed.message || 'The assistant failed to finish this response.');
+                    }
+                };
+
+                try {
+                    for (;;) {
+                        const step = await reader.read();
+                        if (step.done) break;
+                        // A chunk can end mid-event, so only whole lines are
+                        // consumed and the tail stays in the buffer.
+                        buffer += decoder.decode(step.value, { stream: true });
+                        let newline;
+                        while ((newline = buffer.indexOf('\n')) !== -1) {
+                            let line = buffer.slice(0, newline);
+                            buffer = buffer.slice(newline + 1);
+                            if (line.charAt(line.length - 1) === '\r') line = line.slice(0, -1);
+                            feedSseLine(line, state, dispatch);
+                        }
+                    }
+                    buffer += decoder.decode();
+                    if (buffer !== '') feedSseLine(buffer.replace(/\r$/, ''), state, dispatch);
+                    feedSseLine('', state, dispatch);
+                } finally {
+                    if (typeof reader.releaseLock === 'function') reader.releaseLock();
+                }
+
+                if (streamError) {
+                    // Keep whatever arrived before the failure; the server saved
+                    // the same partial turn, so the view matches a reload.
+                    streamError.partial = content;
+                    throw streamError;
+                }
+                if (content === '') throw new Error('The assistant returned an empty reply.');
+                return { conversationId: conversationId, content: content };
             }
 
             // ===== BACKEND (optional account service) =====
-            const API_BASE = '/api';
 
             // ===== AUTH (session via /api backend when present; guest otherwise) =====
             let currentUser = null;
@@ -456,8 +380,10 @@
             }
 
             function applyOwner() {
+                // Only the display profile is per-owner in this browser; the
+                // conversation list comes from the API for whoever the server
+                // says is asking.
                 window.ChatBotStore.setOwner(ownerKey());
-                conversations = window.ChatBotStore.loadConversations();
             }
 
             // Display name/photo: local per-owner profile overrides account data.
@@ -535,37 +461,45 @@
                 applyOwner();
                 renderFooter();
                 notifyAccountPanel();
-                // Always reset the view after auth resolves so the history
-                // shown always matches the active owner (guest or account).
+                // The view is always rebuilt after auth resolves so the history
+                // shown matches the active owner (guest or account).
                 resetChatView();
+                await refreshConversations();
                 return user;
             }
 
             async function doSignOut(everywhere) {
-                try {
-                    await fetch(API_BASE + '/auth/logout', { method: 'POST', credentials: 'same-origin' });
-                } catch (e) {}
+                // "Log out everywhere" needs this browser's session to still be
+                // valid, so it runs before the plain logout.
                 if (everywhere) {
                     try {
                         await fetch(API_BASE + '/auth/logout-all', { method: 'POST', credentials: 'same-origin' });
                     } catch (e) {}
                 }
+                try {
+                    await fetch(API_BASE + '/auth/logout', { method: 'POST', credentials: 'same-origin' });
+                } catch (e) {}
                 currentUser = null;
-                // Signed-out view is always empty: wipe the guest scratch store.
-                window.ChatBotStore.clearConversations('guest');
                 applyOwner();
                 renderFooter();
                 notifyAccountPanel();
                 resetChatView();
+                // Signing out switches the owner the server scopes to, so the
+                // sidebar is re-read rather than assumed.
+                await refreshConversations();
             }
 
             async function deleteAccount() {
                 if (!currentUser) return false;
-                const owner = ownerKey();
                 try {
-                    await fetch(API_BASE + '/auth/account', { method: 'DELETE', credentials: 'same-origin' });
+                    // The endpoint requires an explicit confirmation in the body.
+                    await fetch(API_BASE + '/auth/account', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ confirm: true })
+                    });
                 } catch (e) {}
-                window.ChatBotStore.clearConversations(owner);
                 await doSignOut(false);
                 return true;
             }
@@ -580,10 +514,10 @@
             // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
                 + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
-                + '**History** — every chat is saved automatically. Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
-                + '**Models** — pick a model from the dropdown in the input box. Default uses your local Jan model. Cloud models (GPT-4o, Gemini, Claude, DeepSeek) need an API key in Settings → API Key.\n\n'
-                + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Attached files are sent to the model together with your message.\n\n'
-                + '**Account** — sign in to keep a personal chat history on this device. Signing out clears the view; signing back in reloads your saved chats.';
+                + '**History** — every chat is saved to your account and stays there. Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
+                + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude and DeepSeek are sent through the server with the API key you save in Settings → API Key.\n\n'
+                + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Only the file names travel with your message; file contents are not uploaded.\n\n'
+                + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
             function showHelpChat() {
                 activeConversationId = null;
@@ -992,8 +926,9 @@
             // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
             function updateSendState() {
                 const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0;
-                btnSend.disabled = !hasText;
-                btnSend.classList.toggle('active', hasText);
+                const ready = hasText && !sending;
+                btnSend.disabled = !ready;
+                btnSend.classList.toggle('active', ready);
             }
 
             chatInput.addEventListener('input', function() {
@@ -1002,7 +937,9 @@
                 updateSendState();
             });
 
-            // ===== CONVERSATION STORE (synced + persisted) =====
+            // ===== CONVERSATIONS (the server is the single source of truth) =====
+            // Nothing here is cached in localStorage: the sidebar and the open
+            // thread are always rendered from GET /api/conversations.
             function getActiveConversation() {
                 for (let i = 0; i < conversations.length; i++) {
                     if (conversations[i].id === activeConversationId) return conversations[i];
@@ -1010,23 +947,34 @@
                 return null;
             }
 
-            function persistConversations() {
-                window.ChatBotStore.saveConversations(conversations);
+            /**
+             * Re-reads the sidebar from the API.
+             *
+             * Called after every change the server owns: a new turn, a rename,
+             * a delete, a sign-in and a sign-out.
+             */
+            async function refreshConversations() {
+                try {
+                    const res = await fetch(API_BASE + '/conversations', { credentials: 'same-origin' });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+                    conversations = Array.isArray(data.conversations) ? data.conversations : [];
+                } catch (e) {
+                    conversations = [];
+                }
                 renderHistory();
             }
 
-            function makeTitle(raw) {
-                const clean = (raw || '').replace(/\s+/g, ' ').trim();
-                if (!clean) return 'Attached files';
-                return clean.length > 42 ? clean.slice(0, 42) + '…' : clean;
-            }
-
-            function escHtml(s) {
-                return String(s)
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
+            /**
+             * The API returns 'YYYY-MM-DD HH:MM:SS.SSS' in UTC. Without a zone
+             * marker the Date constructor reads that as local time, which would
+             * file an evening chat under tomorrow's group.
+             */
+            function parseServerTime(value) {
+                if (!value) return Date.now();
+                const iso = String(value).trim().replace(' ', 'T');
+                const ms = Date.parse(/[Zz]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z');
+                return Number.isNaN(ms) ? Date.now() : ms;
             }
 
             function conversationGroup(ts) {
@@ -1054,7 +1002,7 @@
                 const order = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
                 const buckets = { 'Today': [], 'Yesterday': [], 'Previous 7 days': [], 'Older': [] };
                 conversations.forEach(function(c) {
-                    buckets[conversationGroup(c.updatedAt || c.createdAt || Date.now())].push(c);
+                    buckets[conversationGroup(parseServerTime(c.updated_at || c.created_at))].push(c);
                 });
                 order.forEach(function(label) {
                     const items = buckets[label];
@@ -1094,19 +1042,36 @@
                 });
             }
 
-            function loadConversation(id) {
-                let convo = null;
-                for (let i = 0; i < conversations.length; i++) {
-                    if (conversations[i].id === id) convo = conversations[i];
+            /** Opens a conversation; its messages come from the server. */
+            async function loadConversation(id) {
+                let data = null;
+                try {
+                    const res = await fetch(API_BASE + '/conversations/' + encodeURIComponent(id), {
+                        credentials: 'same-origin'
+                    });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    data = await res.json();
+                } catch (e) {
+                    data = null;
                 }
-                if (!convo) return;
-                activeConversationId = id;
-                setModelPicker(convo.model || 'default');
+                if (!data) {
+                    // The list was stale (deleted in another tab, say): re-read.
+                    await refreshConversations();
+                    return;
+                }
+
+                const convo = data.conversation || {};
+                const messages = Array.isArray(data.messages) ? data.messages : [];
+
+                activeConversationId = convo.id || id;
+                setModelPicker(modelKeyFromLabel(convo.model));
+
                 messagesWrapper.innerHTML = '';
-                (convo.messages || []).forEach(function(m) {
+                messages.forEach(function(m) {
                     addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content);
                 });
-                if (convo.messages && convo.messages.length) {
+
+                if (messages.length) {
                     chatStarted = true;
                     welcomeScreen.style.display = 'none';
                     messagesWrapper.classList.add('visible');
@@ -1120,6 +1085,8 @@
             }
 
             function startNewChat() {
+                // A new chat has no id until the first message: the server
+                // creates the conversation then and reports it in `meta`.
                 activeConversationId = null;
                 chatStarted = false;
                 welcomeScreen.style.display = '';
@@ -1132,13 +1099,17 @@
                 chatInput.focus();
             }
 
-            function deleteConversation(id) {
-                conversations = conversations.filter(function(c) { return c.id !== id; });
+            async function deleteConversation(id) {
+                try {
+                    await fetch(API_BASE + '/conversations/' + encodeURIComponent(id), {
+                        method: 'DELETE',
+                        credentials: 'same-origin'
+                    });
+                } catch (e) {}
                 if (activeConversationId === id) {
                     startNewChat();
-                } else {
-                    persistConversations();
                 }
+                await refreshConversations();
             }
 
             function startRename(item, id) {
@@ -1154,17 +1125,22 @@
                 input.value = convo.title || '';
                 input.setAttribute('aria-label', 'Rename conversation');
                 let done = false;
-                function commit(save) {
+                async function commit(save) {
                     if (done) return;
                     done = true;
-                    if (save) {
-                        const v = input.value.trim();
-                        if (v) {
-                            convo.title = v;
-                            convo.updatedAt = Date.now();
-                        }
+                    const title = input.value.trim();
+                    if (save && title && title !== convo.title) {
+                        try {
+                            await fetch(API_BASE + '/conversations/' + encodeURIComponent(id), {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
+                                body: JSON.stringify({ title: title })
+                            });
+                        } catch (e) {}
                     }
-                    persistConversations();
+                    // The server's copy wins whether or not the PATCH landed.
+                    await refreshConversations();
                 }
                 input.addEventListener('click', function(ev) { ev.stopPropagation(); });
                 input.addEventListener('keydown', function(ev) {
@@ -1189,10 +1165,17 @@
                 if (keyAlertOverlay) keyAlertOverlay.hidden = true;
             }
 
-            function showKeyAlert(modelKey) {
-                const def = modelDef(modelKey);
+            /**
+             * Names the model the way the picker does.
+             *
+             * The server reports a missing key against the label it was sent
+             * ("GPT-4o"), and the key panel calls it by its internal key, so
+             * this accepts either.
+             */
+            function showKeyAlert(model) {
+                const label = modelLabelFor(model);
                 if (keyAlertDesc) {
-                    keyAlertDesc.textContent = def.label + ' needs an API key before it can be used. Add it in Settings → API Key, then try again.';
+                    keyAlertDesc.textContent = label + ' needs an API key before it can be used. Add it in Settings → API Key, then try again.';
                 }
                 if (keyAlertOverlay) keyAlertOverlay.hidden = false;
             }
@@ -1221,36 +1204,18 @@
 
             // ===== SEND MESSAGE =====
             async function sendMessage(text) {
+                if (sending) return;
                 const raw = (text || '').trim();
                 const hasFiles = attachedFiles.length > 0;
                 if (!raw && !hasFiles) return;
 
-                // Gate: cloud models require a saved API key.
+                // Fast path: the key panel already knows this model has no key,
+                // so don't spend a round trip proving it. The server re-checks
+                // and is the real enforcement.
                 if (!modelHasKey(currentModelKey)) {
                     showKeyAlert(currentModelKey);
-                    setModelPicker('default');
-                    const gated = getActiveConversation();
-                    if (gated) {
-                        gated.model = 'default';
-                        persistConversations();
-                    }
                     return;
                 }
-
-                let convo = getActiveConversation();
-                if (!convo) {
-                    convo = {
-                        id: window.ChatBotStore.makeId(),
-                        title: makeTitle(raw),
-                        model: currentModelKey,
-                        messages: [],
-                        createdAt: Date.now(),
-                        updatedAt: Date.now()
-                    };
-                    conversations.unshift(convo);
-                    activeConversationId = convo.id;
-                }
-                convo.model = currentModelKey;
 
                 if (!chatStarted) {
                     chatStarted = true;
@@ -1258,16 +1223,12 @@
                     messagesWrapper.classList.add('visible');
                 }
 
-                let displayText = raw;
-                if (hasFiles) {
-                    const names = attachedFiles.map(function(f) { return f.name; }).join(', ');
-                    displayText = (displayText ? displayText + '\n' : '') + '[Attached files: ' + names + ']';
-                }
-                convo.messages.push({ role: 'user', content: displayText, ts: Date.now() });
-
+                // The backend accepts no file bytes, so the turn carries the
+                // attachment names and nothing else.
                 const filesSnapshot = attachedFiles.map(function(f) {
-                    return { name: f.name, type: f.type, data: f.data };
+                    return { name: f.name, type: f.type };
                 });
+                const displayText = buildUserText(raw, filesSnapshot);
                 attachedFiles.length = 0;
                 const filePreviewArea = document.getElementById('filePreviewArea');
                 if (filePreviewArea) {
@@ -1275,32 +1236,53 @@
                     filePreviewArea.hidden = true;
                 }
 
-                // Add user message
                 addMessage('user', displayText);
-                persistConversations();
-
-                // Clear input
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
-                updateSendState();
 
-                // Show typing
+                // The assistant bubble is created on the first delta, so a turn
+                // that never produces one leaves no empty shell behind.
+                let bubble = null;
+                function ensureBubble() {
+                    if (!bubble) bubble = addMessage('assistant', '');
+                    return bubble;
+                }
+
+                sending = true;
+                updateSendState();
                 typingIndicator.classList.add('visible');
                 scrollToBottom();
 
                 try {
-                    const reply = await callAssistant(currentModelKey, getApiKeys(), convo.messages, filesSnapshot);
-                    typingIndicator.classList.remove('visible');
-                    addMessage('assistant', reply);
-                    convo.messages.push({ role: 'assistant', content: reply, ts: Date.now() });
+                    const turn = await callAssistant(currentModelKey, raw, filesSnapshot, function(chunk) {
+                        typingIndicator.classList.remove('visible');
+                        ensureBubble().append(chunk);
+                        scrollToBottom();
+                    });
+                    // The server created this conversation on its first turn;
+                    // adopt the id so the next message continues the thread.
+                    if (turn.conversationId) activeConversationId = turn.conversationId;
                 } catch (error) {
+                    const message = (error && error.message) ? error.message : 'request failed.';
+                    if (error && error.code === 'missing_api_key') {
+                        // The server refused before writing anything, so point
+                        // at the setting that fixes it and keep the alert as the
+                        // only feedback.
+                        showKeyAlert(error.model);
+                    } else if (error && error.partial) {
+                        // Keep the text that did arrive, and say why it stopped.
+                        ensureBubble().append('\n\n— the reply stopped early: ' + message);
+                    } else {
+                        ensureBubble().setText('Sorry — ' + message);
+                    }
+                } finally {
                     typingIndicator.classList.remove('visible');
-                    const message = 'Sorry — ' + ((error && error.message) ? error.message : 'request failed.');
-                    addMessage('assistant', message);
-                    convo.messages.push({ role: 'assistant', content: message, ts: Date.now() });
+                    sending = false;
+                    updateSendState();
                 }
-                convo.updatedAt = Date.now();
-                persistConversations();
+
+                // Titles and ordering belong to the server, so re-read them.
+                await refreshConversations();
                 scrollToBottom();
             }
 
@@ -1414,7 +1396,7 @@
             });
             updateSendState();
 
-            // ===== HISTORY: select / rename / delete (delegated, persisted) =====
+            // ===== HISTORY: select / rename / delete (delegated, server-backed) =====
             if (chatHistoryNav) {
                 chatHistoryNav.addEventListener('click', function(e) {
                     if (e.target.closest('.history-rename-input')) return;
@@ -1443,7 +1425,8 @@
                 startNewChat();
             });
 
-            // Initial paint from persisted store.
+            // Initial paint: the sidebar itself is filled by refreshAuth(), which
+            // re-reads it once the server has said who is asking.
             setModelPicker('default');
             renderHistory();
 
@@ -1594,18 +1577,16 @@
                 modelOptions.forEach(function(opt) {
                     opt.addEventListener('click', function() {
                         const key = modelKeyFromLabel(this.getAttribute('data-model'));
-                        // Gate: keyless cloud models cannot be used.
+                        // Fast path: a keyless cloud model cannot be picked. The
+                        // server re-checks on send and is the real gate.
                         if (!modelHasKey(key)) {
                             closeModelDropdown();
                             showKeyAlert(key);
                             return;
                         }
+                        // The choice is only sent with the next turn, so nothing
+                        // changes server-side here.
                         setModelPicker(key);
-                        const convo = getActiveConversation();
-                        if (convo) {
-                            convo.model = currentModelKey;
-                            persistConversations();
-                        }
                         closeModelDropdown();
                     });
                 });
@@ -1696,26 +1677,16 @@
             if (fileInput) {
                 fileInput.addEventListener('change', function(e) {
                     const files = Array.from(e.target.files || []);
+                    // Only the names travel: the backend takes no file bytes, so
+                    // the file is never read here at all.
                     files.forEach(function(file) {
-                        fileToBase64(file).then(function(base64) {
-                            attachedFiles.push({
-                                name: file.name,
-                                type: file.type,
-                                data: base64
-                            });
-                            renderFilePreview(file);
-                        }).catch(function() {});
+                        attachedFiles.push({
+                            name: file.name,
+                            type: file.type || ''
+                        });
+                        renderFilePreview(file);
                     });
                     fileInput.value = '';
-                });
-            }
-
-            function fileToBase64(file) {
-                return new Promise(function(resolve, reject) {
-                    const reader = new FileReader();
-                    reader.onload = function() { resolve(reader.result.split(',')[1]); };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
                 });
             }
 
@@ -1902,7 +1873,7 @@
 
             if (btnDeleteAccount) {
                 btnDeleteAccount.addEventListener('click', function() {
-                    if (confirm('Delete your account permanently? Its saved conversations will be removed from this device.')) {
+                    if (confirm('Delete your account permanently? Its saved conversations are deleted with it.')) {
                         if (window.ChatBotAuth) window.ChatBotAuth.deleteAccount();
                     }
                 });
@@ -2013,6 +1984,8 @@
             }
 
             // ===== API KEY SETTINGS (5 providers, persisted in ChatBotStore) =====
+            // These keys never leave the browser except as per-request headers on
+            // POST /api/chat. The server holds them only for that request.
             function refreshApiStatus(card, has) {
                 const st = card.querySelector('[data-api-status]');
                 if (!st) return;
@@ -2034,9 +2007,12 @@
                     const keyInput = card.querySelector('[data-api-field="key"]');
                     const baseInput = card.querySelector('[data-api-field="baseUrl"]');
                     const modelInput = card.querySelector('[data-api-field="model"]');
+
+                    // Personal-provider cards store a key plus, optionally, a
+                    // base URL and model override of their own.
                     if (keyInput) keyInput.value = keys[provider] || '';
-                    if (baseInput) baseInput.value = keys.defaultBaseUrl || '';
-                    if (modelInput) modelInput.value = keys.defaultModel || '';
+                    if (baseInput) baseInput.value = keys[provider + 'BaseUrl'] || '';
+                    if (modelInput) modelInput.value = keys[provider + 'Model'] || '';
                     refreshApiStatus(card, provider === 'default' ? true : !!(keys[provider] && keys[provider].trim()));
 
                     const toggle = card.querySelector('[data-api-toggle]');
@@ -2049,12 +2025,9 @@
                     const saveBtn = card.querySelector('[data-api-save]');
                     function doSave() {
                         const all = window.ChatBotStore.loadKeys();
-                        if (provider === 'default') {
-                            all.defaultBaseUrl = baseInput ? baseInput.value.trim() : '';
-                            all.defaultModel = modelInput ? modelInput.value.trim() : '';
-                        } else if (keyInput) {
-                            all[provider] = keyInput.value.trim();
-                        }
+                        if (keyInput) all[provider] = keyInput.value.trim();
+                        if (baseInput) all[provider + 'BaseUrl'] = baseInput.value.trim();
+                        if (modelInput) all[provider + 'Model'] = modelInput.value.trim();
                         const ok = window.ChatBotStore.saveKeys(all);
                         refreshApiStatus(card, provider === 'default' ? true : !!(keyInput && keyInput.value.trim()));
                         if (saveBtn) {
@@ -2080,15 +2053,12 @@
                     if (clearBtn) {
                         clearBtn.addEventListener('click', function() {
                             const all = window.ChatBotStore.loadKeys();
-                            if (provider === 'default') {
-                                all.defaultBaseUrl = '';
-                                all.defaultModel = '';
-                                if (baseInput) baseInput.value = '';
-                                if (modelInput) modelInput.value = '';
-                            } else {
-                                all[provider] = '';
-                                if (keyInput) keyInput.value = '';
-                            }
+                            all[provider] = '';
+                            all[provider + 'BaseUrl'] = '';
+                            all[provider + 'Model'] = '';
+                            if (keyInput) keyInput.value = '';
+                            if (baseInput) baseInput.value = '';
+                            if (modelInput) modelInput.value = '';
                             window.ChatBotStore.saveKeys(all);
                             refreshApiStatus(card, provider === 'default');
                         });
