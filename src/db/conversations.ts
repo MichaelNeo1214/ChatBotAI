@@ -3,6 +3,13 @@ import { db, type ConversationRow, type MessageRow } from './index.ts';
 
 const MAX_TITLE_LENGTH = 60;
 
+/**
+ * Millisecond-resolution UTC timestamp, matching the column defaults in
+ * schema.sql. datetime('now') is only accurate to the second, which let rows
+ * written in the same second tie on updated_at and sort arbitrarily.
+ */
+const NOW_MS = `strftime('%Y-%m-%d %H:%M:%f', 'now')`;
+
 const statements = {
   insertConversation: db.prepare(
     `INSERT INTO conversations (id, owner_id, title, model) VALUES (?, ?, ?, ?)`,
@@ -14,10 +21,10 @@ const statements = {
     `SELECT * FROM conversations WHERE id = ? AND owner_id = ?`,
   ),
   renameConversation: db.prepare(
-    `UPDATE conversations SET title = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`,
+    `UPDATE conversations SET title = ?, updated_at = ${NOW_MS} WHERE id = ? AND owner_id = ?`,
   ),
   touchConversation: db.prepare(
-    `UPDATE conversations SET updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE conversations SET updated_at = ${NOW_MS} WHERE id = ?`,
   ),
   deleteConversation: db.prepare(
     `DELETE FROM conversations WHERE id = ? AND owner_id = ?`,

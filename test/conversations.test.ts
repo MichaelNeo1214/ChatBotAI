@@ -13,9 +13,7 @@ process.env.DATABASE_PATH = path.join(tmpdir(), `chatbotai-conversations-${rando
 process.env.AI_PROVIDER = 'mock';
 const dbPath = process.env.DATABASE_PATH;
 
-const { CookieJar: Jar, createTestServer, nextSecond, payloadsOf, readSse } = await import(
-  './helpers.ts'
-);
+const { CookieJar: Jar, createTestServer, payloadsOf, readSse } = await import('./helpers.ts');
 
 let server: TestServer;
 let owner: CookieJar;
@@ -79,9 +77,6 @@ describe('GET /api/conversations', () => {
 
   test('after a chat the conversation is listed, most recent first', async () => {
     const first = await startConversation(owner, 'Oldest conversation');
-    // updated_at has one-second resolution, so the ordering assertion below is
-    // only meaningful once the second conversation lands in a later second.
-    await nextSecond();
     const second = await startConversation(owner, 'Newest conversation');
 
     const res = await owner.get('/api/conversations');

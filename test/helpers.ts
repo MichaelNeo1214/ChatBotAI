@@ -232,21 +232,6 @@ export function payloadsOf<T>(events: SseEvent[], name: string): T[] {
   return events.filter(([eventName]) => eventName === name).map(([, payload]) => payload as T);
 }
 
-/**
- * Waits until the wall clock has crossed into the next whole second.
- *
- * `conversations.updated_at` is written with SQLite's `datetime('now')`, which
- * has one-second resolution, so two rows created inside the same second tie and
- * `ORDER BY updated_at DESC` breaks that tie arbitrarily. Any test that asserts
- * relative ordering has to put the rows in different seconds first.
- */
-export async function nextSecond(): Promise<void> {
-  const target = Math.floor(Date.now() / 1000) * 1000 + 1000;
-  while (Date.now() < target) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
-
 export interface ChatDelta {
   text: string;
 }
