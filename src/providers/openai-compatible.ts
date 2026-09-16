@@ -1,8 +1,5 @@
+import { DEFAULT_SYSTEM_PROMPT } from '../chat/personalities.ts';
 import type { ChatProvider, ChatRequest } from './types.ts';
-
-const SYSTEM_PROMPT =
-  'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
-  'Use Markdown for structure and fenced code blocks for code.';
 
 interface StreamChunk {
   choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[];
@@ -60,7 +57,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
         model: this.#model,
         stream: true,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: request.system ?? DEFAULT_SYSTEM_PROMPT },
           ...request.messages.map((m) => ({ role: m.role, content: m.content })),
         ],
       }),

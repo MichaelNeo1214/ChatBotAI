@@ -88,6 +88,7 @@ All endpoints live under `/api`. Conversations are scoped to the caller by an
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | Liveness, active provider, uptime. |
+| `GET` | `/api/personalities` | Built-in assistant personas. |
 | `POST` | `/api/auth/signup` | Create an account and start a session. |
 | `POST` | `/api/auth/login` | Start a session. |
 | `POST` | `/api/auth/logout` | End the current session. |
@@ -98,7 +99,7 @@ All endpoints live under `/api`. Conversations are scoped to the caller by an
 | `GET` | `/api/conversations` | List conversations, most recent first. |
 | `POST` | `/api/conversations` | Create an empty conversation. |
 | `GET` | `/api/conversations/:id` | One conversation with all its messages. |
-| `PATCH` | `/api/conversations/:id` | Rename a conversation. |
+| `PATCH` | `/api/conversations/:id` | Rename a conversation or change its persona. |
 | `DELETE` | `/api/conversations/:id` | Delete a conversation and its messages. |
 
 ### `POST /api/chat`
@@ -106,6 +107,11 @@ All endpoints live under `/api`. Conversations are scoped to the caller by an
 ```json
 { "message": "Hello", "conversationId": "optional-uuid", "model": "GPT-4o" }
 ```
+
+A first turn (no `conversationId`) may also carry `personality` or
+`systemPrompt` to set the persona of the conversation it creates; see
+[Personas](#personas). On a later turn those fields are refused with
+`400 {"code":"persona_on_existing_conversation"}`.
 
 Omit `conversationId` to start a new conversation; the response names the one
 that was created. The reply streams back as Server-Sent Events:
@@ -169,11 +175,33 @@ The headers are ignored for `ChatBot AI`. An unknown label returns
 **The key is never stored.** It lives only for the duration of the request: not
 written to the database, not logged, and never echoed in a response or error.
 
+### Personas
+
+Every conversation has a system prompt. By default it is the built-in
+ChatBot AI instructions; a conversation can instead use one of the built-in
+personalities or free text of its own:
+
+```json
+POST  /api/conversations            { "personality": "coder" }
+PATCH /api/conversations/:id        { "systemPrompt": "Answer only in haiku." }
+PATCH /api/conversations/:id        { "systemPrompt": null }
+```
+
+`GET /api/personalities` lists the built-ins (`default`, `concise`, `tutor`,
+`coder`, `creative`) with their full prompts, for a picker. Send either
+`personality` or `systemPrompt`, not both. `null`, an empty string or the
+`default` personality clears the prompt. Custom prompts are capped at 4000
+characters. The conversation's `system_prompt` field shows what is in effect
+(`null` for the default), and every adapter sends it in place of its own
+instructions. Built-ins live in `src/chat/personalities.ts`.
+
 ## 🗄️ Data
 
 Messages are stored in SQLite at `DATABASE_PATH` (default `./data/chatbot.db`,
 which is gitignored). The schema in `src/db/schema.sql` is applied on every
-boot and is idempotent, so there are no migrations to run yet.
+boot and is idempotent. Columns added after a database was first created are
+listed in `src/db/index.ts` and added with a guarded `ALTER TABLE` on boot, so
+there is still nothing to run by hand.
 
 Conversations carry an `owner_id`: the user id when signed in, otherwise an
 anonymous per-browser id. That means **you can chat before creating an account**,
@@ -291,7 +319,7 @@ Please keep pull requests focused, document new configuration, and preserve user
 - [x] Add authentication (email + password, server-side sessions)
 - [ ] Email verification and password reset
 - [x] Improve conversation memory (budgeted context window)
-- [ ] Add configurable assistant personalities
+- [x] Add configurable assistant personalities
 - [x] Support multiple AI providers
 - [x] Add streaming and rich message rendering
 - [ ] Introduce analytics and administration tools

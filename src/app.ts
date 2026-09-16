@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.ts';
 import { chatRouter } from './routes/chat.ts';
 import { conversationsRouter } from './routes/conversations.ts';
 import { healthRouter } from './routes/health.ts';
+import { personalitiesRouter } from './routes/personalities.ts';
 
 function cors(req: Request, res: Response, next: NextFunction): void {
   const origin = req.headers.origin;
@@ -32,6 +33,7 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }));
 
   app.use('/api/health', healthRouter);
+  app.use('/api/personalities', personalitiesRouter);
 
   // Everything below is scoped to a caller.
   app.use('/api', identifyOwner);

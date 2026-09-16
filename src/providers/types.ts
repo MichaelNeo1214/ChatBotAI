@@ -7,6 +7,8 @@ export interface ChatRequest {
   messages: ChatMessage[];
   /** Label chosen in the frontend model picker, e.g. "ChatBot AI" or "Claude". */
   model?: string;
+  /** Replaces the adapter's default system prompt when set. */
+  system?: string;
   signal?: AbortSignal;
 }
 
