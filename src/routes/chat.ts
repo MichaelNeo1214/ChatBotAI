@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { config } from '../config.ts';
 import {
   addMessage,
   createConversation,
@@ -8,6 +9,7 @@ import {
   titleFromMessage,
 } from '../db/conversations.ts';
 import { badRequest, notFound } from '../middleware/errors.ts';
+import { rateLimit } from '../middleware/rate-limit.ts';
 import { resolveProviderForRequest, type ChatMessage } from '../providers/index.ts';
 
 export const chatRouter = Router();
@@ -15,6 +17,26 @@ export const chatRouter = Router();
 const MAX_MESSAGE_LENGTH = 32_000;
 /** How much prior conversation to replay to the model. */
 const HISTORY_LIMIT = 40;
+
+const RATE_LIMITED = {
+  code: 'rate_limited',
+  message: 'You are sending messages too quickly. Please wait a moment.',
+};
+
+// Owner first so a browser that hits its own cap does not also eat into the
+// shared per-IP budget of everyone behind the same NAT.
+const ownerLimiter = rateLimit({
+  ...RATE_LIMITED,
+  windowMs: config.chatRateLimit.windowMs,
+  max: config.chatRateLimit.perOwner,
+  key: (req) => `owner:${req.ownerId}`,
+});
+const ipLimiter = rateLimit({
+  ...RATE_LIMITED,
+  windowMs: config.chatRateLimit.windowMs,
+  max: config.chatRateLimit.perIp,
+  key: (req) => `ip:${req.ip ?? 'unknown'}`,
+});
 
 /**
  * POST /api/chat
@@ -25,8 +47,11 @@ const HISTORY_LIMIT = 40;
  *   event: delta  — { text } for each chunk
  *   event: done   — { messageId, content }
  *   event: error  — { message }
+ *
+ * Over the limit: 429 { error: { code: "rate_limited", retryAfter } } with a
+ * Retry-After header, before anything is written.
  */
-chatRouter.post('/', async (req, res, next) => {
+chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
   try {
     const { message, conversationId, model } = req.body ?? {};
 
