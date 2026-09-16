@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS conversations (
   owner_id    TEXT NOT NULL,
   title       TEXT NOT NULL DEFAULT 'New chat',
   model       TEXT NOT NULL DEFAULT 'ChatBot AI',
+  -- NULL means the adapter's default instructions. Added after the first
+  -- release, so src/db/index.ts also adds it to databases created earlier.
+  system_prompt TEXT,
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
 );

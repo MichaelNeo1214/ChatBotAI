@@ -1,9 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { DEFAULT_SYSTEM_PROMPT } from '../chat/personalities.ts';
 import type { ChatProvider, ChatRequest } from './types.ts';
-
-const SYSTEM_PROMPT =
-  'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
-  'Use Markdown for structure and fenced code blocks for code.';
 
 export interface AnthropicOptions {
   apiKey: string;
@@ -37,7 +34,7 @@ export class AnthropicProvider implements ChatProvider {
       {
         model: this.#model,
         max_tokens: 16000,
-        system: SYSTEM_PROMPT,
+        system: request.system ?? DEFAULT_SYSTEM_PROMPT,
         messages: request.messages.map((message) => ({
           role: message.role,
           content: message.content,

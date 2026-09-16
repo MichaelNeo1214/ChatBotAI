@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { selectHistory } from '../chat/history.ts';
+import { readSystemPrompt } from '../chat/personalities.ts';
 import { config } from '../config.ts';
 import {
   addMessage,
@@ -40,7 +41,10 @@ const ipLimiter = rateLimit({
 /**
  * POST /api/chat
  *
- * Body: { message: string, conversationId?: string, model?: string }
+ * Body: { message: string, conversationId?: string, model?: string,
+ *         systemPrompt?: string, personality?: string }
+ * The persona fields apply only when this turn starts a new conversation;
+ * an existing one is changed with PATCH /api/conversations/:id.
  * Responds with Server-Sent Events:
  *   event: meta   — { conversationId, messageId } (sent before any token)
  *   event: delta  — { text } for each chunk
@@ -68,6 +72,14 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
       throw badRequest('"model" must be a string when provided');
     }
 
+    const systemPrompt = readSystemPrompt(req.body);
+    if (systemPrompt !== undefined && conversationId) {
+      throw badRequest(
+        'Change the persona of an existing conversation with PATCH /api/conversations/:id',
+        { code: 'persona_on_existing_conversation' },
+      );
+    }
+
     const text = message.trim();
 
     // Resolved before anything is written, so a bad model or a missing key
@@ -79,7 +91,7 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
 
     const conversation = conversationId
       ? getConversation(conversationId, req.ownerId)
-      : createConversation(req.ownerId, { title: titleFromMessage(text), model });
+      : createConversation(req.ownerId, { title: titleFromMessage(text), model, systemPrompt });
 
     if (!conversation) throw notFound('Conversation not found');
 
@@ -116,6 +128,7 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
       for await (const chunk of chatProvider.streamChat({
         messages: [...history, { role: 'user', content: text }],
         model: resolvedModel,
+        system: conversation.system_prompt ?? undefined,
         signal: abort.signal,
       })) {
         answer += chunk;

@@ -12,7 +12,8 @@ const NOW_MS = `strftime('%Y-%m-%d %H:%M:%f', 'now')`;
 
 const statements = {
   insertConversation: db.prepare(
-    `INSERT INTO conversations (id, owner_id, title, model) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO conversations (id, owner_id, title, model, system_prompt)
+     VALUES (?, ?, ?, ?, ?)`,
   ),
   listConversations: db.prepare(
     `SELECT * FROM conversations WHERE owner_id = ? ORDER BY updated_at DESC LIMIT ?`,
@@ -22,6 +23,10 @@ const statements = {
   ),
   renameConversation: db.prepare(
     `UPDATE conversations SET title = ?, updated_at = ${NOW_MS} WHERE id = ? AND owner_id = ?`,
+  ),
+  setSystemPrompt: db.prepare(
+    `UPDATE conversations SET system_prompt = ?, updated_at = ${NOW_MS}
+     WHERE id = ? AND owner_id = ?`,
   ),
   touchConversation: db.prepare(
     `UPDATE conversations SET updated_at = ${NOW_MS} WHERE id = ?`,
@@ -48,7 +53,7 @@ export function titleFromMessage(text: string): string {
 
 export function createConversation(
   ownerId: string,
-  options: { title?: string; model?: string } = {},
+  options: { title?: string; model?: string; systemPrompt?: string | null } = {},
 ): ConversationRow {
   const id = randomUUID();
   statements.insertConversation.run(
@@ -56,6 +61,7 @@ export function createConversation(
     ownerId,
     options.title ?? 'New chat',
     options.model ?? 'ChatBot AI',
+    options.systemPrompt ?? null,
   );
   const created = getConversation(id, ownerId);
   if (!created) throw new Error(`Conversation ${id} vanished immediately after insert`);
@@ -74,6 +80,15 @@ export function getConversation(id: string, ownerId: string): ConversationRow | 
 
 export function renameConversation(id: string, ownerId: string, title: string): boolean {
   return statements.renameConversation.run(title, id, ownerId).changes > 0;
+}
+
+/** `null` clears the prompt so the adapter's default applies again. */
+export function setSystemPrompt(
+  id: string,
+  ownerId: string,
+  systemPrompt: string | null,
+): boolean {
+  return statements.setSystemPrompt.run(systemPrompt, id, ownerId).changes > 0;
 }
 
 export function deleteConversation(id: string, ownerId: string): boolean {

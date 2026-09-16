@@ -6,7 +6,9 @@ import {
   listConversations,
   listMessages,
   renameConversation,
+  setSystemPrompt,
 } from '../db/conversations.ts';
+import { readSystemPrompt } from '../chat/personalities.ts';
 import { badRequest, notFound } from '../middleware/errors.ts';
 
 export const conversationsRouter = Router();
@@ -23,7 +25,10 @@ conversationsRouter.post('/', (req, res) => {
   if (model != null && typeof model !== 'string') {
     throw badRequest('"model" must be a string when provided');
   }
-  res.status(201).json({ conversation: createConversation(req.ownerId, { title, model }) });
+  const systemPrompt = readSystemPrompt(req.body);
+  res.status(201).json({
+    conversation: createConversation(req.ownerId, { title, model, systemPrompt }),
+  });
 });
 
 conversationsRouter.get('/:id', (req, res) => {
@@ -32,13 +37,31 @@ conversationsRouter.get('/:id', (req, res) => {
   res.json({ conversation, messages: listMessages(conversation.id) });
 });
 
+/**
+ * Updates any of: title, systemPrompt (free text, null to clear), personality
+ * (a built-in id from GET /api/personalities). At least one is required.
+ */
 conversationsRouter.patch('/:id', (req, res) => {
   const { title } = req.body ?? {};
-  if (typeof title !== 'string' || title.trim() === '') {
-    throw badRequest('"title" is required and must be a non-empty string');
+  const systemPrompt = readSystemPrompt(req.body);
+
+  if (title === undefined && systemPrompt === undefined) {
+    throw badRequest('Provide "title", "systemPrompt" or "personality"');
   }
-  if (!renameConversation(req.params.id, req.ownerId, title.trim())) {
+  if (title !== undefined && (typeof title !== 'string' || title.trim() === '')) {
+    throw badRequest('"title" must be a non-empty string');
+  }
+
+  // Ownership is checked once up front so a partial update cannot leak whether
+  // a conversation exists through a second, differently-scoped write.
+  if (!getConversation(req.params.id, req.ownerId)) {
     throw notFound('Conversation not found');
+  }
+  if (title !== undefined) {
+    renameConversation(req.params.id, req.ownerId, title.trim());
+  }
+  if (systemPrompt !== undefined) {
+    setSystemPrompt(req.params.id, req.ownerId, systemPrompt);
   }
   res.json({ conversation: getConversation(req.params.id, req.ownerId) });
 });
