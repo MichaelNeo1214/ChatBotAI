@@ -96,11 +96,13 @@ All endpoints live under `/api`. Conversations are scoped to the caller by an
 | `DELETE` | `/api/auth/account` | Delete the account and its conversations. |
 | `GET` | `/api/auth/me` | The signed-in user, or `null`. |
 | `POST` | `/api/chat` | Send a message; streams the reply. |
+| `POST` | `/api/chat/regenerate` | Answer the last user message again; streams the reply. |
 | `GET` | `/api/conversations` | List conversations, most recent first. |
 | `POST` | `/api/conversations` | Create an empty conversation. |
 | `GET` | `/api/conversations/:id` | One conversation with all its messages. |
 | `PATCH` | `/api/conversations/:id` | Rename a conversation or change its persona. |
 | `DELETE` | `/api/conversations/:id` | Delete a conversation and its messages. |
+| `DELETE` | `/api/conversations/:id/messages/:messageId` | Delete one message. |
 
 ### `POST /api/chat`
 
@@ -147,6 +149,21 @@ HTTP 429, Retry-After: 42
 Tune it with `CHAT_RATE_LIMIT_WINDOW_MS`, `CHAT_RATE_LIMIT_PER_OWNER` and
 `CHAT_RATE_LIMIT_PER_IP`. The counters live in memory, so they reset on
 restart and are per instance.
+
+### `POST /api/chat/regenerate`
+
+```json
+{ "conversationId": "uuid", "model": "GPT-4o" }
+```
+
+Answers the conversation's last user message again, with the same SSE stream
+as `/api/chat`. If the newest message is the assistant's reply it is deleted
+first so the thread never holds two answers to one question; its id is
+reported as `replaced` in the `meta` event (`null` when nothing was deleted).
+A conversation with no user message to answer returns
+`400 {"code":"nothing_to_regenerate"}`. To edit and resend, delete the
+message with `DELETE /api/conversations/:id/messages/:messageId` and send
+the new text to `/api/chat`. Both endpoints share the chat rate limit.
 
 ### Bring your own key
 

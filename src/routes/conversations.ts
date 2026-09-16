@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createConversation,
   deleteConversation,
+  deleteMessage,
   getConversation,
   listConversations,
   listMessages,
@@ -64,6 +65,16 @@ conversationsRouter.patch('/:id', (req, res) => {
     setSystemPrompt(req.params.id, req.ownerId, systemPrompt);
   }
   res.json({ conversation: getConversation(req.params.id, req.ownerId) });
+});
+
+/** Removes one message. The conversation is looked up first so a foreign id is a 404, not a silent no-op. */
+conversationsRouter.delete('/:id/messages/:messageId', (req, res) => {
+  const conversation = getConversation(req.params.id, req.ownerId);
+  if (!conversation) throw notFound('Conversation not found');
+  if (!deleteMessage(conversation.id, req.params.messageId)) {
+    throw notFound('Message not found');
+  }
+  res.status(204).end();
 });
 
 conversationsRouter.delete('/:id', (req, res) => {
