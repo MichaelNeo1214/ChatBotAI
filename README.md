@@ -124,6 +124,11 @@ data: {"messageId":"...","content":"Hello there"}
 A failure mid-stream arrives as `event: error` instead of `event: done`; any
 text generated before the failure is still saved.
 
+Each turn replays the conversation to the model within a character budget,
+`CHAT_CONTEXT_CHARS` (default 48000, about 12k tokens). The newest turns are
+kept and the oldest dropped once the budget is spent, so long conversations
+keep working instead of overflowing the model's context window.
+
 Turns are rate limited per owner (browser or account) and per IP, with
 defaults of 20 and 60 per minute. Over the cap the endpoint answers before
 streaming anything:
@@ -285,7 +290,7 @@ Please keep pull requests focused, document new configuration, and preserve user
 - [x] Persist conversations and messages
 - [x] Add authentication (email + password, server-side sessions)
 - [ ] Email verification and password reset
-- [ ] Improve conversation memory
+- [x] Improve conversation memory (budgeted context window)
 - [ ] Add configurable assistant personalities
 - [x] Support multiple AI providers
 - [x] Add streaming and rich message rendering
