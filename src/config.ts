@@ -83,6 +83,14 @@ export const config = {
    * from looping, and the per-IP cap is the backstop when cookies are cleared
    * to dodge it. Per-IP is looser because an office or campus shares one.
    */
+  /**
+   * Characters of conversation replayed to the model per turn, including the
+   * new message. Roughly four characters per token, so the default is about
+   * 12k tokens: well inside every supported model's window while leaving room
+   * for the system prompt and the reply.
+   */
+  chatContextChars: positiveInt('CHAT_CONTEXT_CHARS', 48_000),
+
   chatRateLimit: {
     windowMs: positiveInt('CHAT_RATE_LIMIT_WINDOW_MS', 60_000),
     perOwner: positiveInt('CHAT_RATE_LIMIT_PER_OWNER', 20),

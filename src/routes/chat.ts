@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { selectHistory } from '../chat/history.ts';
 import { config } from '../config.ts';
 import {
   addMessage,
@@ -10,13 +11,11 @@ import {
 } from '../db/conversations.ts';
 import { badRequest, notFound } from '../middleware/errors.ts';
 import { rateLimit } from '../middleware/rate-limit.ts';
-import { resolveProviderForRequest, type ChatMessage } from '../providers/index.ts';
+import { resolveProviderForRequest } from '../providers/index.ts';
 
 export const chatRouter = Router();
 
 const MAX_MESSAGE_LENGTH = 32_000;
-/** How much prior conversation to replay to the model. */
-const HISTORY_LIMIT = 40;
 
 const RATE_LIMITED = {
   code: 'rate_limited',
@@ -84,16 +83,14 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
 
     if (!conversation) throw notFound('Conversation not found');
 
-    // The history the model sees must not include the new message twice.
-    const history: ChatMessage[] = listMessages(conversation.id)
-      .filter((row) => row.role !== 'system')
-      .slice(-HISTORY_LIMIT)
-      .map((row) => ({ role: row.role as ChatMessage['role'], content: row.content }));
+    // Read before the new message is stored so it is not replayed twice.
+    const stored = listMessages(conversation.id);
+    const history = selectHistory(stored, text, { budgetChars: config.chatContextChars });
 
     addMessage(conversation.id, 'user', text);
 
     // First real message in a conversation that was created empty: name it.
-    if (history.length === 0 && conversation.title === 'New chat') {
+    if (stored.length === 0 && conversation.title === 'New chat') {
       renameConversation(conversation.id, req.ownerId, titleFromMessage(text));
     }
 
