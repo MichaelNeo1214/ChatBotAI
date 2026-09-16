@@ -80,6 +80,32 @@ This starts the API and serves the frontend from the same origin at
 <http://localhost:3000>. `npm start` runs it without file watching, and
 `npm run typecheck` checks types without emitting anything.
 
+### Deploy
+
+The repo ships a `Dockerfile` and a `docker-compose.yml` that run the API and
+the frontend in one container on port 3000, with the SQLite file in a named
+volume so it survives container replacements:
+
+```bash
+cp .env.example .env   # set AI_PROVIDER, AI_API_KEY, CORS_ORIGINS
+docker compose up -d --build
+```
+
+Without Docker, any host with Node 22.5+ works: `npm ci --omit=dev` and
+`NODE_ENV=production npm start`.
+
+Two settings matter once the app is not on localhost:
+
+- `NODE_ENV=production` marks the session cookie `secure`, so it is only sent
+  over HTTPS. Terminate TLS in front of the app.
+- `TRUST_PROXY=1` (the number of proxy hops) when a reverse proxy sits in
+  front. Without it every request appears to come from the proxy, so the
+  per-IP rate limit would throttle everyone together and the `secure` cookie
+  would never be set.
+
+Expired sessions are purged on boot and every `SESSION_SWEEP_MS` (default one
+hour) after that.
+
 ## 🔌 API
 
 All endpoints live under `/api`. Conversations are scoped to the caller by an
@@ -340,7 +366,7 @@ Please keep pull requests focused, document new configuration, and preserve user
 - [x] Support multiple AI providers
 - [x] Add streaming and rich message rendering
 - [ ] Introduce analytics and administration tools
-- [ ] Provide production deployment examples
+- [x] Provide production deployment examples (Dockerfile, compose)
 
 ## 📄 License
 

@@ -28,3 +28,28 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t chatbotai:ci .
+
+      - name: Boot container and check health
+        run: |
+          docker run -d --name chatbotai -p 3000:3000 -e AI_PROVIDER=mock chatbotai:ci
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:3000/api/health; then echo; exit 0; fi
+            sleep 1
+          done
+          echo "container never became healthy"; docker logs chatbotai; exit 1
+
+      - name: Frontend is served
+        run: curl -sf -o /dev/null http://127.0.0.1:3000/
+
+      - name: Container logs
+        if: always()
+        run: docker logs chatbotai || true
