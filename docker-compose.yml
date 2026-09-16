@@ -1,0 +1,19 @@
+# One-container deployment: the API and the static frontend on port 3000,
+# SQLite persisted in a named volume. Put real values in .env first.
+services:
+  chatbotai:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/chatbot.db
+      # Uncomment when a reverse proxy in front of this container terminates TLS.
+      # TRUST_PROXY: "1"
+    volumes:
+      - chatbotai-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  chatbotai-data:

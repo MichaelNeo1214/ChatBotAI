@@ -33,6 +33,14 @@ function positiveInt(name: string, fallback: number): number {
   return value;
 }
 
+function positiveIntOrZero(name: string, fallback: number): number {
+  const value = int(name, fallback);
+  if (value < 0) {
+    throw new Error(`Environment variable ${name} must be zero or a positive integer, got "${value}"`);
+  }
+  return value;
+}
+
 const databasePath = str('DATABASE_PATH', './data/chatbot.db');
 
 function parseModelMap(raw: string): Readonly<Record<string, string>> {
@@ -96,6 +104,18 @@ export const config = {
     perOwner: positiveInt('CHAT_RATE_LIMIT_PER_OWNER', 20),
     perIp: positiveInt('CHAT_RATE_LIMIT_PER_IP', 60),
   },
+
+  /**
+   * Set when a reverse proxy (nginx, Caddy, a PaaS router) terminates TLS in
+   * front of the app. Express then reads the client IP and scheme from
+   * X-Forwarded-* instead of the proxy's own address, which the rate limiter
+   * and the `secure` session cookie both depend on. The value is the number
+   * of trusted hops, so "1" for one proxy. Unset means no proxy.
+   */
+  trustProxy: positiveIntOrZero('TRUST_PROXY', 0),
+
+  /** How often expired sessions are swept while the server runs. */
+  sessionSweepMs: positiveInt('SESSION_SWEEP_MS', 60 * 60 * 1000),
 
   corsOrigins: str('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
     .split(',')
