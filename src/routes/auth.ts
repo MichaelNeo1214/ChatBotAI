@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { clearSessionCookie, readCookie, setSessionCookie, SESSION_COOKIE } from '../auth/cookies.ts';
 import { DUMMY_HASH, hashPassword, verifyPassword } from '../auth/password.ts';
-import { rateLimit } from '../auth/rate-limit.ts';
+import { rateLimit } from '../middleware/rate-limit.ts';
 import {
   claimConversations,
   createSession,

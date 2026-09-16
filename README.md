@@ -124,6 +124,19 @@ data: {"messageId":"...","content":"Hello there"}
 A failure mid-stream arrives as `event: error` instead of `event: done`; any
 text generated before the failure is still saved.
 
+Turns are rate limited per owner (browser or account) and per IP, with
+defaults of 20 and 60 per minute. Over the cap the endpoint answers before
+streaming anything:
+
+```json
+HTTP 429, Retry-After: 42
+{ "error": { "code": "rate_limited", "status": 429, "retryAfter": 42, "message": "..." } }
+```
+
+Tune it with `CHAT_RATE_LIMIT_WINDOW_MS`, `CHAT_RATE_LIMIT_PER_OWNER` and
+`CHAT_RATE_LIMIT_PER_IP`. The counters live in memory, so they reset on
+restart and are per instance.
+
 ### Bring your own key
 
 The model picker's `ChatBot AI` option uses the server's own provider and
