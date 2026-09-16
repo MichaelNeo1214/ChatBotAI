@@ -37,6 +37,9 @@ const statements = {
   insertMessage: db.prepare(
     `INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)`,
   ),
+  deleteMessage: db.prepare(
+    `DELETE FROM messages WHERE id = ? AND conversation_id = ?`,
+  ),
   listMessages: db.prepare(
     `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at, rowid`,
   ),
@@ -97,6 +100,13 @@ export function deleteConversation(id: string, ownerId: string): boolean {
 
 export function listMessages(conversationId: string): MessageRow[] {
   return statements.listMessages.all(conversationId) as unknown as MessageRow[];
+}
+
+/** Scoped to the conversation so an id from another thread cannot match. */
+export function deleteMessage(conversationId: string, messageId: string): boolean {
+  const removed = statements.deleteMessage.run(messageId, conversationId).changes > 0;
+  if (removed) statements.touchConversation.run(conversationId);
+  return removed;
 }
 
 export function addMessage(

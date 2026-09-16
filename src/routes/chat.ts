@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { selectHistory } from '../chat/history.ts';
 import { readSystemPrompt } from '../chat/personalities.ts';
+import { streamAssistantReply } from '../chat/stream.ts';
 import { config } from '../config.ts';
 import {
   addMessage,
   createConversation,
+  deleteMessage,
   getConversation,
   listMessages,
   renameConversation,
@@ -45,11 +47,7 @@ const ipLimiter = rateLimit({
  *         systemPrompt?: string, personality?: string }
  * The persona fields apply only when this turn starts a new conversation;
  * an existing one is changed with PATCH /api/conversations/:id.
- * Responds with Server-Sent Events:
- *   event: meta   — { conversationId, messageId } (sent before any token)
- *   event: delta  — { text } for each chunk
- *   event: done   — { messageId, content }
- *   event: error  — { message }
+ * Responds with the Server-Sent Events described in src/chat/stream.ts.
  *
  * Over the limit: 429 { error: { code: "rate_limited", retryAfter } } with a
  * Retry-After header, before anything is written.
@@ -106,48 +104,73 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
       renameConversation(conversation.id, req.ownerId, titleFromMessage(text));
     }
 
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
+    await streamAssistantReply({
+      res,
+      conversation,
+      provider: chatProvider,
+      model: resolvedModel,
+      messages: [...history, { role: 'user', content: text }],
     });
+  } catch (error) {
+    next(error);
+  }
+});
 
-    const send = (event: string, data: unknown) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    };
+/**
+ * POST /api/chat/regenerate
+ *
+ * Body: { conversationId: string, model?: string }
+ * Answers the conversation's last user message again. If the most recent
+ * message is the assistant's reply it is deleted first, so the thread never
+ * holds two answers to one question; the meta event names it as `replaced`.
+ * A conversation whose last message is already the user's (an earlier reply
+ * failed or was deleted) is simply answered. Same SSE stream as POST /api/chat.
+ */
+chatRouter.post('/regenerate', ownerLimiter, ipLimiter, async (req, res, next) => {
+  try {
+    const { conversationId, model } = req.body ?? {};
 
-    send('meta', { conversationId: conversation.id, model: conversation.model });
-
-    // Stop generating if the browser navigates away or hits stop.
-    const abort = new AbortController();
-    res.on('close', () => abort.abort());
-
-    let answer = '';
-    try {
-      for await (const chunk of chatProvider.streamChat({
-        messages: [...history, { role: 'user', content: text }],
-        model: resolvedModel,
-        system: conversation.system_prompt ?? undefined,
-        signal: abort.signal,
-      })) {
-        answer += chunk;
-        send('delta', { text: chunk });
-      }
-    } catch (streamError) {
-      // Persist whatever arrived before the failure so the turn is not lost.
-      if (answer !== '') addMessage(conversation.id, 'assistant', answer);
-      if (!abort.signal.aborted) {
-        console.error('[chat] provider stream failed', streamError);
-        send('error', { message: 'The assistant failed to finish this response.' });
-      }
-      res.end();
-      return;
+    if (typeof conversationId !== 'string' || conversationId === '') {
+      throw badRequest('"conversationId" is required and must be a string');
+    }
+    if (model != null && typeof model !== 'string') {
+      throw badRequest('"model" must be a string when provided');
     }
 
-    const saved = addMessage(conversation.id, 'assistant', answer);
-    send('done', { messageId: saved.id, content: answer });
-    res.end();
+    const { provider: chatProvider, model: resolvedModel } = resolveProviderForRequest({
+      modelLabel: model,
+      headers: req.headers,
+    });
+
+    const conversation = getConversation(conversationId, req.ownerId);
+    if (!conversation) throw notFound('Conversation not found');
+
+    const stored = listMessages(conversation.id);
+    const last = stored.at(-1);
+    const replaced = last?.role === 'assistant' ? last : undefined;
+    const rows = replaced ? stored.slice(0, -1) : stored;
+    const target = rows.at(-1);
+
+    if (!target || target.role !== 'user') {
+      throw badRequest('There is no user message to answer', { code: 'nothing_to_regenerate' });
+    }
+
+    // Everything is decided before the delete so a bad request leaves the
+    // thread untouched.
+    if (replaced) deleteMessage(conversation.id, replaced.id);
+
+    const history = selectHistory(rows.slice(0, -1), target.content, {
+      budgetChars: config.chatContextChars,
+    });
+
+    await streamAssistantReply({
+      res,
+      conversation,
+      provider: chatProvider,
+      model: resolvedModel,
+      messages: [...history, { role: 'user', content: target.content }],
+      meta: { replaced: replaced?.id ?? null },
+    });
   } catch (error) {
     next(error);
   }

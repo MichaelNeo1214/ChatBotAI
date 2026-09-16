@@ -57,6 +57,14 @@ describe('POST /api/chat — rate limiting', () => {
     assert.equal(typeof body.error.message, 'string');
   });
 
+  test('regenerate shares the same budget', async () => {
+    const list = await alice.get('/api/conversations');
+    const { conversations } = (await list.json()) as ConversationListBody;
+    const res = await alice.post('/api/chat/regenerate', { conversationId: conversations[0]!.id });
+    assert.equal(res.status, 429);
+    assert.equal(((await res.json()) as RateLimitedBody).error.code, 'rate_limited');
+  });
+
   test('a rejected turn is not persisted', async () => {
     const res = await alice.get('/api/conversations');
     const { conversations } = (await res.json()) as ConversationListBody;
