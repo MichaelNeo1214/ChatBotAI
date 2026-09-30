@@ -1,17 +1,374 @@
- * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #000;
-            color: #fff;
-            overflow: hidden;
-        }
-        
-        #root {
-            width: 100%;
-            height: 100vh;
-        }
+/* ==========================================================================
+   SIGN IN / SIGN UP
+   Shares the design language of the chat app: same tokens, same radii,
+   same accent, same focus rings. The three.js dot-field background is
+   kept from the original page and simply sits behind a glass card.
+   ========================================================================== */
+
+:root {
+    --auth-bg: #0b0c0e;
+    --auth-surface: rgba(255, 255, 255, 0.032);
+    --auth-surface-solid: #121316;
+    --auth-border: rgba(255, 255, 255, 0.09);
+    --auth-border-strong: rgba(255, 255, 255, 0.16);
+    --auth-text: #e9edf3;
+    --auth-text-secondary: #9aa4b2;
+    --auth-text-faint: #6b7482;
+    --auth-accent: #6366f1;
+    --auth-accent-hover: #7c7ff5;
+    --auth-accent-soft: rgba(99, 102, 241, 0.16);
+    --auth-danger-bg: rgba(239, 68, 68, 0.12);
+    --auth-danger-border: rgba(239, 68, 68, 0.35);
+    --auth-danger-text: #fca5a5;
+    --auth-radius-lg: 18px;
+    --auth-radius-md: 10px;
+    --auth-transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--auth-bg);
+    color: var(--auth-text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+    width: 100%;
+    height: 100vh;
+}
+
+/* --------------------------------------------------------------------------
+   LAYOUT
+   -------------------------------------------------------------------------- */
+.auth-page {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 24px;
+}
+
+.auth-bg-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+/* Vignette so the dot field never competes with the form. */
+.auth-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background:
+        radial-gradient(circle at 50% 40%, rgba(11, 12, 14, 0.55) 0%, rgba(11, 12, 14, 0.92) 70%),
+        linear-gradient(to bottom, rgba(11, 12, 14, 0.5), rgba(11, 12, 14, 0.5));
+    pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   CARD
+   -------------------------------------------------------------------------- */
+.auth-card {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    max-width: 420px;
+    padding: 36px 32px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--auth-surface-solid);
+    background-clip: padding-box;
+    border: 1px solid var(--auth-border);
+    border-radius: var(--auth-radius-lg);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.04) inset,
+        0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* A 1px accent hairline along the top edge. */
+.auth-card::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 15%;
+    right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--auth-accent), transparent);
+    opacity: 0.7;
+}
+
+.auth-logo {
+    align-self: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--auth-border-strong);
+    background: var(--auth-accent-soft);
+    color: var(--auth-accent-hover);
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+}
+
+.auth-title {
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.022em;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+.auth-subtitle {
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--auth-text-secondary);
+    text-align: center;
+    margin-bottom: 22px;
+}
+
+/* --------------------------------------------------------------------------
+   FORM
+   -------------------------------------------------------------------------- */
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.auth-field {
+    width: 100%;
+    padding: 11px 14px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--auth-text);
+    background: var(--auth-surface);
+    border: 1px solid var(--auth-border);
+    border-radius: var(--auth-radius-md);
+    outline: none;
+    transition: border-color var(--auth-transition), background var(--auth-transition), box-shadow var(--auth-transition);
+}
+
+.auth-field::placeholder {
+    color: var(--auth-text-faint);
+}
+
+.auth-field:hover {
+    border-color: var(--auth-border-strong);
+}
+
+.auth-field:focus {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--auth-accent);
+    box-shadow: 0 0 0 3px var(--auth-accent-soft);
+}
+
+.auth-submit {
+    width: 100%;
+    margin-top: 4px;
+    padding: 11px 16px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--auth-accent);
+    border: none;
+    border-radius: var(--auth-radius-md);
+    cursor: pointer;
+    transition: background var(--auth-transition), transform var(--auth-transition), opacity var(--auth-transition);
+}
+
+.auth-submit:hover:not(:disabled) {
+    background: var(--auth-accent-hover);
+}
+
+.auth-submit:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.auth-submit:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   ERROR BANNER
+   -------------------------------------------------------------------------- */
+.auth-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    text-align: left;
+    color: var(--auth-danger-text);
+    background: var(--auth-danger-bg);
+    border: 1px solid var(--auth-danger-border);
+    border-radius: var(--auth-radius-md);
+}
+
+.auth-error svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   DIVIDER + SOCIAL
+   -------------------------------------------------------------------------- */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin: 20px 0 14px;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--auth-text-faint);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--auth-border);
+}
+
+.auth-social {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.auth-social-btn {
+    width: 100%;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--auth-text);
+    background: var(--auth-surface);
+    border: 1px solid var(--auth-border);
+    border-radius: var(--auth-radius-md);
+    cursor: pointer;
+    transition: background var(--auth-transition), border-color var(--auth-transition), color var(--auth-transition);
+}
+
+.auth-social-btn svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+}
+
+.auth-social-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--auth-border-strong);
+}
+
+.auth-social-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   FOOTER
+   -------------------------------------------------------------------------- */
+.auth-switch {
+    margin-top: 22px;
+    font-size: 0.85rem;
+    color: var(--auth-text-secondary);
+    text-align: center;
+}
+
+.auth-link {
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 500;
+    color: var(--auth-text);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color var(--auth-transition);
+}
+
+.auth-link:hover {
+    color: var(--auth-accent-hover);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.auth-legal {
+    margin-top: 18px;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: var(--auth-text-faint);
+    text-align: center;
+}
+
+.auth-legal a {
+    color: var(--auth-text-secondary);
+    text-decoration: none;
+    transition: color var(--auth-transition);
+}
+
+.auth-legal a:hover {
+    color: var(--auth-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+    .auth-page {
+        align-items: flex-start;
+        padding: 20px 16px;
+        overflow-y: auto;
+    }
+
+    .auth-card {
+        padding: 28px 20px 22px;
+        border-radius: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-field,
+    .auth-submit,
+    .auth-social-btn,
+    .auth-link,
+    .auth-legal a {
+        transition: none;
+    }
+}
