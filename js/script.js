@@ -517,7 +517,10 @@
             window.ChatBotAuth.signOut = function(everywhere) { return doSignOut(!!everywhere); };
             window.ChatBotAuth.deleteAccount = function() { return deleteAccount(); };
 
-            refreshAuth();
+            // After auth resolves, rebuild the last local thread (IndexedDB).
+            refreshAuth().then(function() {
+                restoreLocalHistory();
+            });
 
             // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
@@ -533,7 +536,10 @@
                 welcomeScreen.style.display = 'none';
                 messagesWrapper.classList.add('visible');
                 messagesWrapper.innerHTML = '';
-                addMessage('assistant', HELP_TEXT);
+                const helpBubble = addMessage('assistant', HELP_TEXT);
+                if (helpBubble && helpBubble.element) {
+                    helpBubble.element.setAttribute('data-transient', 'true');
+                }
                 renderHistory();
                 isPinnedToBottom = true;
                 scrollToBottom(true);
@@ -1132,6 +1138,7 @@
                 welcomeScreen.style.display = '';
                 messagesWrapper.classList.remove('visible');
                 messagesWrapper.innerHTML = '';
+                clearHistory();
                 renderHistory();
                 isPinnedToBottom = true;
                 updateScrollFab();
@@ -1139,6 +1146,119 @@
                     closeSidebar();
                 }
                 chatInput.focus();
+            }
+
+            // ===== LOCAL PERSISTENCE (IndexedDB) =====
+            // The on-screen thread is mirrored to IndexedDB so a refresh (or an
+            // offline reload) never loses it. Additive only: the server remains
+            // the source of truth for the sidebar; this is a device-local echo.
+            const IDB_NAME = 'ChatBotDB';
+            const IDB_STORE = 'chats';
+            const IDB_KEY = 'current';
+            let chatHistory = [];
+            let dbPromise = null;
+
+            function initDB() {
+                if (dbPromise) return dbPromise;
+                dbPromise = new Promise(function(resolve) {
+                    if (!('indexedDB' in window)) { resolve(null); return; }
+                    let req;
+                    try {
+                        req = indexedDB.open(IDB_NAME, 1);
+                    } catch (e) { resolve(null); return; }
+                    req.onupgradeneeded = function() {
+                        const db = req.result;
+                        if (!db.objectStoreNames.contains(IDB_STORE)) {
+                            db.createObjectStore(IDB_STORE);
+                        }
+                    };
+                    req.onsuccess = function() { resolve(req.result); };
+                    req.onerror = function() { resolve(null); };
+                });
+                return dbPromise;
+            }
+
+            function idbWrite(mutate) {
+                return initDB().then(function(db) {
+                    if (!db) return null;
+                    return new Promise(function(resolve) {
+                        let tx;
+                        try {
+                            tx = db.transaction(IDB_STORE, 'readwrite');
+                            mutate(tx.objectStore(IDB_STORE));
+                        } catch (e) { resolve(null); return; }
+                        tx.oncomplete = function() { resolve(true); };
+                        tx.onerror = function() { resolve(null); };
+                        tx.onabort = function() { resolve(null); };
+                    });
+                });
+            }
+
+            function saveHistory(messages) {
+                return idbWrite(function(store) { store.put(messages || [], IDB_KEY); });
+            }
+
+            function clearHistory() {
+                chatHistory = [];
+                return idbWrite(function(store) { store.delete(IDB_KEY); });
+            }
+
+            function loadHistory() {
+                return initDB().then(function(db) {
+                    if (!db) return [];
+                    return new Promise(function(resolve) {
+                        let tx;
+                        try {
+                            tx = db.transaction(IDB_STORE, 'readonly');
+                        } catch (e) { resolve([]); return; }
+                        const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+                        req.onsuccess = function() { resolve(Array.isArray(req.result) ? req.result : []); };
+                        req.onerror = function() { resolve([]); };
+                    });
+                });
+            }
+
+            // Reflects the live thread (in DOM order) into memory + IndexedDB.
+            // Regenerate and edit thus persist correctly without special-casing.
+            function persistHistory() {
+                const nodes = messagesWrapper.querySelectorAll('.message');
+                const out = [];
+                for (let i = 0; i < nodes.length; i++) {
+                    const el = nodes[i];
+                    if (el.getAttribute('data-transient') === 'true') continue;
+                    const text = typeof el.__sourceText === 'string' ? el.__sourceText : '';
+                    if (!text) continue;
+                    out.push({
+                        role: el.classList.contains('user') ? 'user' : 'assistant',
+                        text: text
+                    });
+                }
+                chatHistory = out;
+                saveHistory(chatHistory);
+            }
+
+            // Rebuilds the chat from IndexedDB on first load. No API call here.
+            async function restoreLocalHistory() {
+                if (messagesWrapper.children.length > 0) return;
+                const saved = await loadHistory();
+                if (!saved.length) return;
+                chatHistory = saved.slice();
+                saved.forEach(function(m) {
+                    addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                });
+                chatStarted = true;
+                welcomeScreen.style.display = 'none';
+                messagesWrapper.classList.add('visible');
+                for (let k = saved.length - 1; k >= 0; k--) {
+                    if (saved[k].role === 'user') {
+                        lastTurn = { raw: saved[k].text || '', files: [] };
+                        break;
+                    }
+                }
+                renderHistory();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+                updateScrollFab();
             }
 
             async function deleteConversation(id) {
@@ -1304,6 +1424,8 @@
                     activeAbort = null;
                     setComposerBusy(false);
                     updateSendState();
+                    // Persist the finished turn locally (survives refresh/offline).
+                    persistHistory();
                     // Auto-focus: cursor is ready for the next prompt the moment
                     // the reply finishes (or is stopped) — no manual click needed.
                     chatInput.focus();
@@ -1364,6 +1486,7 @@
                 }
 
                 addMessage('user', displayText);
+                persistHistory();
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
                 lastTurn = { raw: raw, files: filesSnapshot };
@@ -1408,8 +1531,10 @@
                 messagesWrapper.appendChild(msg);
 
                 // Streaming replies grow after insertion, so keep the source text
-                // here and re-render on each update.
+                // here and re-render on each update. __sourceText mirrors it for
+                // the IndexedDB persistence layer.
                 let currentText = text;
+                msg.__sourceText = currentText;
                 const textNode = msg.querySelector('.message-text');
 
                 // Copy button
@@ -1456,10 +1581,12 @@
                     element: msg,
                     append: function(chunk) {
                         currentText += chunk;
+                        msg.__sourceText = currentText;
                         textNode.innerHTML = formatText(currentText);
                     },
                     setText: function(next) {
                         currentText = next;
+                        msg.__sourceText = currentText;
                         textNode.innerHTML = formatText(currentText);
                     },
                     getText: function() {
@@ -1901,6 +2028,15 @@
             // re-reads it once the server has said who is asking.
             setModelPicker('default');
             renderHistory();
+
+            // ===== PWA: SERVICE WORKER =====
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('sw.js').catch(function() {
+                        // Registration is best-effort: the app works without it.
+                    });
+                });
+            }
 
             // ===== SEARCH POPUP (icon -> popup bar + conversation list) =====
             const btnSearchPopup = document.getElementById('btnSearchPopup');
