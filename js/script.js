@@ -95,6 +95,8 @@
             const btnNewChat = document.getElementById('btnNewChat');
             const chatInput = document.getElementById('chatInput');
             const btnSend = document.getElementById('btnSend');
+            const btnScrollBottom = document.getElementById('btnScrollBottom');
+            const btnThemeToggle = document.getElementById('btnThemeToggle');
             const chatArea = document.getElementById('chatArea');
             const messagesWrapper = document.getElementById('messagesWrapper');
             const welcomeScreen = document.getElementById('welcomeScreen');
@@ -121,6 +123,9 @@
             // State
             let chatStarted = false;
             let sending = false;
+            let activeAbort = null;
+            let isPinnedToBottom = true;
+            let lastTurn = { raw: '', files: [] };
             const attachedFiles = [];
             let conversations = [];
             let activeConversationId = null;
@@ -279,7 +284,7 @@
              * { conversationId, content }; the caller adopts the id when the
              * server created a new conversation for this turn.
              */
-            async function callAssistant(modelKey, text, files, onDelta) {
+            async function callAssistant(modelKey, text, files, onDelta, signal) {
                 const def = modelDef(modelKey);
 
                 const payload = {
@@ -299,9 +304,12 @@
                         method: 'POST',
                         headers: headers,
                         credentials: 'same-origin',
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payload),
+                        signal: signal
                     });
                 } catch (e) {
+                    // A user-initiated abort is not a connectivity failure.
+                    if (e && e.name === 'AbortError') throw e;
                     throw new Error(requestFailed('the server', e));
                 }
 
@@ -527,7 +535,8 @@
                 messagesWrapper.innerHTML = '';
                 addMessage('assistant', HELP_TEXT);
                 renderHistory();
-                scrollToBottom();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
                 if (getBreakpoint() !== 'desktop') {
                     closeSidebar();
                 }
@@ -925,10 +934,31 @@
 
             // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
             function updateSendState() {
+                if (sending) {
+                    btnSend.disabled = false;
+                    btnSend.classList.remove('active');
+                    btnSend.classList.add('stopping');
+                    btnSend.setAttribute('aria-label', 'Stop generating');
+                    return;
+                }
+                btnSend.classList.remove('stopping');
+                btnSend.setAttribute('aria-label', 'Send message');
                 const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0;
-                const ready = hasText && !sending;
-                btnSend.disabled = !ready;
-                btnSend.classList.toggle('active', ready);
+                btnSend.disabled = !hasText;
+                btnSend.classList.toggle('active', hasText);
+            }
+
+            // While a reply streams the composer is locked: the model owns the
+            // turn and the user either waits or presses Stop.
+            function setComposerBusy(busy) {
+                chatInput.readOnly = busy;
+                chatInput.classList.toggle('is-busy', busy);
+                chatInput.setAttribute('aria-busy', busy ? 'true' : 'false');
+            }
+
+            function stopGeneration() {
+                if (!sending || !activeAbort) return;
+                activeAbort.abort();
             }
 
             chatInput.addEventListener('input', function() {
@@ -1071,6 +1101,14 @@
                     addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content);
                 });
 
+                // Seed the last turn so Regenerate works on a re-opened thread.
+                for (let k = messages.length - 1; k >= 0; k--) {
+                    if (messages[k].role !== 'assistant') {
+                        lastTurn = { raw: messages[k].content, files: [] };
+                        break;
+                    }
+                }
+
                 if (messages.length) {
                     chatStarted = true;
                     welcomeScreen.style.display = 'none';
@@ -1081,7 +1119,8 @@
                     messagesWrapper.classList.remove('visible');
                 }
                 renderHistory();
-                scrollToBottom();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
             }
 
             function startNewChat() {
@@ -1093,6 +1132,8 @@
                 messagesWrapper.classList.remove('visible');
                 messagesWrapper.innerHTML = '';
                 renderHistory();
+                isPinnedToBottom = true;
+                updateScrollFab();
                 if (getBreakpoint() !== 'desktop') {
                     closeSidebar();
                 }
@@ -1203,6 +1244,88 @@
             });
 
             // ===== SEND MESSAGE =====
+            // Runs one assistant turn: paints the streaming bubble, honours Stop
+            // and reports errors. Shared by send, regenerate and message edit.
+            async function runAssistant(raw, filesSnapshot) {
+                // The assistant bubble is created on the first delta, so a turn
+                // that never produces one leaves no empty shell behind.
+                let bubble = null;
+                function ensureBubble() {
+                    if (!bubble) bubble = addMessage('assistant', '');
+                    return bubble;
+                }
+
+                sending = true;
+                activeAbort = new AbortController();
+                const signal = activeAbort.signal;
+                updateSendState();
+                setComposerBusy(true);
+                typingIndicator.classList.add('visible');
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+
+                const typer = createTypewriter(function(partial) {
+                    ensureBubble().setText(partial + '\u258d');
+                });
+
+                try {
+                    const turn = await callAssistant(currentModelKey, raw, filesSnapshot, function(chunk) {
+                        typingIndicator.classList.remove('visible');
+                        typer.push(chunk);
+                        scrollToBottom();
+                    }, signal);
+                    typer.finish();
+                    // The server created this conversation on its first turn;
+                    // adopt the id so the next message continues the thread.
+                    if (turn.conversationId) activeConversationId = turn.conversationId;
+                } catch (error) {
+                    typer.finish();
+                    if (error && error.name === 'AbortError') {
+                        // Keep whatever streamed before the user hit Stop.
+                        if (bubble) bubble.setText(bubble.getText() + '\n\n— stopped by you.');
+                    } else {
+                        const message = (error && error.message) ? error.message : 'request failed.';
+                        if (error && error.code === 'missing_api_key') {
+                            // The server refused before writing anything, so point
+                            // at the setting that fixes it and keep the alert as the
+                            // only feedback.
+                            showKeyAlert(error.model);
+                        } else if (error && error.partial) {
+                            // Keep the text that did arrive, and say why it stopped.
+                            ensureBubble().setText(error.partial + '\n\n— the reply stopped early: ' + message);
+                        } else {
+                            ensureBubble().setText('Sorry — ' + message);
+                        }
+                    }
+                } finally {
+                    typingIndicator.classList.remove('visible');
+                    sending = false;
+                    activeAbort = null;
+                    setComposerBusy(false);
+                    updateSendState();
+                }
+
+                // Titles and ordering belong to the server, so re-read them.
+                await refreshConversations();
+                scrollToBottom(true);
+            }
+
+            // Re-runs the most recent user turn without adding a new user bubble.
+            async function regenerate() {
+                if (sending) return;
+                if (!lastTurn.raw && !(lastTurn.files && lastTurn.files.length)) return;
+                if (!modelHasKey(currentModelKey)) {
+                    showKeyAlert(currentModelKey);
+                    return;
+                }
+                if (!chatStarted) {
+                    chatStarted = true;
+                    welcomeScreen.style.display = 'none';
+                    messagesWrapper.classList.add('visible');
+                }
+                await runAssistant(lastTurn.raw, lastTurn.files);
+            }
+
             async function sendMessage(text) {
                 if (sending) return;
                 const raw = (text || '').trim();
@@ -1239,51 +1362,9 @@
                 addMessage('user', displayText);
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
+                lastTurn = { raw: raw, files: filesSnapshot };
 
-                // The assistant bubble is created on the first delta, so a turn
-                // that never produces one leaves no empty shell behind.
-                let bubble = null;
-                function ensureBubble() {
-                    if (!bubble) bubble = addMessage('assistant', '');
-                    return bubble;
-                }
-
-                sending = true;
-                updateSendState();
-                typingIndicator.classList.add('visible');
-                scrollToBottom();
-
-                try {
-                    const turn = await callAssistant(currentModelKey, raw, filesSnapshot, function(chunk) {
-                        typingIndicator.classList.remove('visible');
-                        ensureBubble().append(chunk);
-                        scrollToBottom();
-                    });
-                    // The server created this conversation on its first turn;
-                    // adopt the id so the next message continues the thread.
-                    if (turn.conversationId) activeConversationId = turn.conversationId;
-                } catch (error) {
-                    const message = (error && error.message) ? error.message : 'request failed.';
-                    if (error && error.code === 'missing_api_key') {
-                        // The server refused before writing anything, so point
-                        // at the setting that fixes it and keep the alert as the
-                        // only feedback.
-                        showKeyAlert(error.model);
-                    } else if (error && error.partial) {
-                        // Keep the text that did arrive, and say why it stopped.
-                        ensureBubble().append('\n\n— the reply stopped early: ' + message);
-                    } else {
-                        ensureBubble().setText('Sorry — ' + message);
-                    }
-                } finally {
-                    typingIndicator.classList.remove('visible');
-                    sending = false;
-                    updateSendState();
-                }
-
-                // Titles and ordering belong to the server, so re-read them.
-                await refreshConversations();
-                scrollToBottom();
+                await runAssistant(raw, filesSnapshot);
             }
 
             function addMessage(role, text) {
@@ -1295,19 +1376,29 @@
                     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 
                 const senderName = role === 'user' ? 'You' : 'ChatBot AI';
-
                 const formattedText = formatText(text);
+
+                const copyAction = '<button class="btn-msg-action" type="button" data-action="copy" aria-label="Copy">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>';
+                const regenerateAction = '<button class="btn-msg-action" type="button" data-action="regenerate" aria-label="Regenerate">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Regenerate</button>';
+                const likeAction = '<button class="btn-msg-action" type="button" data-action="like" aria-label="Good response">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg></button>';
+                const dislikeAction = '<button class="btn-msg-action" type="button" data-action="dislike" aria-label="Bad response">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg></button>';
+                const editAction = '<button class="btn-msg-action" type="button" data-action="edit" aria-label="Edit message">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>';
+
+                const actions = role === 'user'
+                    ? copyAction + editAction
+                    : copyAction + regenerateAction + likeAction + dislikeAction;
 
                 msg.innerHTML = '<div class="message-content">'
                     + '<div class="message-avatar">' + avatarIcon + '</div>'
                     + '<div class="message-body">'
                     + '<div class="message-sender">' + senderName + '</div>'
                     + '<div class="message-text">' + formattedText + '</div>'
-                    + '<div class="message-actions">'
-                    + '<button class="btn-msg-action" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>'
-                    + '<button class="btn-msg-action" aria-label="Like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg></button>'
-                    + '<button class="btn-msg-action" aria-label="Dislike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg></button>'
-                    + '</div>'
+                    + '<div class="message-actions">' + actions + '</div>'
                     + '</div></div>';
 
                 messagesWrapper.appendChild(msg);
@@ -1318,13 +1409,42 @@
                 const textNode = msg.querySelector('.message-text');
 
                 // Copy button
-                const copyBtn = msg.querySelector('.btn-msg-action[aria-label="Copy"]');
+                const copyBtn = msg.querySelector('[data-action="copy"]');
                 copyBtn.addEventListener('click', function() {
                     navigator.clipboard.writeText(currentText).then(function() {
+                        copyBtn.classList.add('active');
                         copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
                         setTimeout(function() {
+                            copyBtn.classList.remove('active');
                             copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
                         }, 2000);
+                    });
+                });
+
+                // Thumbs up / down are mutually exclusive toggles.
+                const likeBtn = msg.querySelector('[data-action="like"]');
+                const dislikeBtn = msg.querySelector('[data-action="dislike"]');
+                if (likeBtn) likeBtn.addEventListener('click', function() {
+                    likeBtn.classList.toggle('active');
+                    if (dislikeBtn) dislikeBtn.classList.remove('active');
+                });
+                if (dislikeBtn) dislikeBtn.addEventListener('click', function() {
+                    dislikeBtn.classList.toggle('active');
+                    if (likeBtn) likeBtn.classList.remove('active');
+                });
+
+                // Regenerate replays the last user turn (assistant messages only).
+                const regenBtn = msg.querySelector('[data-action="regenerate"]');
+                if (regenBtn) regenBtn.addEventListener('click', function() { regenerate(); });
+
+                // Edit rewrites a user message and re-runs the turn.
+                const editBtn = msg.querySelector('[data-action="edit"]');
+                if (editBtn) editBtn.addEventListener('click', function() {
+                    enterEditMode(msg, textNode, function(nextText) {
+                        currentText = nextText;
+                        textNode.innerHTML = formatText(currentText);
+                        lastTurn = { raw: nextText, files: [] };
+                        runAssistant(nextText, []);
                     });
                 });
 
@@ -1337,42 +1457,377 @@
                     setText: function(next) {
                         currentText = next;
                         textNode.innerHTML = formatText(currentText);
+                    },
+                    getText: function() {
+                        return currentText;
                     }
                 };
             }
 
-            function formatText(text) {
-                // Escape HTML
-                let formatted = text
+            // Inline editor for a user message. Save rewrites the bubble and
+            // re-runs the assistant; Escape / Cancel restores the original.
+            function enterEditMode(msg, textNode, onSave) {
+                if (msg.querySelector('.edit-composer')) return;
+                const body = msg.querySelector('.message-body');
+                const actionsRow = msg.querySelector('.message-actions');
+                const source = textNode.textContent;
+
+                const wrap = document.createElement('div');
+                wrap.className = 'edit-composer';
+
+                const ta = document.createElement('textarea');
+                ta.className = 'edit-textarea';
+                ta.value = source;
+                ta.rows = Math.min(12, Math.max(2, Math.ceil(source.length / 60)));
+
+                const row = document.createElement('div');
+                row.className = 'edit-actions';
+                const saveBtn = document.createElement('button');
+                saveBtn.type = 'button';
+                saveBtn.className = 'btn primary';
+                saveBtn.textContent = 'Save & Submit';
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'btn';
+                cancelBtn.textContent = 'Cancel';
+                row.appendChild(saveBtn);
+                row.appendChild(cancelBtn);
+                wrap.appendChild(ta);
+                wrap.appendChild(row);
+
+                textNode.style.display = 'none';
+                body.insertBefore(wrap, actionsRow);
+
+                function close() {
+                    wrap.remove();
+                    textNode.style.display = '';
+                }
+                cancelBtn.addEventListener('click', close);
+                saveBtn.addEventListener('click', function() {
+                    const next = ta.value.trim();
+                    if (!next) { ta.focus(); return; }
+                    close();
+                    onSave(next);
+                });
+                ta.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        close();
+                    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        saveBtn.click();
+                    }
+                });
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+            }
+
+            // ===== MARKDOWN =====
+            function escapeHtml(s) {
+                return String(s)
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
-
-                // Code blocks
-                formatted = formatted.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-
-                // Inline code
-                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-                // Bold
-                formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-                // Line breaks to paragraphs
-                formatted = formatted.split('\n\n').map(function(p) {
-                    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
-                }).join('');
-
-                return formatted;
             }
 
-            function scrollToBottom() {
-                requestAnimationFrame(function() {
-                    chatArea.scrollTop = chatArea.scrollHeight;
+            // Lightweight syntax tint for fenced code. Operates on already
+            // escaped text and matches each token once via one alternation, so
+            // a character is never wrapped twice.
+            function highlightCode(code, lang) {
+                const escaped = escapeHtml(code);
+                const known = /^(js|javascript|ts|typescript|jsx|tsx|python|py|java|c|cpp|cs|csharp|go|rust|rb|ruby|php|sh|bash|shell|sql|json|html|xml|css|yaml|yml)$/i.test(lang || '');
+                if (!known) return escaped;
+                const token = /(?:\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?\b)|(\b(?:function|return|const|let|var|if|else|elif|for|while|do|done|fi|then|class|new|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|this|super|extends|def|lambda|None|True|False|print|self|and|or|not|in|is|package|public|private|protected|static|void|int|float|double|struct|impl|fn|pub|use|mut|match|select|where|insert|update|delete|end)\b)/g;
+                return escaped.replace(token, function(m, num, kw) {
+                    if (num) return '<span class="tok-num">' + num + '</span>';
+                    if (kw) return '<span class="tok-key">' + kw + '</span>';
+                    if (m.charAt(0) === '/' || m.charAt(0) === '#') return '<span class="tok-com">' + m + '</span>';
+                    return '<span class="tok-str">' + m + '</span>';
                 });
             }
 
-            // Send button
+            const CODE_COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+            function buildCodeBlock(block) {
+                const rawLang = block.lang ? block.lang : '';
+                const langClass = rawLang ? escapeHtml(rawLang.toLowerCase()) : 'plaintext';
+                const label = rawLang ? escapeHtml(rawLang) : 'code';
+                return '<div class="code-block">'
+                    + '<div class="code-block-header">'
+                    + '<span class="code-lang">' + label + '</span>'
+                    + '<button class="btn-code-copy" type="button" data-code-copy aria-label="Copy code">'
+                    + CODE_COPY_ICON + '<span>Copy</span>'
+                    + '</button>'
+                    + '</div>'
+                    + '<pre><code class="language-' + langClass + '">' + highlightCode(block.code, rawLang) + '</code></pre>'
+                    + '</div>';
+            }
+
+            function inlineMarkdown(s) {
+                const codes = [];
+                // Pull inline code out first so emphasis rules cannot touch its body.
+                let t = s.replace(/`([^`]+)`/g, function(_, c) {
+                    codes.push(c);
+                    return '\u0002IC' + (codes.length - 1) + '\u0002';
+                });
+                t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function(_, label, href) {
+                    const safe = href.replace(/["']/g, '');
+                    return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+                });
+                t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                t = t.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+                t = t.replace(/~~(.+?)~~/g, '<del>$1</del>');
+                t = t.replace(/\u0002IC(\d+)\u0002/g, function(_, n) {
+                    return '<code>' + codes[Number(n)] + '</code>';
+                });
+                return t;
+            }
+
+            function splitTableRow(line) {
+                let s = line.trim();
+                if (s.charAt(0) === '|') s = s.slice(1);
+                if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+                return s.split('|');
+            }
+
+            function isTableStart(lines, idx) {
+                if (idx + 1 >= lines.length) return false;
+                if (lines[idx].indexOf('|') === -1) return false;
+                const sep = splitTableRow(lines[idx + 1]);
+                if (!sep.length) return false;
+                for (let k = 0; k < sep.length; k++) {
+                    if (!/^:?-{1,}:?$/.test(sep[k].trim())) return false;
+                }
+                return true;
+            }
+
+            function isBlockStart(line) {
+                return /^\u0001CODE\d+\u0001$/.test(line)
+                    || /^(#{1,6})\s+/.test(line)
+                    || /^\s*([-*_])\s*(\1\s*){2,}$/.test(line)
+                    || /^\s*&gt;\s?/.test(line)
+                    || /^\s*[-*+]\s+/.test(line)
+                    || /^\s*\d+[.)]\s+/.test(line);
+            }
+
+            function formatText(text) {
+                if (text == null) return '';
+                const src = String(text);
+
+                // Fenced code blocks are lifted out before escaping so their
+                // bodies stay verbatim; they return as one-line placeholders.
+                const codeBlocks = [];
+                const stripped = src.replace(/```([^\n`]*)\n?([\s\S]*?)```/g, function(_, lang, code) {
+                    codeBlocks.push({ lang: (lang || '').trim(), code: String(code).replace(/\n$/, '') });
+                    return '\n\u0001CODE' + (codeBlocks.length - 1) + '\u0001\n';
+                });
+
+                const lines = escapeHtml(stripped).split('\n');
+                const html = [];
+                let i = 0;
+
+                while (i < lines.length) {
+                    const line = lines[i];
+                    const ph = line.match(/^\u0001CODE(\d+)\u0001$/);
+                    const blank = line.trim() === '';
+
+                    if (ph) {
+                        html.push(buildCodeBlock(codeBlocks[Number(ph[1])]));
+                        i++;
+                        continue;
+                    }
+                    if (blank) { i++; continue; }
+
+                    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+                    if (heading) {
+                        const level = Math.min(heading[1].length + 1, 4);
+                        html.push('<h' + level + '>' + inlineMarkdown(heading[2].trim()) + '</h' + level + '>');
+                        i++;
+                        continue;
+                    }
+
+                    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
+                        html.push('<hr>');
+                        i++;
+                        continue;
+                    }
+
+                    if (/^\s*&gt;\s?/.test(line)) {
+                        const buf = [];
+                        while (i < lines.length && /^\s*&gt;\s?/.test(lines[i])) {
+                            buf.push(lines[i].replace(/^\s*&gt;\s?/, ''));
+                            i++;
+                        }
+                        html.push('<blockquote>' + inlineMarkdown(buf.join('\n')).replace(/\n/g, '<br>') + '</blockquote>');
+                        continue;
+                    }
+
+                    if (isTableStart(lines, i)) {
+                        const header = splitTableRow(line);
+                        let r = i + 2;
+                        const rows = [];
+                        while (r < lines.length && lines[r].indexOf('|') !== -1 && lines[r].trim() !== '') {
+                            rows.push(splitTableRow(lines[r]));
+                            r++;
+                        }
+                        let table = '<table><thead><tr>';
+                        header.forEach(function(c) { table += '<th>' + inlineMarkdown(c.trim()) + '</th>'; });
+                        table += '</tr></thead><tbody>';
+                        rows.forEach(function(row) {
+                            table += '<tr>';
+                            for (let c = 0; c < header.length; c++) {
+                                table += '<td>' + inlineMarkdown((row[c] || '').trim()) + '</td>';
+                            }
+                            table += '</tr>';
+                        });
+                        table += '</tbody></table>';
+                        html.push(table);
+                        i = r;
+                        continue;
+                    }
+
+                    if (/^\s*[-*+]\s+/.test(line)) {
+                        const items = [];
+                        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+                            items.push('<li>' + inlineMarkdown(lines[i].replace(/^\s*[-*+]\s+/, '')) + '</li>');
+                            i++;
+                        }
+                        html.push('<ul>' + items.join('') + '</ul>');
+                        continue;
+                    }
+
+                    if (/^\s*\d+[.)]\s+/.test(line)) {
+                        const items = [];
+                        while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+                            items.push('<li>' + inlineMarkdown(lines[i].replace(/^\s*\d+[.)]\s+/, '')) + '</li>');
+                            i++;
+                        }
+                        html.push('<ol>' + items.join('') + '</ol>');
+                        continue;
+                    }
+
+                    const buf = [line];
+                    i++;
+                    while (i < lines.length && lines[i].trim() !== '' && !isBlockStart(lines[i]) && !isTableStart(lines, i)) {
+                        buf.push(lines[i]);
+                        i++;
+                    }
+                    html.push('<p>' + inlineMarkdown(buf.join('\n')).replace(/\n/g, '<br>') + '</p>');
+                }
+
+                return html.join('');
+            }
+
+            // Code-block copy buttons are delegated: replies are re-rendered on
+            // every streamed chunk, so binding per block would leak listeners.
+            if (messagesWrapper) {
+                messagesWrapper.addEventListener('click', function(e) {
+                    const btn = e.target.closest('[data-code-copy]');
+                    if (!btn) return;
+                    const codeEl = btn.closest('.code-block').querySelector('code');
+                    const code = codeEl ? codeEl.textContent : '';
+                    navigator.clipboard.writeText(code).then(function() {
+                        const label = btn.querySelector('span');
+                        if (label) label.textContent = 'Copied!';
+                        setTimeout(function() {
+                            if (label) label.textContent = 'Copy';
+                        }, 2000);
+                    });
+                });
+            }
+
+            // ===== TYPEWRITER =====
+            // Reveals streamed text at a steady pace instead of dumping whole
+            // chunks, so a long reply paints smoothly. `paint` receives the
+            // visible slice on every frame.
+            function createTypewriter(paint) {
+                let full = '';
+                let shown = 0;
+                let timer = null;
+                let isDone = false;
+
+                function tick() {
+                    if (shown >= full.length) {
+                        if (isDone) stop();
+                        return;
+                    }
+                    const backlog = full.length - shown;
+                    const step = Math.max(1, Math.ceil(backlog / 6));
+                    shown = Math.min(full.length, shown + step);
+                    paint(full.slice(0, shown));
+                }
+
+                function start() {
+                    if (timer === null && shown < full.length) {
+                        timer = setInterval(tick, 20);
+                    }
+                }
+
+                function stop() {
+                    if (timer !== null) {
+                        clearInterval(timer);
+                        timer = null;
+                    }
+                }
+
+                return {
+                    push: function(chunk) {
+                        if (chunk) full += chunk;
+                        start();
+                    },
+                    finish: function() {
+                        isDone = true;
+                        shown = full.length;
+                        stop();
+                        paint(full);
+                    },
+                    stop: stop
+                };
+            }
+
+            // ===== SCROLL (pinned-to-bottom + jump button) =====
+            function nearBottom() {
+                return chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 80;
+            }
+
+            function updateScrollFab() {
+                if (!btnScrollBottom) return;
+                btnScrollBottom.hidden = isPinnedToBottom || messagesWrapper.children.length === 0;
+            }
+
+            // `force` is used when the view must follow (new turn, load, send);
+            // without it the view only follows while the user is at the bottom.
+            function scrollToBottom(force) {
+                if (!force && !isPinnedToBottom) {
+                    updateScrollFab();
+                    return;
+                }
+                requestAnimationFrame(function() {
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    updateScrollFab();
+                });
+            }
+
+            if (chatArea) {
+                chatArea.addEventListener('scroll', function() {
+                    isPinnedToBottom = nearBottom();
+                    updateScrollFab();
+                });
+            }
+
+            if (btnScrollBottom) {
+                btnScrollBottom.addEventListener('click', function() {
+                    isPinnedToBottom = true;
+                    scrollToBottom(true);
+                });
+            }
+
+            // Send button: doubles as Stop while a reply is streaming.
             btnSend.addEventListener('click', function() {
+                if (sending) {
+                    stopGeneration();
+                    return;
+                }
                 sendMessage(chatInput.value);
             });
 
@@ -1552,6 +2007,14 @@
                     applyTheme(prefersLight ? 'light' : 'dark');
                 }
             })();
+
+            // Topbar shortcut mirrors the Appearance setting.
+            if (btnThemeToggle) {
+                btnThemeToggle.addEventListener('click', function() {
+                    const isLight = document.body.classList.contains('light');
+                    applyTheme(isLight ? 'dark' : 'light');
+                });
+            }
 
             // ===== MODEL DROPDOWN =====
             function closeModelDropdown() {
