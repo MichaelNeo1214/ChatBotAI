@@ -115,23 +115,12 @@
             const menuSettings = document.getElementById('menuSettings');
             const menuHelp = document.getElementById('menuHelp');
             const menuSignOut = document.getElementById('menuSignOut');
-            const btnThemeToggle = document.getElementById('btnThemeToggle');
-            const btnScrollBottom = document.getElementById('btnScrollBottom');
 
 
             
             // State
             let chatStarted = false;
-<<<<<<< HEAD
-            // In-flight provider request handle. "Stop generating" aborts it so the
-            // network call is cancelled, not just the on-screen typewriter.
-            let activeRequestCtl = null;
-            // Active typewriter streamer (or null). See stopGeneration().
-            let activeStream = null;
-            let isStreaming = false;
-=======
             let sending = false;
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
             const attachedFiles = [];
             let conversations = [];
             let activeConversationId = null;
@@ -194,29 +183,6 @@
                 return !!(keys[key] && keys[key].trim());
             }
 
-<<<<<<< HEAD
-            // ===== PROVIDERS (local Jan + cloud APIs, direct from browser) =====
-            function fetchWithTimeout(url, options, ms) {
-                const controller = new AbortController();
-                const timer = setTimeout(function() { controller.abort(); }, ms || 120000);
-                if (activeRequestCtl) {
-                    // Chain the shared "stop" signal onto this request without
-                    // changing any of the provider call signatures.
-                    if (activeRequestCtl.signal.aborted) {
-                        controller.abort();
-                    } else {
-                        activeRequestCtl.signal.addEventListener('abort', function() {
-                            controller.abort();
-                        }, { once: true });
-                    }
-                }
-                options = options || {};
-                options.signal = controller.signal;
-                return fetch(url, options).then(
-                    function(res) { clearTimeout(timer); return res; },
-                    function(err) { clearTimeout(timer); throw err; }
-                );
-=======
             // The assistant bubble text for a turn: the message, plus a plain
             // note naming the attachments. The backend takes no file bytes, so
             // this line is all a model ever sees about them.
@@ -225,7 +191,6 @@
                 if (!files || !files.length) return raw;
                 const names = files.map(function(f) { return f.name; }).join(', ');
                 return (raw ? raw + '\n' : '') + '[Attached files: ' + names + ']';
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
             }
 
             // Turns a non-2xx JSON body into an Error carrying the contract's
@@ -460,7 +425,6 @@
             }
 
             function resetChatView() {
-                stopGeneration();
                 activeConversationId = null;
                 chatStarted = false;
                 welcomeScreen.style.display = '';
@@ -585,12 +549,7 @@
             if (menuSignIn) {
                 menuSignIn.addEventListener('click', function() {
                     closeUserMenu();
-<<<<<<< HEAD
-                    // Folder name contains spaces, so it is percent-encoded here.
-                    window.location.assign('./components/signup%20and%20signin/signup.html');
-=======
                     window.location.assign('./components/auth/signup.html');
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
                 });
             }
 
@@ -965,25 +924,16 @@
             });
 
             // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
-            const INPUT_MAX_HEIGHT = 260;
-
             function updateSendState() {
-                // While a reply is streaming the button is the "Stop" control, so its
-                // enabled state is managed by setStreaming() instead.
-                if (isStreaming) return;
                 const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0;
                 const ready = hasText && !sending;
                 btnSend.disabled = !ready;
                 btnSend.classList.toggle('active', ready);
             }
 
-            function autoGrowInput() {
-                chatInput.style.height = 'auto';
-                chatInput.style.height = Math.min(chatInput.scrollHeight, INPUT_MAX_HEIGHT) + 'px';
-            }
-
             chatInput.addEventListener('input', function() {
-                autoGrowInput();
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 200) + 'px';
                 updateSendState();
             });
 
@@ -1104,17 +1054,6 @@
                 } catch (e) {
                     data = null;
                 }
-<<<<<<< HEAD
-                if (!convo) return;
-                activeConversationId = id;
-                setModelPicker(convo.model || 'default');
-                    messagesWrapper.innerHTML = '';
-                    (convo.messages || []).forEach(function(m, mi) {
-                        addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content, { msgIndex: mi });
-                    });
-
-                if (convo.messages && convo.messages.length) {
-=======
                 if (!data) {
                     // The list was stale (deleted in another tab, say): re-read.
                     await refreshConversations();
@@ -1133,7 +1072,6 @@
                 });
 
                 if (messages.length) {
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
                     chatStarted = true;
                     welcomeScreen.style.display = 'none';
                     messagesWrapper.classList.add('visible');
@@ -1265,18 +1203,11 @@
             });
 
             // ===== SEND MESSAGE =====
-<<<<<<< HEAD
-            // options.isRetry re-runs the last turn without appending the user message.
-            async function sendMessage(text, options) {
-                const opts = options || {};
-                if (isStreaming) return;
-=======
             async function sendMessage(text) {
                 if (sending) return;
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
                 const raw = (text || '').trim();
                 const hasFiles = attachedFiles.length > 0;
-                if (!raw && !hasFiles && !opts.isRetry) return;
+                if (!raw && !hasFiles) return;
 
                 // Fast path: the key panel already knows this model has no key,
                 // so don't spend a round trip proving it. The server re-checks
@@ -1292,22 +1223,8 @@
                     messagesWrapper.classList.add('visible');
                 }
 
-<<<<<<< HEAD
-                let displayText = raw;
-                if (hasFiles) {
-                    const names = attachedFiles.map(function(f) { return f.name; }).join(', ');
-                    displayText = (displayText ? displayText + '\n' : '') + '[Attached files: ' + names + ']';
-                }
-                if (!opts.isRetry) {
-                    convo.messages.push({ role: 'user', content: displayText, ts: Date.now() });
-                }
-                // Last entry is always the user turn (a retry reuses the stored one).
-                const userMsgIndex = convo.messages.length - 1;
-
-=======
                 // The backend accepts no file bytes, so the turn carries the
                 // attachment names and nothing else.
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
                 const filesSnapshot = attachedFiles.map(function(f) {
                     return { name: f.name, type: f.type };
                 });
@@ -1319,22 +1236,6 @@
                     filePreviewArea.hidden = true;
                 }
 
-<<<<<<< HEAD
-                // Add user message
-                if (!opts.isRetry) addMessage('user', displayText, { msgIndex: userMsgIndex });
-                persistConversations();
-
-                // Clear input
-                chatInput.value = '';
-                autoGrowInput();
-                updateSendState();
-
-                activeRequestCtl = new AbortController();
-                setStreaming(true);
-
-                // "Thinking" dots while the provider call is in flight; the real
-                // bubble is created as soon as there is something to show.
-=======
                 addMessage('user', displayText);
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
@@ -1349,65 +1250,10 @@
 
                 sending = true;
                 updateSendState();
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
                 typingIndicator.classList.add('visible');
                 scrollToBottom();
 
-                let reply = '';
-                let cancelled = false;
                 try {
-<<<<<<< HEAD
-                    reply = await callAssistant(currentModelKey, getApiKeys(), convo.messages, filesSnapshot);
-                } catch (error) {
-                    if (error && error.name === 'AbortError') {
-                        cancelled = true;
-                    } else {
-                        reply = 'Sorry — ' + ((error && error.message) ? error.message : 'request failed.');
-                    }
-                }
-
-                activeRequestCtl = null;
-                typingIndicator.classList.remove('visible');
-
-                // Stopped before any content arrived: drop the placeholder entirely
-                // rather than leaving an empty "Stopped" bubble behind.
-                if (cancelled) {
-                    convo.updatedAt = Date.now();
-                    persistConversations();
-                    setStreaming(false);
-                    scrollToBottom();
-                    return;
-                }
-
-                // Bubble is created up-front so the answer streams straight into it.
-                const ref = addMessage('assistant', '', { msgIndex: convo.messages.length });
-                ref.setStreaming(true);
-
-                // Word-by-word reveal. The button stays in "stop" mode until it ends.
-                activeStream = createTypewriter(ref.textEl, reply, {
-                    onPaint: function() {
-                        if (isPinnedToBottom()) scrollToBottom(true);
-                    },
-                    onDone: function() {
-                        activeStream = null;
-                        ref.setStreaming(false);
-                        convo.messages.push({ role: 'assistant', content: reply, ts: Date.now() });
-                        convo.updatedAt = Date.now();
-                        persistConversations();
-                        setStreaming(false);
-                        updateScrollAffordances();
-                    },
-                    onCancel: function() {
-                        activeStream = null;
-                        ref.setStreaming(false);
-                        ref.markStopped();
-                        convo.updatedAt = Date.now();
-                        persistConversations();
-                        setStreaming(false);
-                    }
-                });
-
-=======
                     const turn = await callAssistant(currentModelKey, raw, filesSnapshot, function(chunk) {
                         typingIndicator.classList.remove('visible');
                         ensureBubble().append(chunk);
@@ -1437,147 +1283,30 @@
 
                 // Titles and ordering belong to the server, so re-read them.
                 await refreshConversations();
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
                 scrollToBottom();
             }
 
-            // "Stop generating": kills the network request and freezes the typewriter.
-            function stopGeneration() {
-                if (activeRequestCtl) {
-                    try { activeRequestCtl.abort(); } catch (e) {}
-                    activeRequestCtl = null;
-                }
-                if (activeStream) {
-                    activeStream.cancel();
-                }
-            }
-
-            // Morph the send arrow into a stop square while a reply is in flight.
-            function setStreaming(on) {
-                    isStreaming = on;
-                    btnSend.classList.toggle('is-stopping', on);
-                    btnSend.disabled = false;
-                    const label = on ? 'Stop generating' : 'Send message';
-                    btnSend.setAttribute('aria-label', label);
-                    btnSend.setAttribute('title', label);
-                    // Lock the composer while an answer is arriving. readOnly is used
-                    // instead of disabled so the caret and focus are never stolen
-                    // from the user mid-answer.
-                    chatInput.readOnly = !!on;
-                    chatInput.setAttribute('aria-busy', on ? 'true' : 'false');
-                    const composer = document.querySelector('.input-box');
-                    if (composer) composer.classList.toggle('is-busy', !!on);
-                    if (!on) {
-                        btnSend.classList.remove('active');
-                        updateSendState();
-                    }
-                }
-
-
-            // Typewriter reveal. Reveals on word boundaries and accelerates over
-            // time so long answers never feel like they are crawling.
-            function createTypewriter(el, fullText, hooks) {
-                const opts = hooks || {};
-                const source = String(fullText == null ? '' : fullText);
-                let shown = 0;
-                let raf = 0;
-                let finished = false;
-                let lastTime = nowMs();
-                const startedAt = lastTime;
-
-                function paint() {
-                    el.innerHTML = formatText(source.slice(0, shown));
-                    if (opts.onPaint) opts.onPaint();
-                }
-
-                function step() {
-                    const t = nowMs();
-                    const dt = Math.max(0, t - lastTime);
-                    lastTime = t;
-                    const elapsed = (t - startedAt) / 1000;
-                    // Starts around 300 chars/sec and ramps up quadratically.
-                    let cps = 300 + elapsed * elapsed * 420;
-                    if (source.length < 500) cps = Math.max(cps, 2600);
-                    let target = Math.min(source.length, shown + Math.max(1, Math.round(cps * dt / 1000)));
-                    if (target < source.length) {
-                        const slice = source.slice(shown, target);
-                        const nl = slice.lastIndexOf('\n');
-                        const sp = slice.lastIndexOf(' ');
-                        const cut = Math.max(nl, sp);
-                        if (cut > 0) target = shown + cut + 1;
-                    }
-                    shown = target;
-                    paint();
-                    if (shown >= source.length) {
-                        settle();
-                        return;
-                    }
-                    raf = requestAnimationFrame(step);
-                }
-
-                function settle() {
-                    if (finished) return;
-                    finished = true;
-                    if (raf) cancelAnimationFrame(raf);
-                    raf = 0;
-                    if (opts.onDone) opts.onDone();
-                }
-
-                const api = {
-                    cancel: function() {
-                        if (finished) return;
-                        finished = true;
-                        if (raf) cancelAnimationFrame(raf);
-                        raf = 0;
-                        if (opts.onCancel) opts.onCancel();
-                    }
-                };
-
-                // Zero-length reply: render immediately, no animation.
-                if (!source) {
-                    paint();
-                    if (opts.onDone) opts.onDone();
-                } else {
-                    raf = requestAnimationFrame(step);
-                }
-
-                return api;
-            }
-
-            function nowMs() {
-                return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-            }
-
-            const ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-            const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-            const ICON_THUMBS_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg>';
-            const ICON_THUMBS_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg>';
-            const ICON_REFRESH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
-            const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-
-            function addMessage(role, text, meta) {
-                const info = meta || {};
+            function addMessage(role, text) {
                 const msg = document.createElement('div');
                 msg.className = 'message ' + role;
 
-                const isUser = role === 'user';
-                const avatarIcon = isUser
+                const avatarIcon = role === 'user'
                     ? 'U'
                     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-                const senderName = isUser ? 'You' : 'ChatBot AI';
-                const senderTag = isUser ? 'user' : 'assistant';
+
+                const senderName = role === 'user' ? 'You' : 'ChatBot AI';
+
+                const formattedText = formatText(text);
 
                 msg.innerHTML = '<div class="message-content">'
                     + '<div class="message-avatar">' + avatarIcon + '</div>'
                     + '<div class="message-body">'
                     + '<div class="message-sender">' + senderName + '</div>'
-                    + '<div class="message-text">' + (text ? formatText(text) : '') + '</div>'
-                    + '<div class="message-actions" hidden>'
-                    + (isUser ? '<button class="btn-msg-action" data-msg-action="edit" aria-label="Edit">' + ICON_EDIT + '<span>Edit</span></button>' : '')
-                    + '<button class="btn-msg-action btn-msg-copy" aria-label="Copy">' + ICON_COPY + '<span>Copy</span></button>'
-                    + (isUser ? '' : '<button class="btn-msg-action" data-msg-action="regenerate" aria-label="Regenerate">' + ICON_REFRESH + '<span>Regenerate</span></button>')
-                    + (isUser ? '' : '<button class="btn-msg-action" data-msg-action="like" aria-label="Like">' + ICON_THUMBS_UP + '</button>')
-                    + (isUser ? '' : '<button class="btn-msg-action" data-msg-action="dislike" aria-label="Dislike">' + ICON_THUMBS_DOWN + '</button>')
+                    + '<div class="message-text">' + formattedText + '</div>'
+                    + '<div class="message-actions">'
+                    + '<button class="btn-msg-action" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>'
+                    + '<button class="btn-msg-action" aria-label="Like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg></button>'
+                    + '<button class="btn-msg-action" aria-label="Dislike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg></button>'
                     + '</div>'
                     + '</div></div>';
 
@@ -1585,633 +1314,65 @@
 
                 // Streaming replies grow after insertion, so keep the source text
                 // here and re-render on each update.
-                let currentText = text || '';
+                let currentText = text;
                 const textNode = msg.querySelector('.message-text');
-                const actionsNode = msg.querySelector('.message-actions');
-
-                function render() {
-                    textNode.innerHTML = currentText ? formatText(currentText) : '';
-                }
 
                 // Copy button
-                const copyBtn = msg.querySelector('.btn-msg-copy');
-                if (copyBtn) {
-                    const label = copyBtn.querySelector('span');
-                    copyBtn.addEventListener('click', function() {
-                        const done = function() {
-                            copyBtn.innerHTML = ICON_CHECK + '<span>Copied</span>';
-                            copyBtn.classList.add('copied');
-                            setTimeout(function() {
-                                copyBtn.innerHTML = ICON_COPY + '<span>Copy</span>';
-                                copyBtn.classList.remove('copied');
-                            }, 1800);
-                        };
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(currentText).then(done, function() {});
-                        } else {
-                            const ta = document.createElement('textarea');
-                            ta.value = currentText;
-                            document.body.appendChild(ta);
-                            ta.select();
-                            try { document.execCommand('copy'); } catch (e) {}
-                            document.body.removeChild(ta);
-                            done();
-                        }
-                    });
-                }
-
-                // Like / dislike are mutually exclusive.
-                msg.querySelectorAll('[data-msg-action]').forEach(function(btn) {
-                    const action = btn.getAttribute('data-msg-action');
-                    if (action !== 'like' && action !== 'dislike') return;
-                    btn.addEventListener('click', function() {
-                        const wasOn = btn.classList.contains('on');
-                        msg.querySelectorAll('[data-msg-action="like"],[data-msg-action="dislike"]').forEach(function(b) {
-                            b.classList.remove('on');
-                        });
-                        if (!wasOn) btn.classList.add('on');
+                const copyBtn = msg.querySelector('.btn-msg-action[aria-label="Copy"]');
+                copyBtn.addEventListener('click', function() {
+                    navigator.clipboard.writeText(currentText).then(function() {
+                        copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+                        setTimeout(function() {
+                            copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
+                        }, 2000);
                     });
                 });
 
-                msg.dataset.role = senderTag;
-                // Index inside the active conversation, so the Edit action knows
-                // exactly which turn to rewind to.
-                if (typeof info.msgIndex === 'number') msg.dataset.mi = String(info.msgIndex);
-
                 return {
                     element: msg,
-                    textEl: textNode,
                     append: function(chunk) {
                         currentText += chunk;
-                        render();
+                        textNode.innerHTML = formatText(currentText);
                     },
                     setText: function(next) {
-                        currentText = next == null ? '' : next;
-                        render();
-                    },
-                    // Hide the action row while the answer is still arriving.
-                    setStreaming: function(on) {
-                        if (actionsNode) actionsNode.hidden = !!on;
-                        msg.classList.toggle('is-streaming', !!on);
-                    },
-                    // Left by a user-initiated stop: keep the partial text, show actions.
-                    markStopped: function() {
-                        if (actionsNode) actionsNode.hidden = false;
-                        msg.classList.remove('is-streaming');
-                        if (!msg.querySelector('.message-stopped')) {
-                            if (!currentText) {
-                                const note = document.createElement('div');
-                                note.className = 'message-stopped';
-                                note.textContent = 'Stopped';
-                                textNode.appendChild(note);
-                            } else {
-                                const note = document.createElement('div');
-                                note.className = 'message-stopped';
-                                note.textContent = 'Stopped';
-                                msg.querySelector('.message-body').appendChild(note);
-                            }
-                        }
+                        currentText = next;
+                        textNode.innerHTML = formatText(currentText);
                     }
                 };
             }
 
-            // ===== MARKDOWN =====
-            // Self-contained renderer: no external library. Code fences are pulled
-            // out first and re-inserted last so their content can never be
-            // interpreted as Markdown (and so the Copy button keeps working across
-            // re-renders, since the original source is cached in a <template>).
-            const RE_FENCE = /^([ \t]*)```([^\n`]*)\n([\s\S]*?)^[ \t]*```[ \t]*$/gm;
-            // Used while an answer is still streaming: a fence with no closer yet.
-            const RE_FENCE_OPEN = /(^|\n)([ \t]*)```([^\n`]*)\n([\s\S]*)$/;
-            const RE_INLINE_CODE = /`([^`\n]+)`/g;
-            const RE_HEADING = /^(#{1,6})\s+(.*)$/;
-            const RE_HR = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
-            const RE_QUOTE = /^>\s?(.*)$/;
-            const RE_BOLD = /\*\*(.+?)\*\*/g;
-            const RE_ITALIC = /(^|[^*\w])\*([^*\n]+)\*(?![*\w])/g;
-            const RE_STRIKE = /~~(.+?)~~/g;
-            const RE_LINK = /\[([^\]]*)\]\(([^)\s]+)\)/g;
-            const RE_BARE_URL = /(^|[\s(])((?:https?:\/\/)[^\s<)]+)/g;
-
-            const PLACEHOLDER_PREFIX = '\u0000md';
-            const LANGUAGE_LABELS = {
-                js: 'JavaScript', jsx: 'JSX', javascript: 'JavaScript', ts: 'TypeScript',
-                tsx: 'TSX', typescript: 'TypeScript', py: 'Python', python: 'Python',
-                rb: 'Ruby', ruby: 'Ruby', go: 'Go', golang: 'Go', rs: 'Rust', rust: 'Rust',
-                java: 'Java', kt: 'Kotlin', kotlin: 'Kotlin', c: 'C', cpp: 'C++', 'c++': 'C++',
-                cs: 'C#', 'c#': 'C#', php: 'PHP', swift: 'Swift', sh: 'Shell', bash: 'Shell',
-                shell: 'Shell', zsh: 'Shell', ps1: 'PowerShell', powershell: 'PowerShell',
-                sql: 'SQL', html: 'HTML', xml: 'XML', css: 'CSS', scss: 'SCSS', sass: 'Sass',
-                less: 'Less', json: 'JSON', jsonc: 'JSON', yaml: 'YAML', yml: 'YAML',
-                toml: 'TOML', ini: 'INI', md: 'Markdown', markdown: 'Markdown',
-                dockerfile: 'Dockerfile', diff: 'Diff', lua: 'Lua', r: 'R', dart: 'Dart',
-                vue: 'Vue', svelte: 'Svelte', graphql: 'GraphQL', gql: 'GraphQL', text: 'Text'
-            };
-
-            function escHtml(value) {
-                return String(value == null ? '' : value)
+            function formatText(text) {
+                // Escape HTML
+                let formatted = text
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#39;');
+                    .replace(/>/g, '&gt;');
+
+                // Code blocks
+                formatted = formatted.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+
+                // Inline code
+                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+                // Bold
+                formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+                // Line breaks to paragraphs
+                formatted = formatted.split('\n\n').map(function(p) {
+                    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
+                }).join('');
+
+                return formatted;
             }
 
-            function languageLabel(lang) {
-                const key = String(lang || '').trim().toLowerCase().split(/[\s:+-]/)[0];
-                if (!key) return 'Code';
-                return LANGUAGE_LABELS[key] || key.charAt(0).toUpperCase() + key.slice(1);
-            }
-
-            // Inline-level formatting. Input must already be HTML-escaped.
-            function inlineMd(escaped) {
-                const codes = [];
-                // Pull inline code out first so `**` inside a span stays literal.
-                let out = String(escaped).replace(RE_INLINE_CODE, function(_, code) {
-                    codes.push(code);
-                    return PLACEHOLDER_PREFIX + 'c' + (codes.length - 1) + '\u0001';
-                });
-
-                out = out.replace(RE_BOLD, '<strong>$1</strong>');
-                out = out.replace(RE_ITALIC, function(_, lead, body) {
-                    return lead + '<em>' + body + '</em>';
-                });
-                out = out.replace(RE_STRIKE, '<del>$1</del>');
-                out = out.replace(RE_LINK, function(_, label, href) {
-                    const safe = escHtml(href);
-                    return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + (label || safe) + '</a>';
-                });
-                out = out.replace(RE_BARE_URL, function(_, lead, url) {
-                    return lead + '<a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(url) + '</a>';
-                });
-
-                return out.replace(new RegExp(PLACEHOLDER_PREFIX + 'c(\\d+)\u0001', 'g'), function(_, i) {
-                    return '<code>' + codes[Number(i)] + '</code>';
-                });
-            }
-
-            // Block-level renderer operating on raw, unescaped text.
-            // `fences` is threaded through recursion so a code block nested in a
-            // list item or blockquote resolves against the same table.
-            function renderBlocks(text, fences) {
-                const source = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
-                const pool = fences || [];
-                let body = source.replace(RE_FENCE, function(_, indent, lang, code) {
-                    pool.push({ lang: lang || '', code: code.replace(/\n$/, '') });
-                    // Keep the original indentation so a fenced block nested in a
-                    // list item stays inside that item.
-                    return indent + PLACEHOLDER_PREFIX + 'f' + (pool.length - 1) + '\u0001\n';
-                });
-                // A still-open fence is normal mid-stream; render it as a code block
-                // instead of leaving raw backticks on screen.
-                body = body.replace(RE_FENCE_OPEN, function(_, lead, indent, lang, code) {
-                    pool.push({ lang: lang || '', code: code.replace(/\n$/, '') });
-                    return lead + indent + PLACEHOLDER_PREFIX + 'f' + (pool.length - 1) + '\u0001';
-                });
-
-                const lines = body.split('\n');
-                const out = [];
-                let i = 0;
-
-                function flushParagraph(buf) {
-                    if (!buf.length) return;
-                    out.push('<p>' + inlineMd(escHtml(buf.join('\n')).replace(/\n/g, '<br>')) + '</p>');
-                }
-
-                while (i < lines.length) {
-                    const line = lines[i];
-
-                    // Fence placeholder on its own line.
-                    const ph = line.trim().match(new RegExp('^' + PLACEHOLDER_PREFIX + 'f(\\d+)\u0001$'));
-                    if (ph) {
-                        out.push(codeBlockHtml(pool[Number(ph[1])]));
-                        i++;
-                        continue;
-                    }
-
-                    if (!line.trim()) { i++; continue; }
-
-                    if (RE_HR.test(line)) {
-                        out.push('<hr>');
-                        i++;
-                        continue;
-                    }
-
-                    const heading = line.match(RE_HEADING);
-                    if (heading) {
-                        const level = heading[1].length;
-                        out.push('<h' + level + '>' + inlineMd(escHtml(heading[2].trim())) + '</h' + level + '>');
-                        i++;
-                        continue;
-                    }
-
-                    if (RE_QUOTE.test(line)) {
-                        const quote = [];
-                        while (i < lines.length && (RE_QUOTE.test(lines[i]) || (quote.length && lines[i].trim()))) {
-                            const m = lines[i].match(RE_QUOTE);
-                            quote.push(m ? m[1] : lines[i].trim());
-                            i++;
-                        }
-                        out.push('<blockquote>' + renderBlocks(quote.join('\n'), pool) + '</blockquote>');
-                        continue;
-                    }
-
-                    const listStart = matchListItem(line);
-                    if (listStart) {
-                        const list = renderList(lines, i, listStart.indent, pool);
-                        out.push(list.html);
-                        i = list.end;
-                        continue;
-                    }
-
-                    // GFM pipe table
-                    if (line.indexOf('|') !== -1 && i + 1 < lines.length && /^\s*\|?[\s:-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1]) && lines[i + 1].indexOf('-') !== -1) {
-                        const header = splitTableRow(line);
-                        const aligns = splitTableRow(lines[i + 1]).map(function(cell) {
-                            const c = cell.trim();
-                            const left = c.charAt(0) === ':';
-                            const right = c.charAt(c.length - 1) === ':';
-                            if (left && right) return 'center';
-                            if (right) return 'right';
-                            if (left) return 'left';
-                            return '';
-                        });
-                        i += 2;
-                        const rows = [];
-                        while (i < lines.length && lines[i].indexOf('|') !== -1 && lines[i].trim()) {
-                            rows.push(splitTableRow(lines[i]));
-                            i++;
-                        }
-                        const th = header.map(function(cell, ci) {
-                            return '<th' + alignAttr(aligns[ci]) + '>' + inlineMd(escHtml(cell)) + '</th>';
-                        }).join('');
-                        const bodyRows = rows.map(function(row) {
-                            return '<tr>' + row.map(function(cell, ci) {
-                                return '<td' + alignAttr(aligns[ci]) + '>' + inlineMd(escHtml(cell)) + '</td>';
-                            }).join('') + '</tr>';
-                        }).join('');
-                        out.push('<div class="md-table-wrap"><table><thead><tr>' + th + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>');
-                        continue;
-                    }
-
-                    // Paragraph (consume until a blank line or a new block marker).
-                    const para = [];
-                    while (i < lines.length && lines[i].trim() && !isBlockStart(lines, i)) {
-                        para.push(lines[i].trim());
-                        i++;
-                    }
-                    flushParagraph(para);
-                }
-
-                return out.join('');
-            }
-
-            function isBlockStart(lines, index) {
-                const line = lines[index] || '';
-                if (RE_HEADING.test(line) || RE_HR.test(line) || RE_QUOTE.test(line)) return true;
-                if (matchListItem(line)) return true;
-                if (line.trim().indexOf(PLACEHOLDER_PREFIX) === 0) return true;
-                if (line.indexOf('|') !== -1 && index + 1 < lines.length && /^\s*\|?[\s:-]*-[\s:|-]*\|?\s*$/.test(lines[index + 1]) && lines[index + 1].indexOf('-') !== -1) return true;
-                return false;
-            }
-
-            // A list marker plus its indentation, or null.
-            function matchListItem(line) {
-                const ul = /^(\s*)[-*+]\s+(.*)$/.exec(line);
-                if (ul) return { indent: ul[1].length, ordered: false, num: 1, text: ul[2] };
-                const ol = /^(\s*)(\d+)[.)]\s+(.*)$/.exec(line);
-                if (ol) return { indent: ol[1].length, ordered: true, num: Number(ol[2]), text: ol[3] };
-                return null;
-            }
-
-            // Renders one <ul>/<ol> level and returns the index of the first line
-            // that is no longer part of it. Recurses for indented sub-lists.
-            function renderList(lines, start, baseIndent, pool) {
-                const head = matchListItem(lines[start]);
-                const ordered = head.ordered;
-                const startAttr = ordered && head.num !== 1 ? ' start="' + head.num + '"' : '';
-                const tag = ordered ? 'ol' : 'ul';
-                let i = start;
-                const items = [];
-
-                while (i < lines.length) {
-                    const m = matchListItem(lines[i]);
-                    if (!m || m.indent !== baseIndent || m.ordered !== ordered) break;
-
-                    const parts = [m.text];
-                    const subLists = [];
-                    i++;
-
-                    while (i < lines.length) {
-                        const l = lines[i];
-                        if (!l.trim()) {
-                            // A blank line only continues the list if indented
-                            // content or another marker follows.
-                            let j = i;
-                            while (j < lines.length && !lines[j].trim()) j++;
-                            if (j < lines.length && (matchListItem(lines[j]) || /^\s{2,}\S/.test(lines[j]))) {
-                                i = j;
-                                continue;
-                            }
-                            i = j;
-                            break;
-                        }
-                        const nm = matchListItem(l);
-                        if (nm && nm.indent <= baseIndent) break;
-                        if (nm) {
-                            const sub = renderList(lines, i, nm.indent, pool);
-                            subLists.push(sub.html);
-                            i = sub.end;
-                            continue;
-                        }
-                        // An indented code block belongs to this item, not after it.
-                        if (/^\s+\u0000md/.test(l)) {
-                            parts.push(l.trim());
-                            i++;
-                            continue;
-                        }
-                        if (isBlockStart(lines, i)) break;
-                        parts.push(l.trim());
-                        i++;
-                    }
-
-                    const paragraph = renderBlocks(parts.join('\n'), pool);
-                    // A lone <p> wrapper is noise inside a list item.
-                    const single = paragraph.match(/^<p>([\s\S]*)<\/p>$/);
-                    items.push('<li>' + (single ? single[1] : paragraph) + subLists.join('') + '</li>');
-                }
-
-                return { html: '<' + tag + startAttr + '>' + items.join('') + '</' + tag + '>', end: i };
-            }
-
-            function splitTableRow(line) {
-                return line
-                    .replace(/^\s*\|/, '')
-                    .replace(/\|\s*$/, '')
-                    .split('|')
-                    .map(function(c) { return c.trim(); });
-            }
-
-            function alignAttr(align) {
-                return align ? ' style="text-align:' + align + '"' : '';
-            }
-
-            // A code block always renders dark, with a language chip and a copy button.
-            function codeBlockHtml(block) {
-                const raw = escHtml(block.code);
-                const label = languageLabel(block.lang);
-                return '<div class="code-block">'
-                    + '<div class="code-block-head">'
-                    + '<span class="code-lang">' + escHtml(label) + '</span>'
-                    + '<button class="code-copy" type="button" aria-label="Copy code">'
-                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
-                    + '<span>Copy</span></button>'
-                    + '</div>'
-                    + '<pre class="code-block-body"><code class="code-block-code">' + highlightCode(block.code, block.lang) + '</code></pre>'
-                    // Pristine copy of the source, so Copy stays correct even though
-                    // innerHTML is rebuilt on every streaming frame.
-                    + '<template class="code-raw">' + raw + '</template>'
-                    + '</div>';
-            }
-
-            // Small, dependency-free highlighter. Deliberately conservative: it only
-            // marks up what it is sure about, so unknown languages still read well.
-            // Strings are matched atomically from left to right, so a `//` inside a
-            // string is never mistaken for a comment.
-            const HL = {
-                comments: /\/\*[\s\S]*?\*\/|\/\/[^\n]*|<!--[\s\S]*?-->|#[^\n]*/,
-                strings: /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/,
-                numbers: /\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?/,
-                keywords: /(?:const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|extends|super|this|typeof|instanceof|in|of|try|catch|finally|throw|async|await|yield|import|export|from|default|as|static|get|set|void|delete|null|undefined|true|false|interface|type|enum|implements|public|private|protected|readonly|package|struct|impl|fn|pub|mut|def|elif|lambda|pass|raise|with|asyncio|self|None|True|False|SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|ALTER|JOIN|ON|GROUP|BY|ORDER|LIMIT|AND|OR|NOT|NULL|PRIMARY|KEY|FOREIGN|REFERENCES|DEFAULT|INDEX|CONSTRAINT|USING)(?![\w$])/
-            };
-
-            function highlightCode(code, lang) {
-                const language = String(lang || '').trim().toLowerCase();
-                let rules = [];
-                const shell = /^(sh|bash|zsh|shell|console|terminal|powershell|ps1|fish)$/.test(language);
-                const html = /^(html|xml|vue|svelte|svg)$/.test(language);
-
-                if (shell) {
-                    rules.push([/#[^\n]*/, 'com', false]);
-                    rules.push([/"(?:\\.|[^"\\\n])*"|'[^'\n]*'/, 'str', false]);
-                    rules.push([/\$[A-Za-z_]\w*|\$\{[^}]*\}/, 'var', false]);
-                } else {
-                    rules.push([HL.comments, 'com', false]);
-                    rules.push([HL.strings, 'str', false]);
-                    if (html) {
-                        rules.push([/<\/?[A-Za-z][\w:-]*/, 'tag', false]);
-                        rules.push([/\/?>/, 'tag', false]);
-                    }
-                    // needsBoundary: never highlight inside a longer identifier
-                    // (e.g. the "in" inside "plain").
-                    rules.push([HL.keywords, 'kw', true]);
-                    rules.push([HL.numbers, 'num', true]);
-                }
-
-                // An unlabeled fence is as likely to be prose or config as code, so
-                // skip keyword coloring rather than turn words like "for" pink.
-                if (!language) {
-                    rules = rules.filter(function(rule) { return rule[1] !== 'kw'; });
-                }
-
-                // Sticky copies: matching at lastIndex avoids slicing the source
-                // once per character, which matters while a long block streams.
-                return runHl(code, rules.map(function(rule) {
-                    return [new RegExp(rule[0].source, 'y'), rule[1], rule[2]];
-                }));
-            }
-
-            // Single-pass tokenizer: at each position take whichever rule matches
-            // first, so patterns can overlap without clobbering each other.
-            function runHl(code, rules) {
-                let out = '';
-                let plain = '';
-                let i = 0;
-
-                function flush() {
-                    if (plain) {
-                        out += escHtml(plain);
-                        plain = '';
-                    }
-                }
-
-                while (i < code.length) {
-                    const atBoundary = i === 0 || !/[\w$]/.test(code[i - 1]);
-                    let bestClass = null;
-                    let bestIndex = 0;
-                    for (let r = 0; r < rules.length; r++) {
-                        const re = rules[r][0];
-                        if (rules[r][2] && !atBoundary) continue;
-                        re.lastIndex = i;
-                        const m = re.exec(code);
-                        if (m && m[0].length) {
-                            bestClass = rules[r][1];
-                            bestIndex = m[0].length;
-                            break;
-                        }
-                    }
-                    if (bestClass) {
-                        flush();
-                        out += '<span class="tok-' + bestClass + '">' + escHtml(code.substr(i, bestIndex)) + '</span>';
-                        i += bestIndex;
-                    } else {
-                        plain += code[i];
-                        i++;
-                    }
-                }
-                flush();
-                return out;
-            }
-
-            // Single entry point used by every message renderer.
-            function formatText(text) {
-                if (!text) return '';
-                return renderBlocks(text);
-            }
-
-            // Delegated so copy buttons keep working after innerHTML re-renders.
-            messagesWrapper.addEventListener('click', function(e) {
-                const codeBtn = e.target.closest('.code-copy');
-                if (codeBtn) {
-                    const block = codeBtn.closest('.code-block');
-                    const tpl = block && block.querySelector('template.code-raw');
-                    const raw = tpl ? tpl.innerHTML : '';
-                    const label = codeBtn.querySelector('span');
-                    const done = function() {
-                        codeBtn.classList.add('copied');
-                        if (label) label.textContent = 'Copied';
-                        setTimeout(function() {
-                            codeBtn.classList.remove('copied');
-                            if (label) label.textContent = 'Copy';
-                        }, 1800);
-                    };
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(raw).then(done, function() {});
-                    } else {
-                        const ta = document.createElement('textarea');
-                        ta.value = raw;
-                        document.body.appendChild(ta);
-                        ta.select();
-                        try { document.execCommand('copy'); } catch (e) {}
-                        document.body.removeChild(ta);
-                        done();
-                    }
-                    return;
-                }
-
-                const regen = e.target.closest('[data-msg-action="regenerate"]');
-                if (regen) { regenerateLast(); return; }
-
-                const editBtn = e.target.closest('[data-msg-action="edit"]');
-                if (editBtn) { editTurn(editBtn.closest('.message')); }
-            });
-
-            // Re-open an earlier user turn for revision: the original text (and
-            // every reply after it) is pulled back out so the user can rewrite
-            // and resend from that point.
-            function editTurn(node) {
-                if (isStreaming || !node) return;
-                const convo = getActiveConversation();
-                if (!convo || !convo.messages || !convo.messages.length) return;
-
-                // Prefer the index recorded at render time; fall back to matching
-                // the nth user bubble so older/foreign renders still work.
-                let idx = node.dataset.mi != null ? parseInt(node.dataset.mi, 10) : -1;
-                if (idx < 0 || idx >= convo.messages.length) {
-                    const userNodes = messagesWrapper.querySelectorAll('.message.user');
-                    const nth = Array.prototype.indexOf.call(userNodes, node);
-                    if (nth < 0) return;
-                    let seen = -1;
-                    for (let k = 0; k < convo.messages.length; k++) {
-                        if (convo.messages[k].role === 'user') {
-                            seen++;
-                            if (seen === nth) { idx = k; break; }
-                        }
-                    }
-                    if (idx < 0) return;
-                }
-
-                const original = convo.messages[idx].content || '';
-
-                // Locate the target bubble FIRST, so a stale reference aborts before
-                // anything is mutated. Removal is driven by DOM order, which stays
-                // correct even for nodes rendered before data-mi existed.
-                const nodes = messagesWrapper.querySelectorAll('.message');
-                let from = -1;
-                for (let k = 0; k < nodes.length; k++) {
-                    if (nodes[k] === node) { from = k; break; }
-                }
-                if (from < 0) return;
-
-                // Both stores are now known to line up: drop the stored turn plus
-                // everything after it, then the matching bubbles.
-                convo.messages = convo.messages.slice(0, idx);
-                for (let k = nodes.length - 1; k >= from; k--) nodes[k].remove();
-
-                // Back to the empty state if this was the only turn left.
-                if (!convo.messages.length) {
-                    chatStarted = false;
-                    welcomeScreen.style.display = '';
-                    messagesWrapper.classList.remove('visible');
-                }
-
-                renderHistory();
-                persistConversations();
-
-                chatInput.value = original;
-                autoGrowInput();
-                updateSendState();
-                chatInput.focus();
-                // Put the caret at the end so the user can keep typing immediately.
-                const len = chatInput.value.length;
-                try { chatInput.setSelectionRange(len, len); } catch (err) {}
-            }
-
-            // Re-ask the model using the conversation up to (but not including) the
-            // last assistant turn, then replace that turn's bubble in place.
-            function regenerateLast() {
-                if (isStreaming) return;
-                const convo = getActiveConversation();
-                if (!convo || !convo.messages.length) return;
-                let lastUserIdx = -1;
-                for (let k = convo.messages.length - 1; k >= 0; k--) {
-                    if (convo.messages[k].role === 'user') { lastUserIdx = k; break; }
-                }
-                if (lastUserIdx === -1) return;
-                // Drop the stale assistant reply so the retry is not duplicated.
-                convo.messages = convo.messages.slice(0, lastUserIdx + 1);
-
-                const nodes = messagesWrapper.querySelectorAll('.message.assistant');
-                if (nodes.length) nodes[nodes.length - 1].remove();
-
-                sendMessage('', { isRetry: true });
-            }
-
-            function isPinnedToBottom() {
-                return chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 120;
-            }
-
-            // instant=true skips the smooth behavior (used while streaming).
-            function scrollToBottom(instant) {
+            function scrollToBottom() {
                 requestAnimationFrame(function() {
-                    if (instant) chatArea.scrollTop = chatArea.scrollHeight;
-                    else chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: 'smooth' });
-                    updateScrollAffordances();
+                    chatArea.scrollTop = chatArea.scrollHeight;
                 });
             }
 
-            function updateScrollAffordances() {
-                if (!btnScrollBottom) return;
-                const distance = chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight;
-                btnScrollBottom.classList.toggle('visible', distance > 200);
-            }
-
-            // Send button doubles as the Stop control while a reply is streaming.
+            // Send button
             btnSend.addEventListener('click', function() {
-                if (isStreaming) {
-                    stopGeneration();
-                    return;
-                }
                 sendMessage(chatInput.value);
             });
 
@@ -2219,45 +1380,23 @@
             chatInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (isStreaming) return;
-                    if (this.value.trim() || attachedFiles.length) {
+                    if (this.value.trim()) {
                         sendMessage(this.value);
                     }
                 }
             });
 
             // ===== QUICK ACTIONS =====
-            // Read the label from the inner span so the icon is never used as text.
             quickActions.forEach(function(btn) {
                 btn.addEventListener('click', function() {
-                    const labelNode = this.querySelector('.quick-action-text') || this;
-                    const query = labelNode.textContent.trim();
-                    chatInput.value = query;
-                    autoGrowInput();
+                    chatInput.value = this.textContent;
                     updateSendState();
-                    sendMessage(query);
+                    sendMessage(this.textContent);
                 });
             });
             updateSendState();
 
-<<<<<<< HEAD
-            // ===== SCROLL TO BOTTOM FAB =====
-            if (btnScrollBottom) {
-                btnScrollBottom.addEventListener('click', function() {
-                    scrollToBottom(false);
-                });
-                chatArea.addEventListener('scroll', function() {
-                    updateScrollAffordances();
-                }, { passive: true });
-                window.addEventListener('resize', function() {
-                    updateScrollAffordances();
-                });
-            }
-
-            // ===== HISTORY: select / rename / delete (delegated, persisted) =====
-=======
             // ===== HISTORY: select / rename / delete (delegated, server-backed) =====
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
             if (chatHistoryNav) {
                 chatHistoryNav.addEventListener('click', function(e) {
                     if (e.target.closest('.history-rename-input')) return;
@@ -2397,19 +1536,6 @@
             if (appearanceSelect) {
                 appearanceSelect.addEventListener('change', function() {
                     applyTheme(this.value === 'Light' ? 'light' : 'dark');
-                });
-            }
-
-            // Header theme toggle: flips the current appearance and keeps the
-            // settings dropdown select in sync via applyTheme/syncAppearanceSelect.
-            if (btnThemeToggle) {
-                btnThemeToggle.addEventListener('click', function() {
-                    const isLight = document.body.classList.contains('light');
-                    applyTheme(isLight ? 'dark' : 'light');
-                    btnThemeToggle.setAttribute(
-                        'aria-label',
-                        isLight ? 'Switch to light mode' : 'Switch to dark mode'
-                    );
                 });
             }
 
