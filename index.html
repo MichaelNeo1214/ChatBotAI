@@ -8,12 +8,16 @@
     <meta name="keywords" content="ChatBot, AI, Assistant, Chat, OpenAI, GPT-4, Gemini, Claude">
     <meta name="author" content="Marvel-Michael-Yere">
     <meta name="embedder" content="ChatBot AI">
+<<<<<<< HEAD
     <meta name="color-scheme" content="dark light">
     <meta name="theme-color" content="#0e0e0f">
     <meta property="og:title" content="ChatBot AI">
     <meta property="og:description" content="Your intelligent assistant">
     <meta property="og:type" content="website">
     <meta property="og:image" content="https://4kwallpapers.com/images/walls/thumbs_2t/25439.jpg">
+=======
+    <meta property="og:image" content="https://4kwallpapers.com/images/walls/thumbs_2t/25439.jpg>
+>>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -307,11 +311,7 @@
                     <li class="settings-menu-item" data-title="Billing" data-panel="billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
                     <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
                     <li class="settings-menu-item" data-title="Analytics" data-panel="analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
-                    <li class="settings-menu-item" data-title="Data controls" data-panel="data-controls"><i class="fa-solid fa-database"></i> Data controls</li>
-                    <li class="settings-menu-item" data-title="Storage" data-panel="storage"><i class="fa-solid fa-hard-drive"></i> Storage</li>
-                    <li class="settings-menu-item" data-title="Safety" data-panel="safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
                     <li class="settings-menu-item" data-title="Security and login" data-panel="security-login"><i class="fa-solid fa-lock"></i> Security and login</li>
-                    <li class="settings-menu-item" data-title="Parental controls" data-panel="parental-controls"><i class="fa-solid fa-user-group"></i> Parental controls</li>
                     <li class="settings-menu-item" data-title="Account" data-panel="account"><i class="fa-regular fa-circle-user"></i> Account</li>
                 </ul>
             </div>
@@ -488,6 +488,7 @@
                         </div>
                     </div>
 
+<<<<<<< HEAD
                     <div class="api-card" data-provider="claude">
                         <div class="api-card-head">
                             <div>
@@ -507,6 +508,39 @@
                             <button class="btn danger" data-api-clear type="button">Delete</button>
                         </div>
                     </div>
+=======
+      <div class="api-card" data-provider="openai">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">OpenAI</div>
+            <div class="setting-desc" data-i18n="apiOpenAiDesc">Powers the GPT-4o model option.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Base URL <span class="api-optional">(optional)</span></span>
+        </div>
+        <div class="api-key-row">
+          <input type="text" class="api-key-input" data-api-field="baseUrl" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Model ID <span class="api-optional">(optional)</span></span>
+        </div>
+        <div class="api-key-row">
+          <input type="text" class="api-key-input" data-api-field="model" placeholder="gpt-4o" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+>>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
 
                     <div class="api-card" data-provider="deepseek">
                         <div class="api-card-head">
@@ -670,6 +704,7 @@
                     </div>
                 </div>
 
+<<<<<<< HEAD
                 <!-- SAFETY -->
                 <div class="settings-panel" data-panel="safety">
                     <h2>Safety</h2>
@@ -706,6 +741,23 @@
                         <button class="btn" type="button">Manage sessions</button>
                     </div>
                 </div>
+=======
+    <!-- SAFETY -->
+    <div class="settings-panel" data-panel="safety">
+      <h2>Safety</h2>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Sensitive content filter</div>
+          <div class="setting-desc">Blur or block potentially sensitive images and text.</div>
+        </div>
+        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Report a concern</span>
+        <button class="btn">Report</button>
+      </div>
+    </div>
+>>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
 
                 <!-- PARENTAL CONTROLS -->
                 <div class="settings-panel" data-panel="parental-controls">
@@ -723,6 +775,7 @@
                     </div>
                 </div>
 
+<<<<<<< HEAD
                 <!-- ACCOUNT -->
                 <div class="settings-panel" data-panel="account">
                     <h2>Account</h2>
@@ -740,6 +793,25 @@
                     </div>
                 </div>
             </div>
+=======
+    <!-- ACCOUNT -->
+    <div class="settings-panel" data-panel="account">
+      <h2>Account</h2>
+      <div class="setting-row">
+        <span class="setting-label">Email</span>
+        <span class="setting-desc" id="accountEmail">Not signed in</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Sign out of all devices</span>
+        <button class="btn" id="btnSignOutAll" type="button">Sign out everywhere</button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Delete account</span>
+        <button class="btn danger" id="btnDeleteAccount" type="button">Delete account</button>
+      </div>
+    </div>
+</div>
+>>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
         </div>
     </div>
 

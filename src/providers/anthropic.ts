@@ -1,29 +1,41 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ChatProvider, ChatRequest } from './types.ts';
-import { config } from '../config.ts';
 
 const SYSTEM_PROMPT =
   'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
   'Use Markdown for structure and fenced code blocks for code.';
 
+export interface AnthropicOptions {
+  apiKey: string;
+  /** Model id sent upstream. */
+  model: string;
+}
+
+/**
+ * Talks to the Anthropic Messages API through the official SDK.
+ *
+ * An instance is fully described by its options and never reads global config,
+ * so a request can build one on the fly for a caller-supplied key.
+ */
 export class AnthropicProvider implements ChatProvider {
   readonly name = 'anthropic';
   readonly #client: Anthropic;
+  readonly #model: string;
 
-  constructor(apiKey: string) {
-    this.#client = new Anthropic({ apiKey });
+  constructor(options: AnthropicOptions) {
+    this.#client = new Anthropic({ apiKey: options.apiKey });
+    this.#model = options.model;
   }
 
-  /** Resolves a frontend picker label to an Anthropic model id. */
-  #resolveModel(label: string | undefined): string {
-    if (label === undefined) return config.provider.model;
-    return config.provider.modelMap[label] ?? config.provider.model;
+  /** The model id this instance sends. */
+  get model(): string {
+    return this.#model;
   }
 
   async *streamChat(request: ChatRequest): AsyncIterable<string> {
     const stream = this.#client.messages.stream(
       {
-        model: this.#resolveModel(request.model),
+        model: this.#model,
         max_tokens: 16000,
         system: SYSTEM_PROMPT,
         messages: request.messages.map((message) => ({

@@ -28,6 +28,9 @@ const statements = {
     `SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > datetime('now')`,
   ),
   deleteSession: db.prepare(`DELETE FROM sessions WHERE token_hash = ?`),
+  deleteUserSessions: db.prepare(`DELETE FROM sessions WHERE user_id = ?`),
+  deleteUserConversations: db.prepare(`DELETE FROM conversations WHERE owner_id = ?`),
+  deleteUser: db.prepare(`DELETE FROM users WHERE id = ?`),
   deleteExpired: db.prepare(`DELETE FROM sessions WHERE expires_at <= datetime('now')`),
   claimConversations: db.prepare(
     `UPDATE conversations SET owner_id = ? WHERE owner_id = ?`,
@@ -95,6 +98,24 @@ export function findSessionUserId(token: string): string | undefined {
 
 export function destroySession(token: string): void {
   statements.deleteSession.run(hashToken(token));
+}
+
+/** Signs the user out everywhere: every session row for the account goes. */
+export function destroyAllSessions(userId: string): number {
+  return Number(statements.deleteUserSessions.run(userId).changes);
+}
+
+/**
+ * Deletes the account and the data it owns.
+ *
+ * Conversations are removed explicitly because `conversations.owner_id` is a
+ * plain TEXT column with no foreign key, so nothing cascades on its own.
+ * Sessions and messages do have FKs with ON DELETE CASCADE and are cleaned up
+ * by SQLite when the user and conversation rows go.
+ */
+export function deleteAccount(userId: string): void {
+  statements.deleteUserConversations.run(userId);
+  statements.deleteUser.run(userId);
 }
 
 export function purgeExpiredSessions(): number {

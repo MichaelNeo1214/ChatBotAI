@@ -25,6 +25,14 @@ function int(name: string, fallback: number): number {
   return parsed;
 }
 
+function positiveInt(name: string, fallback: number): number {
+  const value = int(name, fallback);
+  if (value <= 0) {
+    throw new Error(`Environment variable ${name} must be a positive integer, got "${value}"`);
+  }
+  return value;
+}
+
 const databasePath = str('DATABASE_PATH', './data/chatbot.db');
 
 function parseModelMap(raw: string): Readonly<Record<string, string>> {
@@ -67,6 +75,18 @@ export const config = {
      * the upstream API expects. Anything unmapped falls back to AI_MODEL.
      */
     modelMap: parseModelMap(str('AI_MODEL_MAP', '')),
+  },
+
+  /**
+   * Fixed-window limits on POST /api/chat. Each turn can cost real money on
+   * the server's own key, so the per-owner cap stops one browser or account
+   * from looping, and the per-IP cap is the backstop when cookies are cleared
+   * to dodge it. Per-IP is looser because an office or campus shares one.
+   */
+  chatRateLimit: {
+    windowMs: positiveInt('CHAT_RATE_LIMIT_WINDOW_MS', 60_000),
+    perOwner: positiveInt('CHAT_RATE_LIMIT_PER_OWNER', 20),
+    perIp: positiveInt('CHAT_RATE_LIMIT_PER_IP', 60),
   },
 
   corsOrigins: str('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
