@@ -127,6 +127,10 @@
             let isPinnedToBottom = true;
             let lastTurn = { raw: '', files: [] };
             const attachedFiles = [];
+            // Lightweight client-side RAG: the extracted text of a PDF/TXT the
+            // user attached for the *next* turn. Held as plain capped text (never
+            // the File/ArrayBuffer) so a large document can't pin memory.
+            let ragDoc = null;
             let conversations = [];
             let activeConversationId = null;
             let currentModelKey = 'default';
@@ -284,11 +288,20 @@
              * { conversationId, content }; the caller adopts the id when the
              * server created a new conversation for this turn.
              */
-            async function callAssistant(modelKey, text, files, onDelta, signal) {
+            async function callAssistant(modelKey, text, files, onDelta, signal, ragText) {
                 const def = modelDef(modelKey);
 
+                // Lightweight RAG: fold the attached document's text into this
+                // single turn as a hidden context block. The visible user bubble
+                // still shows only the question (built separately by the caller).
+                let message = buildUserText(text, files);
+                if (ragText) {
+                    message = '[CONTEXT:\n' + ragText + '\n]\n\n'
+                        + 'Based on the context above, answer this question: ' + message;
+                }
+
                 const payload = {
-                    message: buildUserText(text, files),
+                    message: message,
                     model: def.label
                 };
                 if (activeConversationId) payload.conversationId = activeConversationId;
@@ -446,6 +459,7 @@
                     filePreviewArea.innerHTML = '';
                     filePreviewArea.hidden = true;
                 }
+                clearRagDoc();
                 updateSendState();
                 renderHistory();
             }
@@ -949,7 +963,7 @@
                 }
                 btnSend.classList.remove('stopping');
                 btnSend.setAttribute('aria-label', 'Send message');
-                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0;
+                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0 || !!ragDoc;
                 btnSend.disabled = !hasText;
                 btnSend.classList.toggle('active', hasText);
             }
@@ -1367,7 +1381,7 @@
             // ===== SEND MESSAGE =====
             // Runs one assistant turn: paints the streaming bubble, honours Stop
             // and reports errors. Shared by send, regenerate and message edit.
-            async function runAssistant(raw, filesSnapshot) {
+            async function runAssistant(raw, filesSnapshot, ragText) {
                 // The assistant bubble is created on the first delta, so a turn
                 // that never produces one leaves no empty shell behind.
                 let bubble = null;
@@ -1394,7 +1408,7 @@
                         typingIndicator.classList.remove('visible');
                         typer.push(chunk);
                         scrollToBottom();
-                    }, signal);
+                    }, signal, ragText);
                     typer.finish();
                     // The server created this conversation on its first turn;
                     // adopt the id so the next message continues the thread.
@@ -1449,13 +1463,13 @@
                     welcomeScreen.style.display = 'none';
                     messagesWrapper.classList.add('visible');
                 }
-                await runAssistant(lastTurn.raw, lastTurn.files);
+                await runAssistant(lastTurn.raw, lastTurn.files, lastTurn.rag);
             }
 
             async function sendMessage(text) {
                 if (sending) return;
                 const raw = (text || '').trim();
-                const hasFiles = attachedFiles.length > 0;
+                const hasFiles = attachedFiles.length > 0 || !!ragDoc;
                 if (!raw && !hasFiles) return;
 
                 // Fast path: the key panel already knows this model has no key,
@@ -1478,7 +1492,11 @@
                     return { name: f.name, type: f.type };
                 });
                 const displayText = buildUserText(raw, filesSnapshot);
+                // The RAG context is consumed by this one turn: snapshot the text
+                // (so regenerate can reuse it) and clear the indicator right away.
+                const ragSnapshot = ragDoc ? ragDoc.text : '';
                 attachedFiles.length = 0;
+                clearRagDoc();
                 const filePreviewArea = document.getElementById('filePreviewArea');
                 if (filePreviewArea) {
                     filePreviewArea.innerHTML = '';
@@ -1489,9 +1507,9 @@
                 persistHistory();
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
-                lastTurn = { raw: raw, files: filesSnapshot };
+                lastTurn = { raw: raw, files: filesSnapshot, rag: ragSnapshot };
 
-                await runAssistant(raw, filesSnapshot);
+                await runAssistant(raw, filesSnapshot, ragSnapshot);
             }
 
             function addMessage(role, text) {
@@ -2331,6 +2349,161 @@
                 chip.appendChild(remove);
                 filePreviewArea.appendChild(chip);
                 updateSendState();
+            }
+
+            // ===== RAG: CLIENT-SIDE DOCUMENT EXTRACTION (PDF / TXT) =====
+            // A lightweight, in-browser "retrieval" step: the chosen file's text is
+            // extracted locally and folded into the next prompt as hidden context.
+            // Nothing is uploaded, and only the capped *text* is retained — the
+            // source File/ArrayBuffer is released as soon as extraction ends, so a
+            // large PDF cannot pin memory.
+            const RAG_MAX_CHARS = 120000;                 // ~30k tokens of context, hard cap
+            const RAG_MAX_PAGES = 50;                     // stop early on very long PDFs
+            const RAG_MAX_BYTES = 25 * 1024 * 1024;       // refuse files above 25 MB
+
+            if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc =
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+
+            const btnAttachDoc = document.getElementById('btnAttachDoc');
+            const docInput = document.getElementById('docInput');
+            const docIndicator = document.getElementById('docIndicator');
+            const docIndicatorName = document.getElementById('docIndicatorName');
+            const docIndicatorStatus = document.getElementById('docIndicatorStatus');
+            const docIndicatorRemove = document.getElementById('docIndicatorRemove');
+            let docReading = false;
+
+            function renderDocIndicator(name, status, state) {
+                if (!docIndicator) return;
+                docIndicator.hidden = false;
+                docIndicator.classList.toggle('is-loading', state === 'loading');
+                docIndicator.classList.toggle('is-error', state === 'error');
+                if (docIndicatorName) docIndicatorName.textContent = name || '';
+                if (docIndicatorStatus) docIndicatorStatus.textContent = status || '';
+                if (docIndicatorRemove) docIndicatorRemove.hidden = (state === 'loading');
+                if (btnAttachDoc) btnAttachDoc.classList.toggle('has-doc', state !== 'error');
+            }
+
+            function clearRagDoc() {
+                ragDoc = null;
+                if (docIndicator) {
+                    docIndicator.hidden = true;
+                    docIndicator.classList.remove('is-loading', 'is-error');
+                }
+                if (btnAttachDoc) btnAttachDoc.classList.remove('has-doc');
+                updateSendState();
+            }
+
+            function flashDocError(message) {
+                renderDocIndicator(message, '', 'error');
+                window.setTimeout(function() {
+                    // Only auto-clear if this error chip is still the current one.
+                    if (docIndicator && docIndicator.classList.contains('is-error')) {
+                        clearRagDoc();
+                    }
+                }, 4000);
+            }
+
+            // pdf.js text items -> a plain string. Items may carry their own EOL.
+            function pdfItemsToText(items) {
+                let out = '';
+                for (let i = 0; i < items.length; i++) {
+                    const it = items[i];
+                    if (it && typeof it.str === 'string') out += it.str;
+                    if (it && it.hasEOL) out += '\n';
+                    if (out.length >= RAG_MAX_CHARS) break;
+                }
+                return out;
+            }
+
+            // Extracts text from a PDF with pdf.js. The document (and its worker)
+            // are always torn down in `finally`, and the source buffer is dropped.
+            async function extractPdfText(file) {
+                const lib = window.pdfjsLib;
+                if (!lib || typeof lib.getDocument !== 'function') {
+                    throw new Error('pdf.js unavailable');
+                }
+                const buffer = await file.arrayBuffer();
+                let pdf = null;
+                try {
+                    pdf = await lib.getDocument({ data: new Uint8Array(buffer) }).promise;
+                    const pageCount = Math.min(pdf.numPages, RAG_MAX_PAGES);
+                    let text = '';
+                    for (let p = 1; p <= pageCount; p++) {
+                        const page = await pdf.getPage(p);
+                        try {
+                            const content = await page.getTextContent();
+                            text += pdfItemsToText(content.items) + '\n';
+                        } finally {
+                            page.cleanup();
+                        }
+                        if (text.length >= RAG_MAX_CHARS) break;
+                    }
+                    return text.slice(0, RAG_MAX_CHARS).trim();
+                } finally {
+                    if (pdf) {
+                        try { await pdf.destroy(); } catch (e) {}
+                    }
+                }
+            }
+
+            async function extractDocText(file) {
+                const name = (file.name || '').toLowerCase();
+                const isPdf = name.endsWith('.pdf') || file.type === 'application/pdf';
+                if (isPdf) return await extractPdfText(file);
+                // Everything else is treated as plain text (.txt / text/plain).
+                return (await file.text()).slice(0, RAG_MAX_CHARS).trim();
+            }
+
+            async function handleDocFile(file) {
+                if (!file || docReading) return;
+                if (file.size > RAG_MAX_BYTES) {
+                    flashDocError(file.name + ' — too large');
+                    if (docInput) docInput.value = '';
+                    return;
+                }
+                docReading = true;
+                renderDocIndicator(file.name, 'reading…', 'loading');
+                if (docInput) docInput.disabled = true;
+                try {
+                    const text = await extractDocText(file);
+                    if (!text) {
+                        flashDocError(file.name + ' — no text found');
+                        return;
+                    }
+                    ragDoc = { name: file.name, text: text };
+                    renderDocIndicator(file.name, 'attached', 'ready');
+                    updateSendState();
+                } catch (e) {
+                    flashDocError(file.name + ' — could not read');
+                } finally {
+                    docReading = false;
+                    if (docInput) {
+                        docInput.disabled = false;
+                        docInput.value = ''; // allow re-selecting the same file
+                    }
+                }
+            }
+
+            if (btnAttachDoc && docInput) {
+                btnAttachDoc.addEventListener('click', function() {
+                    docInput.click();
+                });
+            }
+
+            if (docInput) {
+                docInput.addEventListener('change', function(e) {
+                    const file = e.target.files && e.target.files[0];
+                    if (file) handleDocFile(file);
+                    else docInput.value = '';
+                });
+            }
+
+            if (docIndicatorRemove) {
+                docIndicatorRemove.addEventListener('click', function() {
+                    clearRagDoc();
+                });
             }
 
             const btnVoiceInput = document.getElementById('btnVoiceInput');

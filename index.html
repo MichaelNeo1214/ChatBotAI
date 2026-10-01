@@ -171,9 +171,19 @@
             <div class="input-wrapper">
     <div class="input-box">
         <div class="file-preview-area" id="filePreviewArea" hidden></div>
+        <div class="doc-indicator" id="docIndicator" hidden>
+            <span class="doc-indicator-emoji" aria-hidden="true">📄</span>
+            <span class="doc-indicator-name" id="docIndicatorName"></span>
+            <span class="doc-indicator-status" id="docIndicatorStatus">attached</span>
+            <button class="doc-indicator-remove" id="docIndicatorRemove" type="button" aria-label="Remove document">×</button>
+        </div>
         <textarea class="chat-input" id="chatInput" rows="1" placeholder="Message ChatBot AI..." data-i18n-ph="inputPlaceholder" aria-label="Message input"></textarea>
         <div class="input-bottom">
             <div class="input-tools">
+                <button class="btn-tool btn-attach-doc" id="btnAttachDoc" type="button" aria-label="Attach document (PDF or TXT)" title="Attach PDF or TXT">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <input type="file" id="docInput" accept=".pdf,.txt,application/pdf,text/plain" hidden>
                 <div class="tool-plus-wrap">
                     <button class="btn-tool btn-plus" id="btnPlus" aria-label="More options">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -746,6 +756,8 @@
 
     <!-- DOMPurify: sanitizes Markdown-rendered HTML before it is injected into the DOM -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+    <!-- pdf.js: extracts text from uploaded PDFs entirely client-side (lightweight RAG) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/script.js"></script>
 </body>
 </html>

@@ -4,9 +4,11 @@
    Bump CACHE_NAME to invalidate old caches on the next deploy. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v1';
+const CACHE_NAME = 'chatbotai-static-v2';
 const OFFLINE_URL = '/index.html';
 const CDN_DOMPURIFY = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js';
+const CDN_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const CDN_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const PRECACHE_URLS = [
   '/',
@@ -16,7 +18,9 @@ const PRECACHE_URLS = [
   '/js/script.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  CDN_DOMPURIFY
+  CDN_DOMPURIFY,
+  CDN_PDFJS,
+  CDN_PDFJS_WORKER
 ];
 
 self.addEventListener('install', function (event) {

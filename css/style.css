@@ -1684,6 +1684,77 @@
             color: var(--text-primary);
         }
 
+        /* ===== RAG DOCUMENT INDICATOR (PDF/TXT) ===== */
+        .btn-attach-doc.has-doc {
+            color: var(--accent-color);
+        }
+
+        .doc-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            align-self: flex-start;
+            max-width: 100%;
+            padding: 4px 6px 4px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .doc-indicator[hidden] {
+            display: none;
+        }
+
+        .doc-indicator-emoji {
+            font-size: 13px;
+            line-height: 1;
+        }
+
+        .doc-indicator-name {
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .doc-indicator-status {
+            color: var(--text-muted);
+        }
+
+        .doc-indicator.is-loading {
+            opacity: 0.75;
+        }
+
+        .doc-indicator.is-error {
+            border-color: #e5484d;
+            color: #e5484d;
+        }
+
+        .doc-indicator-remove {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            padding: 0;
+            background: transparent;
+            border: none;
+            border-radius: 50%;
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            transition: background-color 0.18s ease, color 0.18s ease;
+            flex-shrink: 0;
+        }
+
+        .doc-indicator-remove:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
         /* ===== RESPONSIVE ===== */
 
         /* Mobile: < 768px */
