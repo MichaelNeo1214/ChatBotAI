@@ -11,12 +11,8 @@
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "start": "node --experimental-strip-types src/index.ts",
     "build": "tsc --noEmit",
-<<<<<<< HEAD
-    "typecheck": "tsc --noEmit"
-=======
     "typecheck": "tsc --noEmit",
     "test": "node --test"
->>>>>>> 6ece4609fbbdeb4d73976eb8295744a0026f2eb0
   },
   "dependencies": {
     "express": "^4.21.2",

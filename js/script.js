@@ -959,6 +959,7 @@
             function stopGeneration() {
                 if (!sending || !activeAbort) return;
                 activeAbort.abort();
+                chatInput.focus();
             }
 
             chatInput.addEventListener('input', function() {
@@ -1303,6 +1304,9 @@
                     activeAbort = null;
                     setComposerBusy(false);
                     updateSendState();
+                    // Auto-focus: cursor is ready for the next prompt the moment
+                    // the reply finishes (or is stopped) — no manual click needed.
+                    chatInput.focus();
                 }
 
                 // Titles and ordering belong to the server, so re-read them.
@@ -1530,6 +1534,19 @@
                     .replace(/>/g, '&gt;');
             }
 
+            // Defense-in-depth for model-generated content: every string that
+            // reaches .innerHTML passes through here. DOMPurify strips scripts,
+            // event handlers and javascript: URLs while preserving the safe
+            // markup our Markdown renderer emits (classes, data-* hooks, links).
+            function sanitizeHtml(html) {
+                if (typeof window !== 'undefined' && window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
+                    return window.DOMPurify.sanitize(html, {
+                        ADD_ATTR: ['target', 'rel', 'data-code-copy', 'data-action']
+                    });
+                }
+                return html;
+            }
+
             // Lightweight syntax tint for fenced code. Operates on already
             // escaped text and matches each token once via one alternation, so
             // a character is never wrapped twice.
@@ -1715,7 +1732,7 @@
                     html.push('<p>' + inlineMarkdown(buf.join('\n')).replace(/\n/g, '<br>') + '</p>');
                 }
 
-                return html.join('');
+                return sanitizeHtml(html.join(''));
             }
 
             // Code-block copy buttons are delegated: replies are re-rendered on
@@ -2304,12 +2321,28 @@
             window.ChatBotSettings = window.ChatBotSettings || {};
             window.ChatBotSettings.openPanel = function(key) {
                 if (settingsModalOverlay) settingsModalOverlay.classList.add('active');
+                var activeItem = null;
                 settingsMenuItems.forEach(function(el) {
-                    el.classList.toggle('active', el.getAttribute('data-panel') === key);
+                    var match = el.getAttribute('data-panel') === key;
+                    el.classList.toggle('active', match);
+                    if (match) activeItem = el;
                 });
                 showSettingsPanel(key);
+                if (settingsPageTitle) {
+                    settingsPageTitle.textContent = activeItem
+                        ? activeItem.getAttribute('data-title')
+                        : (key.charAt(0).toUpperCase() + key.slice(1));
+                }
                 if (key === 'account') refreshAccountPanel();
             };
+
+            // Sidebar footer gear button — quick access to the Safety panel.
+            const btnSidebarSettings = document.getElementById('btnSidebarSettings');
+            if (btnSidebarSettings) {
+                btnSidebarSettings.addEventListener('click', function() {
+                    window.ChatBotSettings.openPanel('safety');
+                });
+            }
 
             // ===== ACCOUNT PANEL (email + sign out everywhere + delete) =====
             const accountEmail = document.getElementById('accountEmail');

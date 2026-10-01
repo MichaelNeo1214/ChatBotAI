@@ -158,6 +158,9 @@
 
         html, body {
             height: 100%;
+            /* dvh excludes the mobile browser chrome and virtual keyboard, so the
+               composer is never hidden behind it. vh stays as the fallback. */
+            height: 100dvh;
             overflow: hidden;
         }
 
@@ -199,6 +202,7 @@
             width: var(--sidebar-width);
             min-width: var(--sidebar-width);
             height: 100vh;
+            height: 100dvh;
             background: var(--bg-secondary);
             display: flex;
             flex-direction: column;
@@ -548,6 +552,42 @@
             border-top: 1px solid var(--border-color);
         }
 
+        .sidebar-settings-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 4px;
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: left;
+            cursor: pointer;
+            transition: background var(--transition), color var(--transition);
+        }
+
+        .sidebar-settings-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .sidebar-settings-btn:focus-visible {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+
+        .sidebar-settings-btn i {
+            width: 32px;
+            text-align: center;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+
         .user-btn {
             display: flex;
             align-items: center;
@@ -607,6 +647,7 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            height: 100dvh;
             min-width: 0;
             position: relative;
         }
@@ -1652,6 +1693,7 @@
                 left: 0;
                 top: 0;
                 height: 100vh;
+                height: 100dvh;
                 transform: translateX(0);
                 margin-left: 0 !important;
                 box-shadow: none;
@@ -1700,6 +1742,7 @@
                 left: 0;
                 top: 0;
                 height: 100vh;
+                height: 100dvh;
                 transform: translateX(0);
                 margin-left: 0 !important;
                 box-shadow: none;
@@ -1841,6 +1884,7 @@
             height: 580px;
             max-width: 95vw;
             max-height: 90vh;
+            max-height: 90dvh;
             border-radius: 12px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
             display: flex;

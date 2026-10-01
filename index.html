@@ -47,6 +47,10 @@
         </nav>
 
         <div class="sidebar-footer">
+            <button class="sidebar-settings-btn" id="btnSidebarSettings" type="button" aria-label="Settings" title="Settings" aria-haspopup="dialog">
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
+                <span data-i18n="menuSettings">Settings</span>
+            </button>
             <div class="user-menu-wrap">
                 <button class="user-btn" id="userBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu">
                     <div class="user-avatar" id="userAvatar">U</div>
@@ -283,6 +287,7 @@
                     <li class="settings-menu-item" data-title="Billing" data-panel="billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
                     <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
                     <li class="settings-menu-item" data-title="Analytics" data-panel="analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
+                    <li class="settings-menu-item" data-title="Safety" data-panel="safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
                     <li class="settings-menu-item" data-title="Security and login" data-panel="security-login"><i class="fa-solid fa-lock"></i> Security and login</li>
                     <li class="settings-menu-item" data-title="Account" data-panel="account"><i class="fa-regular fa-circle-user"></i> Account</li>
                 </ul>
@@ -732,6 +737,8 @@
         </div>
     </div>
 
+    <!-- DOMPurify: sanitizes Markdown-rendered HTML before it is injected into the DOM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
     <script src="js/script.js"></script>
 </body>
 </html>
