@@ -2528,6 +2528,12 @@
 .btn.danger{ background:transparent; border-color:#5a2c2c; color:#ff6b6b; }
 .btn.danger:hover{ background:#2a1616; }
 
+/* Cloud sync (Settings -> Safety) */
+.cloud-sync-row{ flex-wrap:wrap; gap:10px; }
+.cloud-sync-actions{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.cloud-sync-actions .btn{ display:inline-flex; align-items:center; gap:7px; }
+.cloud-sync-actions .btn[hidden]{ display:none; }
+
 /* Misc */
 .plugin-row{
   display:flex; align-items:center; justify-content:space-between;

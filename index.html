@@ -662,6 +662,20 @@
         <span class="setting-label">Report a concern</span>
         <button class="btn">Report</button>
       </div>
+      <div class="setting-row cloud-sync-row">
+        <div>
+          <div class="setting-label">Cloud sync</div>
+          <div class="setting-desc" id="cloudSyncStatus">Not connected — chats stay on this device.</div>
+        </div>
+        <div class="cloud-sync-actions">
+          <button class="btn primary" id="btnGoogleLogin" type="button">
+            <i class="fa-brands fa-google" aria-hidden="true"></i>
+            <span>Login with Google</span>
+          </button>
+          <button class="btn" id="btnCloudSyncNow" type="button" hidden>Sync now</button>
+          <button class="btn" id="btnGoogleLogout" type="button" hidden>Sign out</button>
+        </div>
+      </div>
     </div>
 
     <!-- SECURITY AND LOGIN -->
@@ -758,6 +772,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
     <!-- pdf.js: extracts text from uploaded PDFs entirely client-side (lightweight RAG) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Supabase: optional cloud sync (auth + Postgres). IndexedDB stays the UI source of truth. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/script.js"></script>
 </body>
 </html>

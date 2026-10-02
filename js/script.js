@@ -1153,6 +1153,8 @@
                 messagesWrapper.classList.remove('visible');
                 messagesWrapper.innerHTML = '';
                 clearHistory();
+                // Start a fresh cloud session so the next thread syncs separately.
+                if (window.ChatBotSync) window.ChatBotSync.onNewChat();
                 renderHistory();
                 isPinnedToBottom = true;
                 updateScrollFab();
@@ -1242,13 +1244,19 @@
                     if (el.getAttribute('data-transient') === 'true') continue;
                     const text = typeof el.__sourceText === 'string' ? el.__sourceText : '';
                     if (!text) continue;
+                    if (!el.__clientId) el.__clientId = newUuid();
+                    if (!el.__createdAt) el.__createdAt = new Date().toISOString();
                     out.push({
+                        id: el.__clientId,
                         role: el.classList.contains('user') ? 'user' : 'assistant',
-                        text: text
+                        text: text,
+                        createdAt: el.__createdAt
                     });
                 }
                 chatHistory = out;
                 saveHistory(chatHistory);
+                // Mirror to the cloud when signed in (debounced, never blocking).
+                if (window.ChatBotSync) window.ChatBotSync.scheduleSync();
             }
 
             // Rebuilds the chat from IndexedDB on first load. No API call here.
@@ -1258,7 +1266,11 @@
                 if (!saved.length) return;
                 chatHistory = saved.slice();
                 saved.forEach(function(m) {
-                    addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                    if (bubble && bubble.element) {
+                        if (m.id) bubble.element.__clientId = m.id;
+                        if (m.createdAt) bubble.element.__createdAt = m.createdAt;
+                    }
                 });
                 chatStarted = true;
                 welcomeScreen.style.display = 'none';
@@ -1274,6 +1286,324 @@
                 scrollToBottom(true);
                 updateScrollFab();
             }
+
+            // ===== CLOUD SYNC (Supabase) — additive, optional =====
+            // IndexedDB stays the single source of truth for the UI. When the user
+            // is signed in, the local thread is mirrored to Supabase in the
+            // background and can be pulled back onto a fresh device. Every call is
+            // guarded, so an unconfigured / offline Supabase never breaks the app.
+            //
+            // Setup: paste your project URL + anon key below (or inject
+            // window.CHATBOT_SUPABASE_URL / window.CHATBOT_SUPABASE_ANON_KEY),
+            // then run supabase/schema.sql in the Supabase SQL editor.
+            const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
+            const SUPABASE_ANON_KEY = 'YOUR-PUBLIC-ANON-KEY';
+            const SUPA_URL = window.CHATBOT_SUPABASE_URL || SUPABASE_URL;
+            const SUPA_KEY = window.CHATBOT_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+            const CLOUD_SESSION_LS_KEY = 'chatbotai_cloud_session_id';
+
+            let supaClient = null;
+            let supaUser = null;
+            let supaReady = false;
+            let syncTimer = null;
+
+            function newUuid() {
+                try {
+                    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                        return window.crypto.randomUUID();
+                    }
+                } catch (e) {}
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = (Math.random() * 16) | 0;
+                    const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+                    return v.toString(16);
+                });
+            }
+
+            function cloudConfigured() {
+                return typeof SUPA_URL === 'string'
+                    && SUPA_URL.indexOf('http') === 0
+                    && SUPA_URL.indexOf('YOUR-PROJECT') === -1
+                    && typeof SUPA_KEY === 'string'
+                    && SUPA_KEY.length > 20
+                    && SUPA_KEY.indexOf('YOUR-PUBLIC') === -1;
+            }
+
+            function initSupabase() {
+                if (supaClient) return supaClient;
+                if (!cloudConfigured()) return null;
+                const lib = window.supabase;
+                if (!lib || typeof lib.createClient !== 'function') return null;
+                try {
+                    supaClient = lib.createClient(SUPA_URL, SUPA_KEY, {
+                        auth: {
+                            persistSession: true,
+                            autoRefreshToken: true,
+                            detectSessionInUrl: true
+                        }
+                    });
+                } catch (e) {
+                    supaClient = null;
+                }
+                return supaClient;
+            }
+
+            function peekCloudSessionId() {
+                try { return localStorage.getItem(CLOUD_SESSION_LS_KEY); } catch (e) { return null; }
+            }
+
+            function getCloudSessionId() {
+                let id = peekCloudSessionId();
+                if (!id) {
+                    id = newUuid();
+                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, id); } catch (e) {}
+                }
+                return id;
+            }
+
+            function resetCloudSession() {
+                const id = newUuid();
+                try { localStorage.setItem(CLOUD_SESSION_LS_KEY, id); } catch (e) {}
+                return id;
+            }
+
+            function deriveTitle(messages) {
+                for (let i = 0; i < messages.length; i++) {
+                    if (messages[i].role === 'user' && messages[i].text) {
+                        const t = String(messages[i].text).replace(/\s+/g, ' ').trim();
+                        return t.length > 60 ? t.slice(0, 60) + '…' : t;
+                    }
+                }
+                return 'Untitled';
+            }
+
+            function buildSessionData(messages) {
+                const base = Date.now();
+                return {
+                    id: getCloudSessionId(),
+                    title: deriveTitle(messages),
+                    messages: messages.map(function(m, i) {
+                        return {
+                            id: m.id || newUuid(),
+                            role: (m.role === 'user') ? 'user' : 'assistant',
+                            content: m.text || '',
+                            rawContent: (typeof m.raw === 'string') ? m.raw : null,
+                            createdAt: m.createdAt || new Date(base + i).toISOString()
+                        };
+                    })
+                };
+            }
+
+            // Pushes a local thread to Supabase. Idempotent (upsert by UUID), so it
+            // is safe to call repeatedly. Never throws into the caller.
+            async function syncToCloud(sessionData) {
+                const client = initSupabase();
+                if (!client || !supaUser || !sessionData) return false;
+                const messages = sessionData.messages || [];
+                if (!messages.length) return false;
+                try {
+                    const sessionRes = await client.from('chat_sessions').upsert({
+                        id: sessionData.id,
+                        user_id: supaUser.id,
+                        title: sessionData.title || 'Untitled',
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'id' });
+                    if (sessionRes && sessionRes.error) throw sessionRes.error;
+
+                    const rows = messages.map(function(m) {
+                        return {
+                            id: m.id,
+                            session_id: sessionData.id,
+                            role: m.role,
+                            content: m.content,
+                            raw_content: m.rawContent,
+                            created_at: m.createdAt
+                        };
+                    });
+                    const msgRes = await client.from('chat_messages').upsert(rows, { onConflict: 'id' });
+                    if (msgRes && msgRes.error) throw msgRes.error;
+
+                    setCloudStatus('Synced · ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    return true;
+                } catch (e) {
+                    setCloudStatus('Sync failed — will retry');
+                    return false;
+                }
+            }
+
+            function scheduleSync() {
+                if (!supaUser) return;
+                if (syncTimer) clearTimeout(syncTimer);
+                syncTimer = setTimeout(function() {
+                    syncTimer = null;
+                    syncToCloud(buildSessionData(chatHistory.slice()));
+                }, 1200);
+            }
+
+            function renderCloudHistory(list) {
+                messagesWrapper.innerHTML = '';
+                messagesWrapper.classList.add('visible');
+                welcomeScreen.style.display = 'none';
+                chatStarted = true;
+                list.forEach(function(m) {
+                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                    if (bubble && bubble.element) {
+                        if (m.id) bubble.element.__clientId = m.id;
+                        if (m.createdAt) bubble.element.__createdAt = m.createdAt;
+                    }
+                });
+                for (let k = list.length - 1; k >= 0; k--) {
+                    if (list[k].role === 'user') {
+                        lastTurn = { raw: list[k].text || '', files: [] };
+                        break;
+                    }
+                }
+                renderHistory();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+                updateScrollFab();
+            }
+
+            // Pulls the most recent session for the signed-in user and mirrors it
+            // into IndexedDB (same key/shape the UI already reads).
+            async function fetchFromCloud() {
+                const client = initSupabase();
+                if (!client || !supaUser) return false;
+                try {
+                    const sRes = await client.from('chat_sessions')
+                        .select('*')
+                        .order('updated_at', { ascending: false })
+                        .limit(1);
+                    if (sRes && sRes.error) throw sRes.error;
+                    const session = sRes && sRes.data && sRes.data[0];
+                    if (!session) { setCloudStatus('No cloud chats yet'); return false; }
+
+                    const mRes = await client.from('chat_messages')
+                        .select('*')
+                        .eq('session_id', session.id)
+                        .order('created_at', { ascending: true });
+                    if (mRes && mRes.error) throw mRes.error;
+                    const rows = (mRes && mRes.data) || [];
+                    const messages = rows.map(function(r) {
+                        return {
+                            id: r.id,
+                            role: r.role === 'user' ? 'user' : 'assistant',
+                            text: r.content || '',
+                            raw: r.raw_content || undefined,
+                            createdAt: r.created_at
+                        };
+                    });
+
+                    chatHistory = messages.slice();
+                    await saveHistory(chatHistory);
+                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, session.id); } catch (e) {}
+                    renderCloudHistory(messages);
+                    setCloudStatus('Restored · ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    return true;
+                } catch (e) {
+                    setCloudStatus('Restore failed');
+                    return false;
+                }
+            }
+
+            function setCloudStatus(text) {
+                const el = document.getElementById('cloudSyncStatus');
+                if (el && typeof text === 'string') el.textContent = text;
+            }
+
+            function updateCloudUI() {
+                const login = document.getElementById('btnGoogleLogin');
+                const now = document.getElementById('btnCloudSyncNow');
+                const logout = document.getElementById('btnGoogleLogout');
+                const signedIn = !!supaUser;
+                if (login) login.hidden = signedIn;
+                if (now) now.hidden = !signedIn;
+                if (logout) logout.hidden = !signedIn;
+                if (signedIn) {
+                    setCloudStatus('Signed in as ' + (supaUser.email || supaUser.id));
+                } else {
+                    setCloudStatus('Not connected — chats stay on this device.');
+                }
+            }
+
+            function loginWithGoogle() {
+                const client = initSupabase();
+                if (!client) { setCloudStatus('Cloud not configured yet.'); return; }
+                try {
+                    const redirectTo = window.location.origin + window.location.pathname;
+                    client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectTo } });
+                } catch (e) {}
+            }
+
+            function logoutCloud() {
+                const client = initSupabase();
+                if (!client) return;
+                try { client.auth.signOut(); } catch (e) {}
+            }
+
+            async function handleSignedIn() {
+                // New device / first login: adopt the cloud thread if local is empty.
+                const local = await loadHistory();
+                if (!local.length) {
+                    await fetchFromCloud();
+                } else if (!peekCloudSessionId()) {
+                    scheduleSync();
+                }
+            }
+
+            function initCloudSync() {
+                if (supaReady) return;
+                supaReady = true;
+
+                const login = document.getElementById('btnGoogleLogin');
+                const now = document.getElementById('btnCloudSyncNow');
+                const logout = document.getElementById('btnGoogleLogout');
+                if (login) login.addEventListener('click', loginWithGoogle);
+                if (logout) logout.addEventListener('click', logoutCloud);
+                if (now) now.addEventListener('click', async function() {
+                    const local = await loadHistory();
+                    if (local.length) {
+                        setCloudStatus('Syncing…');
+                        await syncToCloud(buildSessionData(local));
+                    } else {
+                        await fetchFromCloud();
+                    }
+                });
+
+                const client = initSupabase();
+                updateCloudUI();
+                if (!client) return;
+
+                client.auth.getSession().then(function(res) {
+                    const session = res && res.data ? res.data.session : null;
+                    supaUser = session && session.user ? session.user : null;
+                    updateCloudUI();
+                    if (supaUser) handleSignedIn();
+                }).catch(function() {});
+
+                client.auth.onAuthStateChange(function(event, session) {
+                    supaUser = session && session.user ? session.user : null;
+                    updateCloudUI();
+                    // Deferred: awaiting inside this callback can deadlock the auth lock.
+                    setTimeout(function() {
+                        if (event === 'SIGNED_IN') handleSignedIn();
+                    }, 0);
+                });
+            }
+
+            // Public bridge (also used by the test harness).
+            window.ChatBotSync = {
+                init: initCloudSync,
+                scheduleSync: scheduleSync,
+                syncToCloud: syncToCloud,
+                fetchFromCloud: fetchFromCloud,
+                buildSessionData: buildSessionData,
+                onNewChat: resetCloudSession,
+                isSignedIn: function() { return !!supaUser; },
+                configured: cloudConfigured
+            };
+
+            initCloudSync();
 
             async function deleteConversation(id) {
                 try {
@@ -1553,6 +1883,10 @@
                 // the IndexedDB persistence layer.
                 let currentText = text;
                 msg.__sourceText = currentText;
+                // Stable identity + timestamp for cloud sync (additive; IndexedDB
+                // remains the single source of truth for the UI).
+                if (!msg.__clientId) msg.__clientId = newUuid();
+                if (!msg.__createdAt) msg.__createdAt = new Date().toISOString();
                 const textNode = msg.querySelector('.message-text');
 
                 // Copy button
