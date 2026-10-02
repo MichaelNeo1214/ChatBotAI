@@ -95,6 +95,8 @@
             const btnNewChat = document.getElementById('btnNewChat');
             const chatInput = document.getElementById('chatInput');
             const btnSend = document.getElementById('btnSend');
+            const btnScrollBottom = document.getElementById('btnScrollBottom');
+            const btnThemeToggle = document.getElementById('btnThemeToggle');
             const chatArea = document.getElementById('chatArea');
             const messagesWrapper = document.getElementById('messagesWrapper');
             const welcomeScreen = document.getElementById('welcomeScreen');
@@ -121,7 +123,14 @@
             // State
             let chatStarted = false;
             let sending = false;
+            let activeAbort = null;
+            let isPinnedToBottom = true;
+            let lastTurn = { raw: '', files: [] };
             const attachedFiles = [];
+            // Lightweight client-side RAG: the extracted text of a PDF/TXT the
+            // user attached for the *next* turn. Held as plain capped text (never
+            // the File/ArrayBuffer) so a large document can't pin memory.
+            let ragDoc = null;
             let conversations = [];
             let activeConversationId = null;
             let currentModelKey = 'default';
@@ -279,11 +288,20 @@
              * { conversationId, content }; the caller adopts the id when the
              * server created a new conversation for this turn.
              */
-            async function callAssistant(modelKey, text, files, onDelta) {
+            async function callAssistant(modelKey, text, files, onDelta, signal, ragText) {
                 const def = modelDef(modelKey);
 
+                // Lightweight RAG: fold the attached document's text into this
+                // single turn as a hidden context block. The visible user bubble
+                // still shows only the question (built separately by the caller).
+                let message = buildUserText(text, files);
+                if (ragText) {
+                    message = '[CONTEXT:\n' + ragText + '\n]\n\n'
+                        + 'Based on the context above, answer this question: ' + message;
+                }
+
                 const payload = {
-                    message: buildUserText(text, files),
+                    message: message,
                     model: def.label
                 };
                 if (activeConversationId) payload.conversationId = activeConversationId;
@@ -299,9 +317,12 @@
                         method: 'POST',
                         headers: headers,
                         credentials: 'same-origin',
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payload),
+                        signal: signal
                     });
                 } catch (e) {
+                    // A user-initiated abort is not a connectivity failure.
+                    if (e && e.name === 'AbortError') throw e;
                     throw new Error(requestFailed('the server', e));
                 }
 
@@ -438,6 +459,7 @@
                     filePreviewArea.innerHTML = '';
                     filePreviewArea.hidden = true;
                 }
+                clearRagDoc();
                 updateSendState();
                 renderHistory();
             }
@@ -509,7 +531,10 @@
             window.ChatBotAuth.signOut = function(everywhere) { return doSignOut(!!everywhere); };
             window.ChatBotAuth.deleteAccount = function() { return deleteAccount(); };
 
-            refreshAuth();
+            // After auth resolves, rebuild the last local thread (IndexedDB).
+            refreshAuth().then(function() {
+                restoreLocalHistory();
+            });
 
             // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
@@ -525,9 +550,13 @@
                 welcomeScreen.style.display = 'none';
                 messagesWrapper.classList.add('visible');
                 messagesWrapper.innerHTML = '';
-                addMessage('assistant', HELP_TEXT);
+                const helpBubble = addMessage('assistant', HELP_TEXT);
+                if (helpBubble && helpBubble.element) {
+                    helpBubble.element.setAttribute('data-transient', 'true');
+                }
                 renderHistory();
-                scrollToBottom();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
                 if (getBreakpoint() !== 'desktop') {
                     closeSidebar();
                 }
@@ -925,10 +954,32 @@
 
             // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
             function updateSendState() {
-                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0;
-                const ready = hasText && !sending;
-                btnSend.disabled = !ready;
-                btnSend.classList.toggle('active', ready);
+                if (sending) {
+                    btnSend.disabled = false;
+                    btnSend.classList.remove('active');
+                    btnSend.classList.add('stopping');
+                    btnSend.setAttribute('aria-label', 'Stop generating');
+                    return;
+                }
+                btnSend.classList.remove('stopping');
+                btnSend.setAttribute('aria-label', 'Send message');
+                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0 || !!ragDoc;
+                btnSend.disabled = !hasText;
+                btnSend.classList.toggle('active', hasText);
+            }
+
+            // While a reply streams the composer is locked: the model owns the
+            // turn and the user either waits or presses Stop.
+            function setComposerBusy(busy) {
+                chatInput.readOnly = busy;
+                chatInput.classList.toggle('is-busy', busy);
+                chatInput.setAttribute('aria-busy', busy ? 'true' : 'false');
+            }
+
+            function stopGeneration() {
+                if (!sending || !activeAbort) return;
+                activeAbort.abort();
+                chatInput.focus();
             }
 
             chatInput.addEventListener('input', function() {
@@ -1071,6 +1122,14 @@
                     addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content);
                 });
 
+                // Seed the last turn so Regenerate works on a re-opened thread.
+                for (let k = messages.length - 1; k >= 0; k--) {
+                    if (messages[k].role !== 'assistant') {
+                        lastTurn = { raw: messages[k].content, files: [] };
+                        break;
+                    }
+                }
+
                 if (messages.length) {
                     chatStarted = true;
                     welcomeScreen.style.display = 'none';
@@ -1081,7 +1140,8 @@
                     messagesWrapper.classList.remove('visible');
                 }
                 renderHistory();
-                scrollToBottom();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
             }
 
             function startNewChat() {
@@ -1092,12 +1152,458 @@
                 welcomeScreen.style.display = '';
                 messagesWrapper.classList.remove('visible');
                 messagesWrapper.innerHTML = '';
+                clearHistory();
+                // Start a fresh cloud session so the next thread syncs separately.
+                if (window.ChatBotSync) window.ChatBotSync.onNewChat();
                 renderHistory();
+                isPinnedToBottom = true;
+                updateScrollFab();
                 if (getBreakpoint() !== 'desktop') {
                     closeSidebar();
                 }
                 chatInput.focus();
             }
+
+            // ===== LOCAL PERSISTENCE (IndexedDB) =====
+            // The on-screen thread is mirrored to IndexedDB so a refresh (or an
+            // offline reload) never loses it. Additive only: the server remains
+            // the source of truth for the sidebar; this is a device-local echo.
+            const IDB_NAME = 'ChatBotDB';
+            const IDB_STORE = 'chats';
+            const IDB_KEY = 'current';
+            let chatHistory = [];
+            let dbPromise = null;
+
+            function initDB() {
+                if (dbPromise) return dbPromise;
+                dbPromise = new Promise(function(resolve) {
+                    if (!('indexedDB' in window)) { resolve(null); return; }
+                    let req;
+                    try {
+                        req = indexedDB.open(IDB_NAME, 1);
+                    } catch (e) { resolve(null); return; }
+                    req.onupgradeneeded = function() {
+                        const db = req.result;
+                        if (!db.objectStoreNames.contains(IDB_STORE)) {
+                            db.createObjectStore(IDB_STORE);
+                        }
+                    };
+                    req.onsuccess = function() { resolve(req.result); };
+                    req.onerror = function() { resolve(null); };
+                });
+                return dbPromise;
+            }
+
+            function idbWrite(mutate) {
+                return initDB().then(function(db) {
+                    if (!db) return null;
+                    return new Promise(function(resolve) {
+                        let tx;
+                        try {
+                            tx = db.transaction(IDB_STORE, 'readwrite');
+                            mutate(tx.objectStore(IDB_STORE));
+                        } catch (e) { resolve(null); return; }
+                        tx.oncomplete = function() { resolve(true); };
+                        tx.onerror = function() { resolve(null); };
+                        tx.onabort = function() { resolve(null); };
+                    });
+                });
+            }
+
+            function saveHistory(messages) {
+                return idbWrite(function(store) { store.put(messages || [], IDB_KEY); });
+            }
+
+            function clearHistory() {
+                chatHistory = [];
+                return idbWrite(function(store) { store.delete(IDB_KEY); });
+            }
+
+            function loadHistory() {
+                return initDB().then(function(db) {
+                    if (!db) return [];
+                    return new Promise(function(resolve) {
+                        let tx;
+                        try {
+                            tx = db.transaction(IDB_STORE, 'readonly');
+                        } catch (e) { resolve([]); return; }
+                        const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+                        req.onsuccess = function() { resolve(Array.isArray(req.result) ? req.result : []); };
+                        req.onerror = function() { resolve([]); };
+                    });
+                });
+            }
+
+            // Reflects the live thread (in DOM order) into memory + IndexedDB.
+            // Regenerate and edit thus persist correctly without special-casing.
+            function persistHistory() {
+                const nodes = messagesWrapper.querySelectorAll('.message');
+                const out = [];
+                for (let i = 0; i < nodes.length; i++) {
+                    const el = nodes[i];
+                    if (el.getAttribute('data-transient') === 'true') continue;
+                    const text = typeof el.__sourceText === 'string' ? el.__sourceText : '';
+                    if (!text) continue;
+                    if (!el.__clientId) el.__clientId = newUuid();
+                    if (!el.__createdAt) el.__createdAt = new Date().toISOString();
+                    out.push({
+                        id: el.__clientId,
+                        role: el.classList.contains('user') ? 'user' : 'assistant',
+                        text: text,
+                        createdAt: el.__createdAt
+                    });
+                }
+                chatHistory = out;
+                saveHistory(chatHistory);
+                // Mirror to the cloud when signed in (debounced, never blocking).
+                if (window.ChatBotSync) window.ChatBotSync.scheduleSync();
+            }
+
+            // Rebuilds the chat from IndexedDB on first load. No API call here.
+            async function restoreLocalHistory() {
+                if (messagesWrapper.children.length > 0) return;
+                const saved = await loadHistory();
+                if (!saved.length) return;
+                chatHistory = saved.slice();
+                saved.forEach(function(m) {
+                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                    if (bubble && bubble.element) {
+                        if (m.id) bubble.element.__clientId = m.id;
+                        if (m.createdAt) bubble.element.__createdAt = m.createdAt;
+                    }
+                });
+                chatStarted = true;
+                welcomeScreen.style.display = 'none';
+                messagesWrapper.classList.add('visible');
+                for (let k = saved.length - 1; k >= 0; k--) {
+                    if (saved[k].role === 'user') {
+                        lastTurn = { raw: saved[k].text || '', files: [] };
+                        break;
+                    }
+                }
+                renderHistory();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+                updateScrollFab();
+            }
+
+            // ===== CLOUD SYNC (Supabase) — additive, optional =====
+            // IndexedDB stays the single source of truth for the UI. When the user
+            // is signed in, the local thread is mirrored to Supabase in the
+            // background and can be pulled back onto a fresh device. Every call is
+            // guarded, so an unconfigured / offline Supabase never breaks the app.
+            //
+            // Setup: paste your project URL + anon key below (or inject
+            // window.CHATBOT_SUPABASE_URL / window.CHATBOT_SUPABASE_ANON_KEY),
+            // then run supabase/schema.sql in the Supabase SQL editor.
+            const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
+            const SUPABASE_ANON_KEY = 'YOUR-PUBLIC-ANON-KEY';
+            const SUPA_URL = window.CHATBOT_SUPABASE_URL || SUPABASE_URL;
+            const SUPA_KEY = window.CHATBOT_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+            const CLOUD_SESSION_LS_KEY = 'chatbotai_cloud_session_id';
+
+            let supaClient = null;
+            let supaUser = null;
+            let supaReady = false;
+            let syncTimer = null;
+
+            function newUuid() {
+                try {
+                    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                        return window.crypto.randomUUID();
+                    }
+                } catch (e) {}
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = (Math.random() * 16) | 0;
+                    const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+                    return v.toString(16);
+                });
+            }
+
+            function cloudConfigured() {
+                return typeof SUPA_URL === 'string'
+                    && SUPA_URL.indexOf('http') === 0
+                    && SUPA_URL.indexOf('YOUR-PROJECT') === -1
+                    && typeof SUPA_KEY === 'string'
+                    && SUPA_KEY.length > 20
+                    && SUPA_KEY.indexOf('YOUR-PUBLIC') === -1;
+            }
+
+            function initSupabase() {
+                if (supaClient) return supaClient;
+                if (!cloudConfigured()) return null;
+                const lib = window.supabase;
+                if (!lib || typeof lib.createClient !== 'function') return null;
+                try {
+                    supaClient = lib.createClient(SUPA_URL, SUPA_KEY, {
+                        auth: {
+                            persistSession: true,
+                            autoRefreshToken: true,
+                            detectSessionInUrl: true
+                        }
+                    });
+                } catch (e) {
+                    supaClient = null;
+                }
+                return supaClient;
+            }
+
+            function peekCloudSessionId() {
+                try { return localStorage.getItem(CLOUD_SESSION_LS_KEY); } catch (e) { return null; }
+            }
+
+            function getCloudSessionId() {
+                let id = peekCloudSessionId();
+                if (!id) {
+                    id = newUuid();
+                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, id); } catch (e) {}
+                }
+                return id;
+            }
+
+            function resetCloudSession() {
+                const id = newUuid();
+                try { localStorage.setItem(CLOUD_SESSION_LS_KEY, id); } catch (e) {}
+                return id;
+            }
+
+            function deriveTitle(messages) {
+                for (let i = 0; i < messages.length; i++) {
+                    if (messages[i].role === 'user' && messages[i].text) {
+                        const t = String(messages[i].text).replace(/\s+/g, ' ').trim();
+                        return t.length > 60 ? t.slice(0, 60) + '…' : t;
+                    }
+                }
+                return 'Untitled';
+            }
+
+            function buildSessionData(messages) {
+                const base = Date.now();
+                return {
+                    id: getCloudSessionId(),
+                    title: deriveTitle(messages),
+                    messages: messages.map(function(m, i) {
+                        return {
+                            id: m.id || newUuid(),
+                            role: (m.role === 'user') ? 'user' : 'assistant',
+                            content: m.text || '',
+                            rawContent: (typeof m.raw === 'string') ? m.raw : null,
+                            createdAt: m.createdAt || new Date(base + i).toISOString()
+                        };
+                    })
+                };
+            }
+
+            // Pushes a local thread to Supabase. Idempotent (upsert by UUID), so it
+            // is safe to call repeatedly. Never throws into the caller.
+            async function syncToCloud(sessionData) {
+                const client = initSupabase();
+                if (!client || !supaUser || !sessionData) return false;
+                const messages = sessionData.messages || [];
+                if (!messages.length) return false;
+                try {
+                    const sessionRes = await client.from('chat_sessions').upsert({
+                        id: sessionData.id,
+                        user_id: supaUser.id,
+                        title: sessionData.title || 'Untitled',
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'id' });
+                    if (sessionRes && sessionRes.error) throw sessionRes.error;
+
+                    const rows = messages.map(function(m) {
+                        return {
+                            id: m.id,
+                            session_id: sessionData.id,
+                            role: m.role,
+                            content: m.content,
+                            raw_content: m.rawContent,
+                            created_at: m.createdAt
+                        };
+                    });
+                    const msgRes = await client.from('chat_messages').upsert(rows, { onConflict: 'id' });
+                    if (msgRes && msgRes.error) throw msgRes.error;
+
+                    setCloudStatus('Synced · ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    return true;
+                } catch (e) {
+                    setCloudStatus('Sync failed — will retry');
+                    return false;
+                }
+            }
+
+            function scheduleSync() {
+                if (!supaUser) return;
+                if (syncTimer) clearTimeout(syncTimer);
+                syncTimer = setTimeout(function() {
+                    syncTimer = null;
+                    syncToCloud(buildSessionData(chatHistory.slice()));
+                }, 1200);
+            }
+
+            function renderCloudHistory(list) {
+                messagesWrapper.innerHTML = '';
+                messagesWrapper.classList.add('visible');
+                welcomeScreen.style.display = 'none';
+                chatStarted = true;
+                list.forEach(function(m) {
+                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                    if (bubble && bubble.element) {
+                        if (m.id) bubble.element.__clientId = m.id;
+                        if (m.createdAt) bubble.element.__createdAt = m.createdAt;
+                    }
+                });
+                for (let k = list.length - 1; k >= 0; k--) {
+                    if (list[k].role === 'user') {
+                        lastTurn = { raw: list[k].text || '', files: [] };
+                        break;
+                    }
+                }
+                renderHistory();
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+                updateScrollFab();
+            }
+
+            // Pulls the most recent session for the signed-in user and mirrors it
+            // into IndexedDB (same key/shape the UI already reads).
+            async function fetchFromCloud() {
+                const client = initSupabase();
+                if (!client || !supaUser) return false;
+                try {
+                    const sRes = await client.from('chat_sessions')
+                        .select('*')
+                        .order('updated_at', { ascending: false })
+                        .limit(1);
+                    if (sRes && sRes.error) throw sRes.error;
+                    const session = sRes && sRes.data && sRes.data[0];
+                    if (!session) { setCloudStatus('No cloud chats yet'); return false; }
+
+                    const mRes = await client.from('chat_messages')
+                        .select('*')
+                        .eq('session_id', session.id)
+                        .order('created_at', { ascending: true });
+                    if (mRes && mRes.error) throw mRes.error;
+                    const rows = (mRes && mRes.data) || [];
+                    const messages = rows.map(function(r) {
+                        return {
+                            id: r.id,
+                            role: r.role === 'user' ? 'user' : 'assistant',
+                            text: r.content || '',
+                            raw: r.raw_content || undefined,
+                            createdAt: r.created_at
+                        };
+                    });
+
+                    chatHistory = messages.slice();
+                    await saveHistory(chatHistory);
+                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, session.id); } catch (e) {}
+                    renderCloudHistory(messages);
+                    setCloudStatus('Restored · ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    return true;
+                } catch (e) {
+                    setCloudStatus('Restore failed');
+                    return false;
+                }
+            }
+
+            function setCloudStatus(text) {
+                const el = document.getElementById('cloudSyncStatus');
+                if (el && typeof text === 'string') el.textContent = text;
+            }
+
+            function updateCloudUI() {
+                const login = document.getElementById('btnGoogleLogin');
+                const now = document.getElementById('btnCloudSyncNow');
+                const logout = document.getElementById('btnGoogleLogout');
+                const signedIn = !!supaUser;
+                if (login) login.hidden = signedIn;
+                if (now) now.hidden = !signedIn;
+                if (logout) logout.hidden = !signedIn;
+                if (signedIn) {
+                    setCloudStatus('Signed in as ' + (supaUser.email || supaUser.id));
+                } else {
+                    setCloudStatus('Not connected — chats stay on this device.');
+                }
+            }
+
+            function loginWithGoogle() {
+                const client = initSupabase();
+                if (!client) { setCloudStatus('Cloud not configured yet.'); return; }
+                try {
+                    const redirectTo = window.location.origin + window.location.pathname;
+                    client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectTo } });
+                } catch (e) {}
+            }
+
+            function logoutCloud() {
+                const client = initSupabase();
+                if (!client) return;
+                try { client.auth.signOut(); } catch (e) {}
+            }
+
+            async function handleSignedIn() {
+                // New device / first login: adopt the cloud thread if local is empty.
+                const local = await loadHistory();
+                if (!local.length) {
+                    await fetchFromCloud();
+                } else if (!peekCloudSessionId()) {
+                    scheduleSync();
+                }
+            }
+
+            function initCloudSync() {
+                if (supaReady) return;
+                supaReady = true;
+
+                const login = document.getElementById('btnGoogleLogin');
+                const now = document.getElementById('btnCloudSyncNow');
+                const logout = document.getElementById('btnGoogleLogout');
+                if (login) login.addEventListener('click', loginWithGoogle);
+                if (logout) logout.addEventListener('click', logoutCloud);
+                if (now) now.addEventListener('click', async function() {
+                    const local = await loadHistory();
+                    if (local.length) {
+                        setCloudStatus('Syncing…');
+                        await syncToCloud(buildSessionData(local));
+                    } else {
+                        await fetchFromCloud();
+                    }
+                });
+
+                const client = initSupabase();
+                updateCloudUI();
+                if (!client) return;
+
+                client.auth.getSession().then(function(res) {
+                    const session = res && res.data ? res.data.session : null;
+                    supaUser = session && session.user ? session.user : null;
+                    updateCloudUI();
+                    if (supaUser) handleSignedIn();
+                }).catch(function() {});
+
+                client.auth.onAuthStateChange(function(event, session) {
+                    supaUser = session && session.user ? session.user : null;
+                    updateCloudUI();
+                    // Deferred: awaiting inside this callback can deadlock the auth lock.
+                    setTimeout(function() {
+                        if (event === 'SIGNED_IN') handleSignedIn();
+                    }, 0);
+                });
+            }
+
+            // Public bridge (also used by the test harness).
+            window.ChatBotSync = {
+                init: initCloudSync,
+                scheduleSync: scheduleSync,
+                syncToCloud: syncToCloud,
+                fetchFromCloud: fetchFromCloud,
+                buildSessionData: buildSessionData,
+                onNewChat: resetCloudSession,
+                isSignedIn: function() { return !!supaUser; },
+                configured: cloudConfigured
+            };
+
+            initCloudSync();
 
             async function deleteConversation(id) {
                 try {
@@ -1203,10 +1709,97 @@
             });
 
             // ===== SEND MESSAGE =====
+            // Runs one assistant turn: paints the streaming bubble, honours Stop
+            // and reports errors. Shared by send, regenerate and message edit.
+            async function runAssistant(raw, filesSnapshot, ragText) {
+                // The assistant bubble is created on the first delta, so a turn
+                // that never produces one leaves no empty shell behind.
+                let bubble = null;
+                function ensureBubble() {
+                    if (!bubble) bubble = addMessage('assistant', '');
+                    return bubble;
+                }
+
+                sending = true;
+                activeAbort = new AbortController();
+                const signal = activeAbort.signal;
+                updateSendState();
+                setComposerBusy(true);
+                typingIndicator.classList.add('visible');
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+
+                const typer = createTypewriter(function(partial) {
+                    ensureBubble().setText(partial + '\u258d');
+                });
+
+                try {
+                    const turn = await callAssistant(currentModelKey, raw, filesSnapshot, function(chunk) {
+                        typingIndicator.classList.remove('visible');
+                        typer.push(chunk);
+                        scrollToBottom();
+                    }, signal, ragText);
+                    typer.finish();
+                    // The server created this conversation on its first turn;
+                    // adopt the id so the next message continues the thread.
+                    if (turn.conversationId) activeConversationId = turn.conversationId;
+                } catch (error) {
+                    typer.finish();
+                    if (error && error.name === 'AbortError') {
+                        // Keep whatever streamed before the user hit Stop.
+                        if (bubble) bubble.setText(bubble.getText() + '\n\n— stopped by you.');
+                    } else {
+                        const message = (error && error.message) ? error.message : 'request failed.';
+                        if (error && error.code === 'missing_api_key') {
+                            // The server refused before writing anything, so point
+                            // at the setting that fixes it and keep the alert as the
+                            // only feedback.
+                            showKeyAlert(error.model);
+                        } else if (error && error.partial) {
+                            // Keep the text that did arrive, and say why it stopped.
+                            ensureBubble().setText(error.partial + '\n\n— the reply stopped early: ' + message);
+                        } else {
+                            ensureBubble().setText('Sorry — ' + message);
+                        }
+                    }
+                } finally {
+                    typingIndicator.classList.remove('visible');
+                    sending = false;
+                    activeAbort = null;
+                    setComposerBusy(false);
+                    updateSendState();
+                    // Persist the finished turn locally (survives refresh/offline).
+                    persistHistory();
+                    // Auto-focus: cursor is ready for the next prompt the moment
+                    // the reply finishes (or is stopped) — no manual click needed.
+                    chatInput.focus();
+                }
+
+                // Titles and ordering belong to the server, so re-read them.
+                await refreshConversations();
+                scrollToBottom(true);
+            }
+
+            // Re-runs the most recent user turn without adding a new user bubble.
+            async function regenerate() {
+                if (sending) return;
+                if (!lastTurn.raw && !(lastTurn.files && lastTurn.files.length)) return;
+                if (!modelHasKey(currentModelKey)) {
+                    showKeyAlert(currentModelKey);
+                    return;
+                }
+                if (!chatStarted) {
+                    chatStarted = true;
+                    welcomeScreen.style.display = 'none';
+                    messagesWrapper.classList.add('visible');
+                }
+                await runAssistant(lastTurn.raw, lastTurn.files, lastTurn.rag);
+            }
+
             async function sendMessage(text) {
                 if (sending) return;
                 const raw = (text || '').trim();
-                const hasFiles = attachedFiles.length > 0;
+                const hasFiles = attachedFiles.length > 0 || !!ragDoc;
                 if (!raw && !hasFiles) return;
 
                 // Fast path: the key panel already knows this model has no key,
@@ -1229,7 +1822,11 @@
                     return { name: f.name, type: f.type };
                 });
                 const displayText = buildUserText(raw, filesSnapshot);
+                // The RAG context is consumed by this one turn: snapshot the text
+                // (so regenerate can reuse it) and clear the indicator right away.
+                const ragSnapshot = ragDoc ? ragDoc.text : '';
                 attachedFiles.length = 0;
+                clearRagDoc();
                 const filePreviewArea = document.getElementById('filePreviewArea');
                 if (filePreviewArea) {
                     filePreviewArea.innerHTML = '';
@@ -1237,53 +1834,12 @@
                 }
 
                 addMessage('user', displayText);
+                persistHistory();
                 chatInput.value = '';
                 chatInput.style.height = 'auto';
+                lastTurn = { raw: raw, files: filesSnapshot, rag: ragSnapshot };
 
-                // The assistant bubble is created on the first delta, so a turn
-                // that never produces one leaves no empty shell behind.
-                let bubble = null;
-                function ensureBubble() {
-                    if (!bubble) bubble = addMessage('assistant', '');
-                    return bubble;
-                }
-
-                sending = true;
-                updateSendState();
-                typingIndicator.classList.add('visible');
-                scrollToBottom();
-
-                try {
-                    const turn = await callAssistant(currentModelKey, raw, filesSnapshot, function(chunk) {
-                        typingIndicator.classList.remove('visible');
-                        ensureBubble().append(chunk);
-                        scrollToBottom();
-                    });
-                    // The server created this conversation on its first turn;
-                    // adopt the id so the next message continues the thread.
-                    if (turn.conversationId) activeConversationId = turn.conversationId;
-                } catch (error) {
-                    const message = (error && error.message) ? error.message : 'request failed.';
-                    if (error && error.code === 'missing_api_key') {
-                        // The server refused before writing anything, so point
-                        // at the setting that fixes it and keep the alert as the
-                        // only feedback.
-                        showKeyAlert(error.model);
-                    } else if (error && error.partial) {
-                        // Keep the text that did arrive, and say why it stopped.
-                        ensureBubble().append('\n\n— the reply stopped early: ' + message);
-                    } else {
-                        ensureBubble().setText('Sorry — ' + message);
-                    }
-                } finally {
-                    typingIndicator.classList.remove('visible');
-                    sending = false;
-                    updateSendState();
-                }
-
-                // Titles and ordering belong to the server, so re-read them.
-                await refreshConversations();
-                scrollToBottom();
+                await runAssistant(raw, filesSnapshot, ragSnapshot);
             }
 
             function addMessage(role, text) {
@@ -1295,36 +1851,81 @@
                     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 
                 const senderName = role === 'user' ? 'You' : 'ChatBot AI';
-
                 const formattedText = formatText(text);
+
+                const copyAction = '<button class="btn-msg-action" type="button" data-action="copy" aria-label="Copy">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>';
+                const regenerateAction = '<button class="btn-msg-action" type="button" data-action="regenerate" aria-label="Regenerate">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Regenerate</button>';
+                const likeAction = '<button class="btn-msg-action" type="button" data-action="like" aria-label="Good response">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg></button>';
+                const dislikeAction = '<button class="btn-msg-action" type="button" data-action="dislike" aria-label="Bad response">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg></button>';
+                const editAction = '<button class="btn-msg-action" type="button" data-action="edit" aria-label="Edit message">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>';
+
+                const actions = role === 'user'
+                    ? copyAction + editAction
+                    : copyAction + regenerateAction + likeAction + dislikeAction;
 
                 msg.innerHTML = '<div class="message-content">'
                     + '<div class="message-avatar">' + avatarIcon + '</div>'
                     + '<div class="message-body">'
                     + '<div class="message-sender">' + senderName + '</div>'
                     + '<div class="message-text">' + formattedText + '</div>'
-                    + '<div class="message-actions">'
-                    + '<button class="btn-msg-action" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>'
-                    + '<button class="btn-msg-action" aria-label="Like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88"/></svg></button>'
-                    + '<button class="btn-msg-action" aria-label="Dislike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88"/></svg></button>'
-                    + '</div>'
+                    + '<div class="message-actions">' + actions + '</div>'
                     + '</div></div>';
 
                 messagesWrapper.appendChild(msg);
 
                 // Streaming replies grow after insertion, so keep the source text
-                // here and re-render on each update.
+                // here and re-render on each update. __sourceText mirrors it for
+                // the IndexedDB persistence layer.
                 let currentText = text;
+                msg.__sourceText = currentText;
+                // Stable identity + timestamp for cloud sync (additive; IndexedDB
+                // remains the single source of truth for the UI).
+                if (!msg.__clientId) msg.__clientId = newUuid();
+                if (!msg.__createdAt) msg.__createdAt = new Date().toISOString();
                 const textNode = msg.querySelector('.message-text');
 
                 // Copy button
-                const copyBtn = msg.querySelector('.btn-msg-action[aria-label="Copy"]');
+                const copyBtn = msg.querySelector('[data-action="copy"]');
                 copyBtn.addEventListener('click', function() {
                     navigator.clipboard.writeText(currentText).then(function() {
+                        copyBtn.classList.add('active');
                         copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
                         setTimeout(function() {
+                            copyBtn.classList.remove('active');
                             copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy';
                         }, 2000);
+                    });
+                });
+
+                // Thumbs up / down are mutually exclusive toggles.
+                const likeBtn = msg.querySelector('[data-action="like"]');
+                const dislikeBtn = msg.querySelector('[data-action="dislike"]');
+                if (likeBtn) likeBtn.addEventListener('click', function() {
+                    likeBtn.classList.toggle('active');
+                    if (dislikeBtn) dislikeBtn.classList.remove('active');
+                });
+                if (dislikeBtn) dislikeBtn.addEventListener('click', function() {
+                    dislikeBtn.classList.toggle('active');
+                    if (likeBtn) likeBtn.classList.remove('active');
+                });
+
+                // Regenerate replays the last user turn (assistant messages only).
+                const regenBtn = msg.querySelector('[data-action="regenerate"]');
+                if (regenBtn) regenBtn.addEventListener('click', function() { regenerate(); });
+
+                // Edit rewrites a user message and re-runs the turn.
+                const editBtn = msg.querySelector('[data-action="edit"]');
+                if (editBtn) editBtn.addEventListener('click', function() {
+                    enterEditMode(msg, textNode, function(nextText) {
+                        currentText = nextText;
+                        textNode.innerHTML = formatText(currentText);
+                        lastTurn = { raw: nextText, files: [] };
+                        runAssistant(nextText, []);
                     });
                 });
 
@@ -1332,47 +1933,397 @@
                     element: msg,
                     append: function(chunk) {
                         currentText += chunk;
+                        msg.__sourceText = currentText;
                         textNode.innerHTML = formatText(currentText);
                     },
                     setText: function(next) {
                         currentText = next;
+                        msg.__sourceText = currentText;
                         textNode.innerHTML = formatText(currentText);
+                    },
+                    getText: function() {
+                        return currentText;
                     }
                 };
             }
 
-            function formatText(text) {
-                // Escape HTML
-                let formatted = text
+            // Inline editor for a user message. Save rewrites the bubble and
+            // re-runs the assistant; Escape / Cancel restores the original.
+            function enterEditMode(msg, textNode, onSave) {
+                if (msg.querySelector('.edit-composer')) return;
+                const body = msg.querySelector('.message-body');
+                const actionsRow = msg.querySelector('.message-actions');
+                const source = textNode.textContent;
+
+                const wrap = document.createElement('div');
+                wrap.className = 'edit-composer';
+
+                const ta = document.createElement('textarea');
+                ta.className = 'edit-textarea';
+                ta.value = source;
+                ta.rows = Math.min(12, Math.max(2, Math.ceil(source.length / 60)));
+
+                const row = document.createElement('div');
+                row.className = 'edit-actions';
+                const saveBtn = document.createElement('button');
+                saveBtn.type = 'button';
+                saveBtn.className = 'btn primary';
+                saveBtn.textContent = 'Save & Submit';
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'btn';
+                cancelBtn.textContent = 'Cancel';
+                row.appendChild(saveBtn);
+                row.appendChild(cancelBtn);
+                wrap.appendChild(ta);
+                wrap.appendChild(row);
+
+                textNode.style.display = 'none';
+                body.insertBefore(wrap, actionsRow);
+
+                function close() {
+                    wrap.remove();
+                    textNode.style.display = '';
+                }
+                cancelBtn.addEventListener('click', close);
+                saveBtn.addEventListener('click', function() {
+                    const next = ta.value.trim();
+                    if (!next) { ta.focus(); return; }
+                    close();
+                    onSave(next);
+                });
+                ta.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        close();
+                    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        saveBtn.click();
+                    }
+                });
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+            }
+
+            // ===== MARKDOWN =====
+            function escapeHtml(s) {
+                return String(s)
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
-
-                // Code blocks
-                formatted = formatted.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-
-                // Inline code
-                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-                // Bold
-                formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-                // Line breaks to paragraphs
-                formatted = formatted.split('\n\n').map(function(p) {
-                    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
-                }).join('');
-
-                return formatted;
             }
 
-            function scrollToBottom() {
-                requestAnimationFrame(function() {
-                    chatArea.scrollTop = chatArea.scrollHeight;
+            // Defense-in-depth for model-generated content: every string that
+            // reaches .innerHTML passes through here. DOMPurify strips scripts,
+            // event handlers and javascript: URLs while preserving the safe
+            // markup our Markdown renderer emits (classes, data-* hooks, links).
+            function sanitizeHtml(html) {
+                if (typeof window !== 'undefined' && window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
+                    return window.DOMPurify.sanitize(html, {
+                        ADD_ATTR: ['target', 'rel', 'data-code-copy', 'data-action']
+                    });
+                }
+                return html;
+            }
+
+            // Lightweight syntax tint for fenced code. Operates on already
+            // escaped text and matches each token once via one alternation, so
+            // a character is never wrapped twice.
+            function highlightCode(code, lang) {
+                const escaped = escapeHtml(code);
+                const known = /^(js|javascript|ts|typescript|jsx|tsx|python|py|java|c|cpp|cs|csharp|go|rust|rb|ruby|php|sh|bash|shell|sql|json|html|xml|css|yaml|yml)$/i.test(lang || '');
+                if (!known) return escaped;
+                const token = /(?:\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?\b)|(\b(?:function|return|const|let|var|if|else|elif|for|while|do|done|fi|then|class|new|import|from|export|default|async|await|try|catch|finally|throw|typeof|instanceof|this|super|extends|def|lambda|None|True|False|print|self|and|or|not|in|is|package|public|private|protected|static|void|int|float|double|struct|impl|fn|pub|use|mut|match|select|where|insert|update|delete|end)\b)/g;
+                return escaped.replace(token, function(m, num, kw) {
+                    if (num) return '<span class="tok-num">' + num + '</span>';
+                    if (kw) return '<span class="tok-key">' + kw + '</span>';
+                    if (m.charAt(0) === '/' || m.charAt(0) === '#') return '<span class="tok-com">' + m + '</span>';
+                    return '<span class="tok-str">' + m + '</span>';
                 });
             }
 
-            // Send button
+            const CODE_COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+            function buildCodeBlock(block) {
+                const rawLang = block.lang ? block.lang : '';
+                const langClass = rawLang ? escapeHtml(rawLang.toLowerCase()) : 'plaintext';
+                const label = rawLang ? escapeHtml(rawLang) : 'code';
+                return '<div class="code-block">'
+                    + '<div class="code-block-header">'
+                    + '<span class="code-lang">' + label + '</span>'
+                    + '<button class="btn-code-copy" type="button" data-code-copy aria-label="Copy code">'
+                    + CODE_COPY_ICON + '<span>Copy</span>'
+                    + '</button>'
+                    + '</div>'
+                    + '<pre><code class="language-' + langClass + '">' + highlightCode(block.code, rawLang) + '</code></pre>'
+                    + '</div>';
+            }
+
+            function inlineMarkdown(s) {
+                const codes = [];
+                // Pull inline code out first so emphasis rules cannot touch its body.
+                let t = s.replace(/`([^`]+)`/g, function(_, c) {
+                    codes.push(c);
+                    return '\u0002IC' + (codes.length - 1) + '\u0002';
+                });
+                t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function(_, label, href) {
+                    const safe = href.replace(/["']/g, '');
+                    return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+                });
+                t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                t = t.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+                t = t.replace(/~~(.+?)~~/g, '<del>$1</del>');
+                t = t.replace(/\u0002IC(\d+)\u0002/g, function(_, n) {
+                    return '<code>' + codes[Number(n)] + '</code>';
+                });
+                return t;
+            }
+
+            function splitTableRow(line) {
+                let s = line.trim();
+                if (s.charAt(0) === '|') s = s.slice(1);
+                if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+                return s.split('|');
+            }
+
+            function isTableStart(lines, idx) {
+                if (idx + 1 >= lines.length) return false;
+                if (lines[idx].indexOf('|') === -1) return false;
+                const sep = splitTableRow(lines[idx + 1]);
+                if (!sep.length) return false;
+                for (let k = 0; k < sep.length; k++) {
+                    if (!/^:?-{1,}:?$/.test(sep[k].trim())) return false;
+                }
+                return true;
+            }
+
+            function isBlockStart(line) {
+                return /^\u0001CODE\d+\u0001$/.test(line)
+                    || /^(#{1,6})\s+/.test(line)
+                    || /^\s*([-*_])\s*(\1\s*){2,}$/.test(line)
+                    || /^\s*&gt;\s?/.test(line)
+                    || /^\s*[-*+]\s+/.test(line)
+                    || /^\s*\d+[.)]\s+/.test(line);
+            }
+
+            function formatText(text) {
+                if (text == null) return '';
+                const src = String(text);
+
+                // Fenced code blocks are lifted out before escaping so their
+                // bodies stay verbatim; they return as one-line placeholders.
+                const codeBlocks = [];
+                const stripped = src.replace(/```([^\n`]*)\n?([\s\S]*?)```/g, function(_, lang, code) {
+                    codeBlocks.push({ lang: (lang || '').trim(), code: String(code).replace(/\n$/, '') });
+                    return '\n\u0001CODE' + (codeBlocks.length - 1) + '\u0001\n';
+                });
+
+                const lines = escapeHtml(stripped).split('\n');
+                const html = [];
+                let i = 0;
+
+                while (i < lines.length) {
+                    const line = lines[i];
+                    const ph = line.match(/^\u0001CODE(\d+)\u0001$/);
+                    const blank = line.trim() === '';
+
+                    if (ph) {
+                        html.push(buildCodeBlock(codeBlocks[Number(ph[1])]));
+                        i++;
+                        continue;
+                    }
+                    if (blank) { i++; continue; }
+
+                    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+                    if (heading) {
+                        const level = Math.min(heading[1].length + 1, 4);
+                        html.push('<h' + level + '>' + inlineMarkdown(heading[2].trim()) + '</h' + level + '>');
+                        i++;
+                        continue;
+                    }
+
+                    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
+                        html.push('<hr>');
+                        i++;
+                        continue;
+                    }
+
+                    if (/^\s*&gt;\s?/.test(line)) {
+                        const buf = [];
+                        while (i < lines.length && /^\s*&gt;\s?/.test(lines[i])) {
+                            buf.push(lines[i].replace(/^\s*&gt;\s?/, ''));
+                            i++;
+                        }
+                        html.push('<blockquote>' + inlineMarkdown(buf.join('\n')).replace(/\n/g, '<br>') + '</blockquote>');
+                        continue;
+                    }
+
+                    if (isTableStart(lines, i)) {
+                        const header = splitTableRow(line);
+                        let r = i + 2;
+                        const rows = [];
+                        while (r < lines.length && lines[r].indexOf('|') !== -1 && lines[r].trim() !== '') {
+                            rows.push(splitTableRow(lines[r]));
+                            r++;
+                        }
+                        let table = '<table><thead><tr>';
+                        header.forEach(function(c) { table += '<th>' + inlineMarkdown(c.trim()) + '</th>'; });
+                        table += '</tr></thead><tbody>';
+                        rows.forEach(function(row) {
+                            table += '<tr>';
+                            for (let c = 0; c < header.length; c++) {
+                                table += '<td>' + inlineMarkdown((row[c] || '').trim()) + '</td>';
+                            }
+                            table += '</tr>';
+                        });
+                        table += '</tbody></table>';
+                        html.push(table);
+                        i = r;
+                        continue;
+                    }
+
+                    if (/^\s*[-*+]\s+/.test(line)) {
+                        const items = [];
+                        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+                            items.push('<li>' + inlineMarkdown(lines[i].replace(/^\s*[-*+]\s+/, '')) + '</li>');
+                            i++;
+                        }
+                        html.push('<ul>' + items.join('') + '</ul>');
+                        continue;
+                    }
+
+                    if (/^\s*\d+[.)]\s+/.test(line)) {
+                        const items = [];
+                        while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+                            items.push('<li>' + inlineMarkdown(lines[i].replace(/^\s*\d+[.)]\s+/, '')) + '</li>');
+                            i++;
+                        }
+                        html.push('<ol>' + items.join('') + '</ol>');
+                        continue;
+                    }
+
+                    const buf = [line];
+                    i++;
+                    while (i < lines.length && lines[i].trim() !== '' && !isBlockStart(lines[i]) && !isTableStart(lines, i)) {
+                        buf.push(lines[i]);
+                        i++;
+                    }
+                    html.push('<p>' + inlineMarkdown(buf.join('\n')).replace(/\n/g, '<br>') + '</p>');
+                }
+
+                return sanitizeHtml(html.join(''));
+            }
+
+            // Code-block copy buttons are delegated: replies are re-rendered on
+            // every streamed chunk, so binding per block would leak listeners.
+            if (messagesWrapper) {
+                messagesWrapper.addEventListener('click', function(e) {
+                    const btn = e.target.closest('[data-code-copy]');
+                    if (!btn) return;
+                    const codeEl = btn.closest('.code-block').querySelector('code');
+                    const code = codeEl ? codeEl.textContent : '';
+                    navigator.clipboard.writeText(code).then(function() {
+                        const label = btn.querySelector('span');
+                        if (label) label.textContent = 'Copied!';
+                        setTimeout(function() {
+                            if (label) label.textContent = 'Copy';
+                        }, 2000);
+                    });
+                });
+            }
+
+            // ===== TYPEWRITER =====
+            // Reveals streamed text at a steady pace instead of dumping whole
+            // chunks, so a long reply paints smoothly. `paint` receives the
+            // visible slice on every frame.
+            function createTypewriter(paint) {
+                let full = '';
+                let shown = 0;
+                let timer = null;
+                let isDone = false;
+
+                function tick() {
+                    if (shown >= full.length) {
+                        if (isDone) stop();
+                        return;
+                    }
+                    const backlog = full.length - shown;
+                    const step = Math.max(1, Math.ceil(backlog / 6));
+                    shown = Math.min(full.length, shown + step);
+                    paint(full.slice(0, shown));
+                }
+
+                function start() {
+                    if (timer === null && shown < full.length) {
+                        timer = setInterval(tick, 20);
+                    }
+                }
+
+                function stop() {
+                    if (timer !== null) {
+                        clearInterval(timer);
+                        timer = null;
+                    }
+                }
+
+                return {
+                    push: function(chunk) {
+                        if (chunk) full += chunk;
+                        start();
+                    },
+                    finish: function() {
+                        isDone = true;
+                        shown = full.length;
+                        stop();
+                        paint(full);
+                    },
+                    stop: stop
+                };
+            }
+
+            // ===== SCROLL (pinned-to-bottom + jump button) =====
+            function nearBottom() {
+                return chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight < 80;
+            }
+
+            function updateScrollFab() {
+                if (!btnScrollBottom) return;
+                btnScrollBottom.hidden = isPinnedToBottom || messagesWrapper.children.length === 0;
+            }
+
+            // `force` is used when the view must follow (new turn, load, send);
+            // without it the view only follows while the user is at the bottom.
+            function scrollToBottom(force) {
+                if (!force && !isPinnedToBottom) {
+                    updateScrollFab();
+                    return;
+                }
+                requestAnimationFrame(function() {
+                    chatArea.scrollTop = chatArea.scrollHeight;
+                    updateScrollFab();
+                });
+            }
+
+            if (chatArea) {
+                chatArea.addEventListener('scroll', function() {
+                    isPinnedToBottom = nearBottom();
+                    updateScrollFab();
+                });
+            }
+
+            if (btnScrollBottom) {
+                btnScrollBottom.addEventListener('click', function() {
+                    isPinnedToBottom = true;
+                    scrollToBottom(true);
+                });
+            }
+
+            // Send button: doubles as Stop while a reply is streaming.
             btnSend.addEventListener('click', function() {
+                if (sending) {
+                    stopGeneration();
+                    return;
+                }
                 sendMessage(chatInput.value);
             });
 
@@ -1429,6 +2380,15 @@
             // re-reads it once the server has said who is asking.
             setModelPicker('default');
             renderHistory();
+
+            // ===== PWA: SERVICE WORKER =====
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('sw.js').catch(function() {
+                        // Registration is best-effort: the app works without it.
+                    });
+                });
+            }
 
             // ===== SEARCH POPUP (icon -> popup bar + conversation list) =====
             const btnSearchPopup = document.getElementById('btnSearchPopup');
@@ -1552,6 +2512,14 @@
                     applyTheme(prefersLight ? 'light' : 'dark');
                 }
             })();
+
+            // Topbar shortcut mirrors the Appearance setting.
+            if (btnThemeToggle) {
+                btnThemeToggle.addEventListener('click', function() {
+                    const isLight = document.body.classList.contains('light');
+                    applyTheme(isLight ? 'dark' : 'light');
+                });
+            }
 
             // ===== MODEL DROPDOWN =====
             function closeModelDropdown() {
@@ -1717,6 +2685,161 @@
                 updateSendState();
             }
 
+            // ===== RAG: CLIENT-SIDE DOCUMENT EXTRACTION (PDF / TXT) =====
+            // A lightweight, in-browser "retrieval" step: the chosen file's text is
+            // extracted locally and folded into the next prompt as hidden context.
+            // Nothing is uploaded, and only the capped *text* is retained — the
+            // source File/ArrayBuffer is released as soon as extraction ends, so a
+            // large PDF cannot pin memory.
+            const RAG_MAX_CHARS = 120000;                 // ~30k tokens of context, hard cap
+            const RAG_MAX_PAGES = 50;                     // stop early on very long PDFs
+            const RAG_MAX_BYTES = 25 * 1024 * 1024;       // refuse files above 25 MB
+
+            if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc =
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+
+            const btnAttachDoc = document.getElementById('btnAttachDoc');
+            const docInput = document.getElementById('docInput');
+            const docIndicator = document.getElementById('docIndicator');
+            const docIndicatorName = document.getElementById('docIndicatorName');
+            const docIndicatorStatus = document.getElementById('docIndicatorStatus');
+            const docIndicatorRemove = document.getElementById('docIndicatorRemove');
+            let docReading = false;
+
+            function renderDocIndicator(name, status, state) {
+                if (!docIndicator) return;
+                docIndicator.hidden = false;
+                docIndicator.classList.toggle('is-loading', state === 'loading');
+                docIndicator.classList.toggle('is-error', state === 'error');
+                if (docIndicatorName) docIndicatorName.textContent = name || '';
+                if (docIndicatorStatus) docIndicatorStatus.textContent = status || '';
+                if (docIndicatorRemove) docIndicatorRemove.hidden = (state === 'loading');
+                if (btnAttachDoc) btnAttachDoc.classList.toggle('has-doc', state !== 'error');
+            }
+
+            function clearRagDoc() {
+                ragDoc = null;
+                if (docIndicator) {
+                    docIndicator.hidden = true;
+                    docIndicator.classList.remove('is-loading', 'is-error');
+                }
+                if (btnAttachDoc) btnAttachDoc.classList.remove('has-doc');
+                updateSendState();
+            }
+
+            function flashDocError(message) {
+                renderDocIndicator(message, '', 'error');
+                window.setTimeout(function() {
+                    // Only auto-clear if this error chip is still the current one.
+                    if (docIndicator && docIndicator.classList.contains('is-error')) {
+                        clearRagDoc();
+                    }
+                }, 4000);
+            }
+
+            // pdf.js text items -> a plain string. Items may carry their own EOL.
+            function pdfItemsToText(items) {
+                let out = '';
+                for (let i = 0; i < items.length; i++) {
+                    const it = items[i];
+                    if (it && typeof it.str === 'string') out += it.str;
+                    if (it && it.hasEOL) out += '\n';
+                    if (out.length >= RAG_MAX_CHARS) break;
+                }
+                return out;
+            }
+
+            // Extracts text from a PDF with pdf.js. The document (and its worker)
+            // are always torn down in `finally`, and the source buffer is dropped.
+            async function extractPdfText(file) {
+                const lib = window.pdfjsLib;
+                if (!lib || typeof lib.getDocument !== 'function') {
+                    throw new Error('pdf.js unavailable');
+                }
+                const buffer = await file.arrayBuffer();
+                let pdf = null;
+                try {
+                    pdf = await lib.getDocument({ data: new Uint8Array(buffer) }).promise;
+                    const pageCount = Math.min(pdf.numPages, RAG_MAX_PAGES);
+                    let text = '';
+                    for (let p = 1; p <= pageCount; p++) {
+                        const page = await pdf.getPage(p);
+                        try {
+                            const content = await page.getTextContent();
+                            text += pdfItemsToText(content.items) + '\n';
+                        } finally {
+                            page.cleanup();
+                        }
+                        if (text.length >= RAG_MAX_CHARS) break;
+                    }
+                    return text.slice(0, RAG_MAX_CHARS).trim();
+                } finally {
+                    if (pdf) {
+                        try { await pdf.destroy(); } catch (e) {}
+                    }
+                }
+            }
+
+            async function extractDocText(file) {
+                const name = (file.name || '').toLowerCase();
+                const isPdf = name.endsWith('.pdf') || file.type === 'application/pdf';
+                if (isPdf) return await extractPdfText(file);
+                // Everything else is treated as plain text (.txt / text/plain).
+                return (await file.text()).slice(0, RAG_MAX_CHARS).trim();
+            }
+
+            async function handleDocFile(file) {
+                if (!file || docReading) return;
+                if (file.size > RAG_MAX_BYTES) {
+                    flashDocError(file.name + ' — too large');
+                    if (docInput) docInput.value = '';
+                    return;
+                }
+                docReading = true;
+                renderDocIndicator(file.name, 'reading…', 'loading');
+                if (docInput) docInput.disabled = true;
+                try {
+                    const text = await extractDocText(file);
+                    if (!text) {
+                        flashDocError(file.name + ' — no text found');
+                        return;
+                    }
+                    ragDoc = { name: file.name, text: text };
+                    renderDocIndicator(file.name, 'attached', 'ready');
+                    updateSendState();
+                } catch (e) {
+                    flashDocError(file.name + ' — could not read');
+                } finally {
+                    docReading = false;
+                    if (docInput) {
+                        docInput.disabled = false;
+                        docInput.value = ''; // allow re-selecting the same file
+                    }
+                }
+            }
+
+            if (btnAttachDoc && docInput) {
+                btnAttachDoc.addEventListener('click', function() {
+                    docInput.click();
+                });
+            }
+
+            if (docInput) {
+                docInput.addEventListener('change', function(e) {
+                    const file = e.target.files && e.target.files[0];
+                    if (file) handleDocFile(file);
+                    else docInput.value = '';
+                });
+            }
+
+            if (docIndicatorRemove) {
+                docIndicatorRemove.addEventListener('click', function() {
+                    clearRagDoc();
+                });
+            }
+
             const btnVoiceInput = document.getElementById('btnVoiceInput');
             if (btnVoiceInput) {
                 btnVoiceInput.addEventListener('click', function() {
@@ -1841,12 +2964,28 @@
             window.ChatBotSettings = window.ChatBotSettings || {};
             window.ChatBotSettings.openPanel = function(key) {
                 if (settingsModalOverlay) settingsModalOverlay.classList.add('active');
+                var activeItem = null;
                 settingsMenuItems.forEach(function(el) {
-                    el.classList.toggle('active', el.getAttribute('data-panel') === key);
+                    var match = el.getAttribute('data-panel') === key;
+                    el.classList.toggle('active', match);
+                    if (match) activeItem = el;
                 });
                 showSettingsPanel(key);
+                if (settingsPageTitle) {
+                    settingsPageTitle.textContent = activeItem
+                        ? activeItem.getAttribute('data-title')
+                        : (key.charAt(0).toUpperCase() + key.slice(1));
+                }
                 if (key === 'account') refreshAccountPanel();
             };
+
+            // Sidebar footer gear button — quick access to the Safety panel.
+            const btnSidebarSettings = document.getElementById('btnSidebarSettings');
+            if (btnSidebarSettings) {
+                btnSidebarSettings.addEventListener('click', function() {
+                    window.ChatBotSettings.openPanel('safety');
+                });
+            }
 
             // ===== ACCOUNT PANEL (email + sign out everywhere + delete) =====
             const accountEmail = document.getElementById('accountEmail');
