@@ -1,3 +1,4 @@
+import { UpstreamError, upstreamErrorInfo } from './errors.ts';
 import type { ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
@@ -6,7 +7,7 @@ const SYSTEM_PROMPT =
 
 interface StreamChunk {
   choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[];
-  error?: { message?: string };
+  error?: { message?: string; code?: string | number; status?: string; type?: string };
 }
 
 export interface OpenAICompatibleOptions {
@@ -67,12 +68,11 @@ export class OpenAICompatibleProvider implements ChatProvider {
     });
 
     if (!response.ok || !response.body) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(
-        `Upstream provider returned ${response.status} ${response.statusText}${
-          detail ? `: ${detail.slice(0, 500)}` : ''
-        }`,
-      );
+      // Surface the vendor's own message (e.g. "models/gemini-x is not found")
+      // instead of a generic failure, so the UI can explain what went wrong.
+      const body = await response.text().catch(() => '');
+      const { message, code } = upstreamErrorInfo(response.status, response.statusText, body);
+      throw new UpstreamError(message, { status: response.status, code });
     }
 
     const decoder = new TextDecoder();
@@ -119,7 +119,16 @@ export class OpenAICompatibleProvider implements ChatProvider {
       }
 
       if (chunk.error) {
-        throw new Error(chunk.error.message ?? 'Upstream provider reported an error');
+        const code =
+          typeof chunk.error.status === 'string'
+            ? chunk.error.status
+            : typeof chunk.error.code === 'number' || typeof chunk.error.code === 'string'
+              ? String(chunk.error.code)
+              : undefined;
+        throw new UpstreamError(chunk.error.message ?? 'Upstream provider reported an error', {
+          status: 502,
+          ...(code !== undefined ? { code } : {}),
+        });
       }
 
       const content = chunk.choices?.[0]?.delta?.content;

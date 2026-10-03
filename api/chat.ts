@@ -28,6 +28,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { config } from '../src/config.ts';
 import { AnthropicProvider } from '../src/providers/anthropic.ts';
+import { UpstreamError } from '../src/providers/errors.ts';
 import { MockProvider } from '../src/providers/mock.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
 import { DEFAULT_MODEL_LABEL, PROVIDER_PRESETS } from '../src/providers/presets.ts';
@@ -55,13 +56,20 @@ class ApiError extends Error {
   readonly status: number;
   readonly code: string | undefined;
   readonly model: string | undefined;
+  /** The upstream vendor's own error code, when the failure came from a model API. */
+  readonly upstreamCode: string | undefined;
 
-  constructor(status: number, message: string, options: { code?: string; model?: string } = {}) {
+  constructor(
+    status: number,
+    message: string,
+    options: { code?: string; model?: string; upstreamCode?: string } = {},
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = options.code;
     this.model = options.model;
+    this.upstreamCode = options.upstreamCode;
   }
 }
 
@@ -248,6 +256,34 @@ function selectProvider(modelLabel: unknown, req: Req): { provider: ChatProvider
   }
 }
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== '') return error.message;
+  return 'The assistant failed to finish this response.';
+}
+
+/** The HTTP status carried by a provider failure, defaulting to 502. */
+function upstreamStatusOf(error: unknown): number {
+  if (error instanceof UpstreamError) return error.status;
+  const candidate = (error as { status?: unknown } | null)?.status;
+  return typeof candidate === 'number' ? candidate : 502;
+}
+
+/**
+ * Wraps a provider failure so the client receives the vendor's own status and
+ * message (e.g. a 404 "models/gemini-... is not found") rather than a generic
+ * server error.
+ */
+function toUpstreamApiError(error: unknown, model: string): ApiError {
+  const status = upstreamStatusOf(error);
+  const safe = status >= 400 && status <= 599 ? status : 502;
+  const upstreamCode = error instanceof UpstreamError ? error.code : undefined;
+  return new ApiError(safe, errorMessage(error), {
+    code: 'upstream_error',
+    model,
+    ...(upstreamCode !== undefined ? { upstreamCode } : {}),
+  });
+}
+
 export default async function handler(req: Req, res: Res): Promise<void> {
   // 1. Method guard — the explicit fix for the 405.
   if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
@@ -281,36 +317,52 @@ export default async function handler(req: Req, res: Res): Promise<void> {
     const history = normalizeHistory(body.history);
     const messages: ChatMessage[] = [...history, { role: 'user', content: message }];
 
-    // 2. Stream the answer as Server-Sent Events.
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
+    const abort = new AbortController();
+    req.on('close', () => abort.abort());
 
+    // 2. Stream the answer as Server-Sent Events.
+    //
+    // The SSE headers are withheld until the upstream yields its first token.
+    // If the provider fails first — the usual case when a model id is retired
+    // or unknown (Gemini 404) — nothing has been written yet, so we can still
+    // reply with a genuine JSON error carrying the vendor's status and message.
+    let started = false;
+    const startSse = (): void => {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.write(`event: meta\ndata: ${JSON.stringify({ model })}\n\n`);
+      started = true;
+    };
     const send = (event: string, data: unknown): void => {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    send('meta', { model });
-
-    const abort = new AbortController();
-    req.on('close', () => abort.abort());
-
     let answer = '';
     try {
       for await (const chunk of provider.streamChat({ messages, signal: abort.signal })) {
+        if (!started) startSse();
         answer += chunk;
         send('delta', { text: chunk });
       }
-    } catch {
-      if (!abort.signal.aborted) {
-        send('error', { message: 'The assistant failed to finish this response.' });
+    } catch (error) {
+      if (abort.signal.aborted) {
+        res.end();
+        return;
       }
+      if (!started) {
+        // Nothing streamed yet: hand the real upstream failure to the client,
+        // which surfaces it through the normal non-2xx JSON error path.
+        throw toUpstreamApiError(error, model);
+      }
+      send('error', { message: errorMessage(error) });
       res.end();
       return;
     }
 
+    if (!started) startSse();
     send('done', { content: answer });
     res.end();
   } catch (error) {
@@ -319,6 +371,7 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         code: error.code,
         message: error.message,
         ...(error.model !== undefined ? { model: error.model } : {}),
+        ...(error.upstreamCode !== undefined ? { upstreamCode: error.upstreamCode } : {}),
       });
       return;
     }

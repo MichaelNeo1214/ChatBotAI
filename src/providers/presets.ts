@@ -28,7 +28,14 @@ export const PROVIDER_PRESETS: Readonly<Record<string, ProviderPreset>> = {
   Gemini: {
     adapter: 'openai-compatible',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.0-flash',
+    /**
+     * Google shut down gemini-2.0-flash on 2026-06-01 and limits the 2.5
+     * family to previously-active projects, so both of those 404 for new keys.
+     * This is the current general-availability Flash model (also the id shown
+     * in Google's OpenAI-compatibility docs). It can be overridden per request
+     * with the X-Provider-Model header.
+     */
+    model: 'gemini-3.8-flash',
   },
   DeepSeek: {
     adapter: 'openai-compatible',

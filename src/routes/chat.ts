@@ -129,7 +129,13 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
       if (answer !== '') addMessage(conversation.id, 'assistant', answer);
       if (!abort.signal.aborted) {
         console.error('[chat] provider stream failed', streamError);
-        send('error', { message: 'The assistant failed to finish this response.' });
+        // Forward the provider's own reason (e.g. a retired model id) instead
+        // of a generic message, so the UI can explain what actually failed.
+        const message =
+          streamError instanceof Error && streamError.message.trim() !== ''
+            ? streamError.message
+            : 'The assistant failed to finish this response.';
+        send('error', { message });
       }
       res.end();
       return;
