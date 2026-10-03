@@ -34,9 +34,9 @@
 
             function defaultKeys() {
                 return {
-                    openai: '', gemini: '', claude: '', deepseek: '',
-                    openaiBaseUrl: '', geminiBaseUrl: '', claudeBaseUrl: '', deepseekBaseUrl: '',
-                    openaiModel: '', geminiModel: '', claudeModel: '', deepseekModel: '',
+                    openai: '', gemini: '', claude: '', deepseek: '', groq: '',
+                    openaiBaseUrl: '', geminiBaseUrl: '', claudeBaseUrl: '', deepseekBaseUrl: '', groqBaseUrl: '',
+                    openaiModel: '', geminiModel: '', claudeModel: '', deepseekModel: '', groqModel: '',
                     defaultBaseUrl: '', defaultModel: ''
                 };
             }
@@ -143,7 +143,8 @@
                 { key: 'openai',   label: 'GPT-4o',     provider: 'openai' },
                 { key: 'gemini',   label: 'Gemini',     provider: 'gemini' },
                 { key: 'claude',   label: 'Claude',     provider: 'anthropic' },
-                { key: 'deepseek', label: 'DeepSeek',   provider: 'deepseek' }
+                { key: 'deepseek', label: 'DeepSeek',   provider: 'deepseek' },
+                { key: 'groq',     label: 'Groq',       provider: 'groq' }
             ];
 
             function modelDef(key) {
@@ -560,7 +561,7 @@
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
                 + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
                 + '**History** — every chat is saved to your account and stays there. Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
-                + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude and DeepSeek are sent through the server with the API key you save in Settings → API Key.\n\n'
+                + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
                 + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Only the file names travel with your message; file contents are not uploaded.\n\n'
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
@@ -3142,7 +3143,7 @@
                 });
             }
 
-            // ===== API KEY SETTINGS (5 providers, persisted in ChatBotStore) =====
+            // ===== API KEY SETTINGS (6 providers, persisted in ChatBotStore) =====
             // These keys never leave the browser except as per-request headers on
             // POST /api/chat. The server holds them only for that request.
             function refreshApiStatus(card, has) {

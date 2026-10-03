@@ -264,6 +264,11 @@
                             <span class="model-name">DeepSeek</span>
                             <span class="model-desc" data-i18n="modelDescDeepseek">DeepSeek reasoning</span>
                         </button>
+                        <button class="model-option" data-model="Groq">
+                            <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                            <span class="model-name">Groq</span>
+                            <span class="model-desc" data-i18n="modelDescGroq">Fast open models</span>
+                        </button>
                     </div>
                 </div>
                 <button class="btn-send" id="btnSend" disabled aria-label="Send message">
@@ -530,6 +535,26 @@
         </div>
         <div class="api-key-row">
           <input type="password" class="api-key-input" data-api-field="key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+          <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="api-actions">
+          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn danger" data-api-clear type="button">Delete</button>
+        </div>
+      </div>
+
+      <div class="api-card" data-provider="groq">
+        <div class="api-card-head">
+          <div>
+            <div class="api-card-name">Groq</div>
+            <div class="setting-desc" data-i18n="apiGroqDesc">Powers the Groq model option. Get a key from Groq Console.</div>
+          </div>
+          <span class="api-status" data-api-status>Not set</span>
+        </div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" data-api-field="key" placeholder="gsk_..." autocomplete="off" spellcheck="false">
           <button class="api-icon-btn" data-api-toggle type="button" aria-label="Show or hide key">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>

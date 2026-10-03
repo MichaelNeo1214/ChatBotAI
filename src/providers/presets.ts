@@ -42,6 +42,17 @@ export const PROVIDER_PRESETS: Readonly<Record<string, ProviderPreset>> = {
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-chat',
   },
+  Groq: {
+    adapter: 'openai-compatible',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    /**
+     * Groq decommissioned llama-3.3-70b-versatile and llama-3.1-8b-instant on
+     * 2026-08-16, so the preset points at its current production flagship,
+     * openai/gpt-oss-120b (OpenAI-compatible chat/completions). Override per
+     * request with the X-Provider-Model header.
+     */
+    model: 'openai/gpt-oss-120b',
+  },
   Claude: {
     adapter: 'anthropic',
     /**

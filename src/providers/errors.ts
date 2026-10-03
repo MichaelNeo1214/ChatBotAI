@@ -1,15 +1,16 @@
 /**
  * Errors raised when an upstream model API answers with a non-2xx status.
  *
- * Vendors disagree on the shape of their error bodies (OpenAI/Gemini use
- * `{ error: { message, code, status } }`, Anthropic uses
- * `{ error: { message, type } }`, some return plain text). `upstreamErrorInfo`
- * normalises all of them to a single readable message + code so the real reason
- * ("models/gemini-2.0-flash is not found ...") reaches the browser instead of a
- * generic "something failed".
+ * Vendors disagree on the shape of their error bodies: OpenAI/Gemini usually
+ * send `{ error: { message, code, status } }`, but the Gemini OpenAI-compatible
+ * layer sometimes wraps it in an array (`[ { error: { ... } } ]`), Anthropic
+ * uses `{ error: { message, type } }`, and some gateways return plain text.
+ * `upstreamErrorInfo` normalises all of these to one readable message + code so
+ * the real reason ("This model is currently experiencing high demand ...")
+ * reaches the browser instead of a wall of raw JSON.
  */
 export class UpstreamError extends Error {
-  /** The HTTP status the vendor returned (404, 400, 403, ...). */
+  /** The HTTP status the vendor returned (404, 400, 403, 503, ...). */
   readonly status: number;
   /** The vendor's own machine-readable code, when it sent one. */
   readonly code: string | undefined;
@@ -28,6 +29,59 @@ function toCode(value: unknown): string | undefined {
   return undefined;
 }
 
+interface Extracted {
+  message: string;
+  code?: string;
+}
+
+/**
+ * Walks an arbitrary parsed error payload looking for the first useful message.
+ * Handles arrays (vendor wrappers), `{ error: ... }` objects, `{ error: "..." }`
+ * strings, and plain `{ message }` objects.
+ */
+function extract(value: unknown, depth = 0): Extracted | undefined {
+  if (depth > 5) return undefined;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extract(item, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return text === '' ? undefined : { message: text };
+  }
+
+  if (value === null || typeof value !== 'object') return undefined;
+  const bag = value as Record<string, unknown>;
+
+  const error = bag.error;
+  if (error !== undefined && error !== null) {
+    const nested = extract(error, depth + 1);
+    if (nested !== undefined) {
+      const code = nested.code ?? toCode(bag.status) ?? toCode(bag.code) ?? toCode(bag.type);
+      return code !== undefined ? { message: nested.message, code } : { message: nested.message };
+    }
+  }
+
+  const message = typeof bag.message === 'string' ? bag.message.trim() : '';
+  if (message !== '') {
+    const code = toCode(bag.status) ?? toCode(bag.code) ?? toCode(bag.type);
+    return code !== undefined ? { message, code } : { message };
+  }
+
+  // `error`/`message` were present but held no text; try the other key.
+  if (error !== undefined && error !== null) {
+    const nested = extract(error, depth + 1);
+    if (nested !== undefined) return nested;
+  }
+
+  return undefined;
+}
+
 /**
  * Extracts a human-readable message and vendor code from an error response.
  * Falls back to the raw (trimmed) body, then to the status line.
@@ -38,35 +92,20 @@ export function upstreamErrorInfo(
   body: string,
 ): { message: string; code?: string } {
   const trimmed = body.trim();
+  if (trimmed === '') {
+    return { message: `Upstream provider returned ${status} ${statusText}`.trim() };
+  }
 
-  if (trimmed !== '') {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      // Not JSON — some vendors return HTML or plain text on failure.
-      return { message: trimmed.slice(0, 500) };
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    const found = extract(parsed);
+    if (found !== undefined) {
+      return found.code !== undefined ? { message: found.message, code: found.code } : { message: found.message };
     }
-
-    const error = (parsed as { error?: unknown } | null)?.error;
-    if (typeof error === 'string' && error.trim() !== '') {
-      return { message: error.trim() };
-    }
-    if (error !== null && typeof error === 'object') {
-      const bag = error as Record<string, unknown>;
-      const message = typeof bag.message === 'string' ? bag.message.trim() : '';
-      // Prefer the symbolic status ("NOT_FOUND") over the numeric one.
-      const code = toCode(bag.status) ?? toCode(bag.code) ?? toCode(bag.type);
-      if (message !== '') return code !== undefined ? { message, code } : { message };
-    }
-
-    const topMessage = (parsed as { message?: unknown } | null)?.message;
-    if (typeof topMessage === 'string' && topMessage.trim() !== '') {
-      return { message: topMessage.trim() };
-    }
-
+  } catch {
+    // Not JSON — some vendors return HTML or plain text on failure.
     return { message: trimmed.slice(0, 500) };
   }
 
-  return { message: `Upstream provider returned ${status} ${statusText}`.trim() };
+  return { message: trimmed.slice(0, 500) };
 }

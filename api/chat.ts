@@ -136,7 +136,7 @@ function normalizeHistory(value: unknown): ChatMessage[] {
  * Chooses the upstream provider for this request — the multi-model switch.
  *
  *   - no label / "ChatBot AI" -> the server's own env-configured provider
- *   - "GPT-4o" / "Gemini" / "DeepSeek" -> OpenAI-compatible, using the caller's key
+ *   - "GPT-4o" / "Gemini" / "DeepSeek" / "Groq" -> OpenAI-compatible, using the caller's key
  *   - "Claude" -> Anthropic Messages API, using the caller's key
  *   - X-Provider-Base-Url on any preset -> talk to a self-hosted endpoint instead
  */

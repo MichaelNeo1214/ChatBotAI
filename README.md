@@ -153,8 +153,9 @@ Presets live in `src/providers/presets.ts`:
 | Label | Adapter | Base URL | Model |
 | --- | --- | --- | --- |
 | `GPT-4o` | openai-compatible | `https://api.openai.com/v1` | `gpt-4o` |
-| `Gemini` | openai-compatible | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
+| `Gemini` | openai-compatible | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-3.8-flash` |
 | `DeepSeek` | openai-compatible | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| `Groq` | openai-compatible | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` |
 | `Claude` | anthropic | — | `claude-opus-5` |
 
 The headers are ignored for `ChatBot AI`. An unknown label returns

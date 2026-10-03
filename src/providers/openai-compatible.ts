@@ -5,6 +5,61 @@ const SYSTEM_PROMPT =
   'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
   'Use Markdown for structure and fenced code blocks for code.';
 
+/**
+ * Statuses worth retrying: transient overloads (503), rate limits (429) and
+ * gateway hiccups. Gemini commonly returns 503 "high demand" for a few seconds,
+ * so a short exponential backoff recovers most turns instead of failing them.
+ */
+const RETRYABLE_STATUS = new Set<number>([408, 425, 429, 500, 502, 503, 504]);
+/** 1 initial attempt + 3 retries. */
+const MAX_ATTEMPTS = 4;
+const RETRY_BASE_MS = 600;
+const RETRY_MAX_MS = 5000;
+
+function abortError(): Error {
+  const error = new Error('The request was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+/** A cancellable sleep: resolves after `ms`, or rejects as soon as the signal aborts. */
+function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? abortError());
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? abortError());
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Reads a `Retry-After` header (seconds or HTTP date) into milliseconds. */
+function parseRetryAfter(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, RETRY_MAX_MS);
+  const date = Date.parse(value);
+  if (!Number.isNaN(date)) {
+    const delta = date - Date.now();
+    return delta > 0 ? Math.min(delta, RETRY_MAX_MS) : 0;
+  }
+  return undefined;
+}
+
+function backoffDelay(attempt: number): number {
+  const exponential = Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_MAX_MS);
+  return exponential + Math.floor(Math.random() * 250);
+}
+
 interface StreamChunk {
   choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[];
   error?: { message?: string; code?: string | number; status?: string; type?: string };
@@ -48,32 +103,60 @@ export class OpenAICompatibleProvider implements ChatProvider {
     return this.#model;
   }
 
-  async *streamChat(request: ChatRequest): AsyncIterable<string> {
+  /**
+   * POSTs the chat request, retrying transient upstream failures (Gemini's 503
+   * "high demand", 429 rate limits, gateway errors) with exponential backoff +
+   * jitter, honouring `Retry-After` when the vendor sends it. Retries happen
+   * before any token is yielded, so they never duplicate streamed output.
+   */
+  async #fetchResponse(request: ChatRequest): Promise<Response> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     // Local runtimes such as Ollama accept an empty key; don't send the header.
     if (this.#apiKey !== '') headers.Authorization = `Bearer ${this.#apiKey}`;
 
-    const response = await fetch(`${this.#baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      signal: request.signal ?? null,
-      body: JSON.stringify({
-        model: this.#model,
-        stream: true,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...request.messages.map((m) => ({ role: m.role, content: m.content })),
-        ],
-      }),
+    const body = JSON.stringify({
+      model: this.#model,
+      stream: true,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...request.messages.map((m) => ({ role: m.role, content: m.content })),
+      ],
     });
+    const url = `${this.#baseUrl}/chat/completions`;
 
-    if (!response.ok || !response.body) {
-      // Surface the vendor's own message (e.g. "models/gemini-x is not found")
+    for (let attempt = 0; ; attempt += 1) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        signal: request.signal ?? null,
+        body,
+      });
+
+      if (response.ok && response.body) return response;
+
+      if (response.ok) {
+        throw new UpstreamError('The upstream provider returned an empty stream.', {
+          status: 502,
+        });
+      }
+
+      const text = await response.text().catch(() => '');
+      const isLastAttempt = attempt >= MAX_ATTEMPTS - 1;
+      if (!isLastAttempt && RETRYABLE_STATUS.has(response.status)) {
+        const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
+        await sleep(retryAfter ?? backoffDelay(attempt), request.signal);
+        continue;
+      }
+
+      // Surface the vendor's own message (e.g. "high demand" or "not found")
       // instead of a generic failure, so the UI can explain what went wrong.
-      const body = await response.text().catch(() => '');
-      const { message, code } = upstreamErrorInfo(response.status, response.statusText, body);
+      const { message, code } = upstreamErrorInfo(response.status, response.statusText, text);
       throw new UpstreamError(message, { status: response.status, code });
     }
+  }
+
+  async *streamChat(request: ChatRequest): AsyncIterable<string> {
+    const response = await this.#fetchResponse(request);
 
     const decoder = new TextDecoder();
     let buffer = '';
