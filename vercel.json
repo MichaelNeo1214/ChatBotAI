@@ -3,11 +3,6 @@
   "framework": null,
   "buildCommand": "echo \"static PWA: no build step\"",
   "outputDirectory": ".",
-  "functions": {
-    "api/chat.ts": {
-      "maxDuration": 60
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
