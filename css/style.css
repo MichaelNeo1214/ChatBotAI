@@ -1200,6 +1200,19 @@
             overflow-wrap: break-word;
         }
 
+        /* Generated image painted into an assistant bubble. */
+        .message-image {
+            display: block;
+            margin-top: 10px;
+            max-width: 100%;
+            width: auto;
+            max-height: 512px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            object-fit: contain;
+        }
+
         .message-text p + p {
             margin-top: 12px;
         }

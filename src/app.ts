@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.ts';
 import { chatRouter } from './routes/chat.ts';
 import { conversationsRouter } from './routes/conversations.ts';
 import { healthRouter } from './routes/health.ts';
+import { imageRouter } from './routes/image.ts';
 
 function cors(req: Request, res: Response, next: NextFunction): void {
   const origin = req.headers.origin;
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/conversations', conversationsRouter);
   app.use('/api/chat', chatRouter);
+  app.use('/api/image', imageRouter);
 
   app.use('/api', notFoundHandler);
 
