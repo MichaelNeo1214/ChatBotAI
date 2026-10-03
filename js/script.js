@@ -163,7 +163,8 @@
                 { key: 'gemini',   label: 'Gemini',     provider: 'gemini' },
                 { key: 'claude',   label: 'Claude',     provider: 'anthropic' },
                 { key: 'deepseek', label: 'DeepSeek',   provider: 'deepseek' },
-                { key: 'groq',     label: 'Groq',       provider: 'groq' }
+                { key: 'groq',     label: 'Groq',       provider: 'groq' },
+                { key: 'image',    label: 'Image',      provider: 'image' }
             ];
 
             function modelDef(key) {
@@ -208,8 +209,21 @@
 
             function modelHasKey(key) {
                 if (key === 'default') return true;
+                if (key === 'image') return !!imageBackend();
                 const keys = getApiKeys();
                 return !!(keys[key] && keys[key].trim());
+            }
+
+            // The Image model has no key of its own: it borrows whichever
+            // image-capable BYOK key is set, preferring OpenAI over Gemini.
+            // Returns null when neither is configured (the UI then prompts).
+            function imageBackend() {
+                const keys = getApiKeys();
+                const openai = String(keys.openai || '').trim();
+                if (openai) return { provider: 'openai', key: openai };
+                const gemini = String(keys.gemini || '').trim();
+                if (gemini) return { provider: 'gemini', key: gemini };
+                return null;
             }
 
             // The assistant bubble text for a turn: the message, plus a plain
@@ -581,6 +595,7 @@
                 + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
                 + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
                 + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
+                + '**Images** — pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
                 + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Only the file names travel with your message; file contents are not uploaded.\n\n'
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
@@ -1281,7 +1296,7 @@
 
                 messagesWrapper.innerHTML = '';
                 messages.forEach(function(m) {
-                    addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.text || '');
+                    addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.text || '', { image: m.image });
                 });
                 const nodes = messagesWrapper.querySelectorAll('.message');
                 for (let i = 0; i < nodes.length && i < messages.length; i++) {
@@ -1488,15 +1503,18 @@
                     const el = nodes[i];
                     if (el.getAttribute('data-transient') === 'true') continue;
                     const text = typeof el.__sourceText === 'string' ? el.__sourceText : '';
-                    if (!text) continue;
+                    const image = typeof el.__image === 'string' ? el.__image : '';
+                    if (!text && !image) continue;
                     if (!el.__clientId) el.__clientId = newUuid();
                     if (!el.__createdAt) el.__createdAt = new Date().toISOString();
-                    out.push({
+                    const record = {
                         id: el.__clientId,
                         role: el.classList.contains('user') ? 'user' : 'assistant',
                         text: text,
                         createdAt: el.__createdAt
-                    });
+                    };
+                    if (image) record.image = image;
+                    out.push(record);
                 }
                 chatHistory = out;
                 saveHistory(chatHistory);
@@ -1548,7 +1566,7 @@
                 setActiveConversationId(id);
 
                 saved.forEach(function(m) {
-                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
+                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '', { image: m.image });
                     if (bubble && bubble.element) {
                         if (m.id) bubble.element.__clientId = m.id;
                         if (m.createdAt) bubble.element.__createdAt = m.createdAt;
@@ -2084,6 +2102,10 @@
             // Re-runs the most recent user turn without adding a new user bubble.
             async function regenerate() {
                 if (sending) return;
+                if (lastTurn.image && lastTurn.raw) {
+                    await generateImageTurn(lastTurn.raw);
+                    return;
+                }
                 if (!lastTurn.raw && !(lastTurn.files && lastTurn.files.length)) return;
                 if (!modelHasKey(currentModelKey)) {
                     showKeyAlert(currentModelKey);
@@ -2117,6 +2139,22 @@
                     messagesWrapper.classList.add('visible');
                 }
 
+                // An image turn skips the streaming chat path entirely.
+                const imagePrompt = imagePromptFrom(raw);
+                if (imagePrompt !== null) {
+                    attachedFiles.length = 0;
+                    clearRagDoc();
+                    const preview = document.getElementById('filePreviewArea');
+                    if (preview) {
+                        preview.innerHTML = '';
+                        preview.hidden = true;
+                    }
+                    chatInput.value = '';
+                    chatInput.style.height = 'auto';
+                    if (imagePrompt !== '') await generateImageTurn(imagePrompt);
+                    return;
+                }
+
                 // The backend accepts no file bytes, so the turn carries the
                 // attachment names and nothing else.
                 const filesSnapshot = attachedFiles.map(function(f) {
@@ -2143,9 +2181,93 @@
                 await runAssistant(raw, filesSnapshot, ragSnapshot);
             }
 
-            function addMessage(role, text) {
+            // An image turn is requested either by selecting the Image model or
+            // by typing "/image <prompt>". Returns the prompt, or null when this
+            // is a normal chat turn.
+            function imagePromptFrom(raw) {
+                const match = /^\/image\b\s*([\s\S]*)$/i.exec(raw);
+                if (match) return (match[1] || '').trim();
+                if (currentModelKey === 'image') return raw.trim();
+                return null;
+            }
+
+            // Generates one image and paints it into an assistant bubble. Unlike
+            // chat this is not streamed: POST /api/image answers with JSON.
+            async function generateImageTurn(prompt) {
+                const backend = imageBackend();
+                if (!backend) {
+                    showKeyAlert('image');
+                    return;
+                }
+                // The prompt is a real user turn, so the conversation exists even
+                // if generation later fails.
+                setActiveConversationId(activeConversationId || newUuid());
+
+                if (!chatStarted) {
+                    chatStarted = true;
+                    welcomeScreen.style.display = 'none';
+                    messagesWrapper.classList.add('visible');
+                }
+
+                addMessage('user', prompt);
+                persistHistory();
+                lastTurn = { raw: prompt, files: [], image: true };
+
+                sending = true;
+                activeAbort = new AbortController();
+                const signal = activeAbort.signal;
+                updateSendState();
+                setComposerBusy(true);
+                typingIndicator.classList.add('visible');
+                isPinnedToBottom = true;
+                scrollToBottom(true);
+
+                const bubble = addMessage('assistant', 'Generating image…');
+
+                try {
+                    const res = await fetch(API_BASE + '/image', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Provider-Key': backend.key
+                        },
+                        body: JSON.stringify({ prompt: prompt, provider: backend.provider }),
+                        signal: signal
+                    });
+                    if (!res.ok) throw await backendError(res);
+                    const data = await res.json();
+                    const url = data && data.image ? data.image.dataUrl : '';
+                    if (!url) throw new Error('The image service returned no image.');
+                    bubble.setImage(url, prompt);
+                } catch (error) {
+                    if (error && error.name === 'AbortError') {
+                        bubble.setText('— stopped by you.');
+                    } else if (error && error.code === 'missing_api_key') {
+                        bubble.element.remove();
+                        showKeyAlert(error.model || 'image');
+                    } else {
+                        const message = (error && error.message) ? error.message : 'request failed.';
+                        bubble.setText('Sorry — ' + message);
+                    }
+                } finally {
+                    typingIndicator.classList.remove('visible');
+                    sending = false;
+                    activeAbort = null;
+                    setComposerBusy(false);
+                    updateSendState();
+                    persistHistory();
+                    chatInput.focus();
+                }
+
+                await refreshConversations();
+                scrollToBottom(true);
+            }
+
+            function addMessage(role, text, options) {
                 const msg = document.createElement('div');
                 msg.className = 'message ' + role;
+                const image = (options && options.image) ? String(options.image) : '';
 
                 const avatarIcon = role === 'user'
                     ? 'U'
@@ -2189,6 +2311,16 @@
                 if (!msg.__clientId) msg.__clientId = newUuid();
                 if (!msg.__createdAt) msg.__createdAt = new Date().toISOString();
                 const textNode = msg.querySelector('.message-text');
+
+                if (image) {
+                    const img = document.createElement('img');
+                    img.className = 'message-image';
+                    img.src = image;
+                    img.alt = (String(text || '').trim() || 'Generated image').slice(0, 120);
+                    img.loading = 'lazy';
+                    msg.querySelector('.message-body').insertBefore(img, msg.querySelector('.message-actions'));
+                    msg.__image = image;
+                }
 
                 // Copy button
                 const copyBtn = msg.querySelector('[data-action="copy"]');
@@ -2240,7 +2372,25 @@
                     setText: function(next) {
                         currentText = next;
                         msg.__sourceText = currentText;
+                        const old = msg.querySelector('.message-image');
+                        if (old) old.remove();
+                        msg.__image = '';
                         textNode.innerHTML = formatText(currentText);
+                    },
+                    setImage: function(url, alt) {
+                        currentText = '';
+                        msg.__sourceText = '';
+                        textNode.innerHTML = '';
+                        let img = msg.querySelector('.message-image');
+                        if (!img) {
+                            img = document.createElement('img');
+                            img.className = 'message-image';
+                            img.loading = 'lazy';
+                            msg.querySelector('.message-body').insertBefore(img, msg.querySelector('.message-actions'));
+                        }
+                        img.src = url;
+                        img.alt = (String(alt || '').trim() || 'Generated image').slice(0, 120);
+                        msg.__image = url;
                     },
                     getText: function() {
                         return currentText;
