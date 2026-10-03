@@ -1,7 +1,7 @@
         // ===== LOCAL STORE (provider keys + display profile) =====
         // Only things that belong to this browser live here. Conversations are
-        // NOT stored client-side any more: the server owns them and the sidebar
-        // is rendered from GET /api/conversations.
+        // device-local too (IndexedDB, see below) and the sidebar is rendered
+        // from that store; an account backend is optional and only mirrored.
         // The display profile stays namespaced per owner: 'guest' when signed
         // out, 'user:<id|email>' when signed in.
         window.ChatBotStore = (function() {
@@ -132,8 +132,27 @@
             // the File/ArrayBuffer) so a large document can't pin memory.
             let ragDoc = null;
             let conversations = [];
+            // Every conversation ("session") lives in IndexedDB; the sidebar is a
+            // projection of this list. `conversations` is the render-ready form.
+            let sessions = [];
             let activeConversationId = null;
             let currentModelKey = 'default';
+
+            // The open conversation is remembered across reloads so the next turn
+            // appends to the same session instead of forking a new one.
+            const ACTIVE_CONV_LS_KEY = 'chatbotai_active_conversation_id';
+
+            function setActiveConversationId(id) {
+                activeConversationId = id || null;
+                try {
+                    if (activeConversationId) localStorage.setItem(ACTIVE_CONV_LS_KEY, activeConversationId);
+                    else localStorage.removeItem(ACTIVE_CONV_LS_KEY);
+                } catch (e) {}
+            }
+
+            function storedActiveConversationId() {
+                try { return localStorage.getItem(ACTIVE_CONV_LS_KEY); } catch (e) { return null; }
+            }
 
             // ===== MODELS =====
             // `label` is the wire value: it is what the server routes on. The
@@ -560,7 +579,7 @@
             // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
                 + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
-                + '**History** — every chat is saved to your account and stays there. Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
+                + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
                 + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
                 + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Only the file names travel with your message; file contents are not uploaded.\n\n'
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
@@ -1009,9 +1028,10 @@
                 updateSendState();
             });
 
-            // ===== CONVERSATIONS (the server is the single source of truth) =====
-            // Nothing here is cached in localStorage: the sidebar and the open
-            // thread are always rendered from GET /api/conversations.
+            // ===== CONVERSATIONS (IndexedDB is the source of truth) =====
+            // The sidebar and the open thread render from the local session store,
+            // so they work offline and with no account backend. Web storage is only
+            // used to remember which conversation was open.
             function getActiveConversation() {
                 for (let i = 0; i < conversations.length; i++) {
                     if (conversations[i].id === activeConversationId) return conversations[i];
@@ -1019,22 +1039,104 @@
                 return null;
             }
 
+            function findSessionIndex(id) {
+                for (let i = 0; i < sessions.length; i++) {
+                    if (sessions[i] && sessions[i].id === id) return i;
+                }
+                return -1;
+            }
+
+            function findSession(id) {
+                const i = findSessionIndex(id);
+                return i >= 0 ? sessions[i] : null;
+            }
+
+            function latestSessionId() {
+                let best = null;
+                let bestTs = -1;
+                sessions.forEach(function(s) {
+                    if (!s || !s.id) return;
+                    const ts = parseServerTime(s.updatedAt || s.createdAt);
+                    if (ts > bestTs) { bestTs = ts; best = s.id; }
+                });
+                return best;
+            }
+
+            // Rebuilds the render-ready `conversations` array (newest first) from
+            // the session store. Shape matches what renderHistory() expects.
+            function syncConversationList() {
+                conversations = sessions
+                    .slice()
+                    .sort(function(a, b) {
+                        return parseServerTime(b && (b.updatedAt || b.createdAt))
+                            - parseServerTime(a && (a.updatedAt || a.createdAt));
+                    })
+                    .map(function(s) {
+                        return {
+                            id: s.id,
+                            title: s.title || 'Untitled',
+                            model: s.model || null,
+                            created_at: s.createdAt,
+                            updated_at: s.updatedAt
+                        };
+                    });
+            }
+
             /**
-             * Re-reads the sidebar from the API.
+             * Re-reads the sidebar from IndexedDB.
              *
-             * Called after every change the server owns: a new turn, a rename,
-             * a delete, a sign-in and a sign-out.
+             * IndexedDB is the source of truth: the sidebar and the open thread
+             * survive a refresh and work with no account backend. A local Express
+             * server, when present, is imported as a best-effort extra; a missing
+             * server must never blank the list (the "No conversations yet" bug).
              */
             async function refreshConversations() {
+                await ensureMigrated();
+                try {
+                    sessions = (await loadSessions()).slice();
+                } catch (e) {
+                    sessions = [];
+                }
+                syncConversationList();
+                renderHistory();
+                // Fire-and-forget; reads a backend's list if one exists.
+                importServerConversations();
+            }
+
+            // Imports conversations that exist only on a local Express backend.
+            // On the static PWA this silently no-ops (GET /api/conversations 404s).
+            let serverImportBusy = false;
+            async function importServerConversations() {
+                if (serverImportBusy) return;
+                serverImportBusy = true;
                 try {
                     const res = await fetch(API_BASE + '/conversations', { credentials: 'same-origin' });
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    if (!res.ok) return;
                     const data = await res.json();
-                    conversations = Array.isArray(data.conversations) ? data.conversations : [];
+                    const list = Array.isArray(data.conversations) ? data.conversations : [];
+                    let changed = false;
+                    for (let i = 0; i < list.length; i++) {
+                        const c = list[i];
+                        if (!c || !c.id || findSessionIndex(c.id) >= 0) continue;
+                        const now = new Date().toISOString();
+                        const session = {
+                            id: c.id,
+                            title: c.title || 'Untitled',
+                            model: c.model || null,
+                            createdAt: c.created_at || now,
+                            updatedAt: c.updated_at || c.created_at || now,
+                            messages: []
+                        };
+                        sessions.push(session);
+                        await saveSession(session);
+                        changed = true;
+                    }
+                    if (changed) { syncConversationList(); renderHistory(); }
                 } catch (e) {
-                    conversations = [];
+                    // No account backend (static PWA): local sessions stand alone.
+                } finally {
+                    serverImportBusy = false;
                 }
-                renderHistory();
             }
 
             /**
@@ -1114,8 +1216,17 @@
                 });
             }
 
-            /** Opens a conversation; its messages come from the server. */
+            /**
+             * Opens a conversation from IndexedDB. Falls back to the account
+             * backend (local Express dev) for a thread not cached on this device.
+             */
             async function loadConversation(id) {
+                const local = findSession(id);
+                if (local && Array.isArray(local.messages) && local.messages.length) {
+                    renderSession(local);
+                    return;
+                }
+
                 let data = null;
                 try {
                     const res = await fetch(API_BASE + '/conversations/' + encodeURIComponent(id), {
@@ -1126,27 +1237,65 @@
                 } catch (e) {
                     data = null;
                 }
-                if (!data) {
-                    // The list was stale (deleted in another tab, say): re-read.
-                    await refreshConversations();
+
+                if (data) {
+                    const convo = data.conversation || {};
+                    const messages = (Array.isArray(data.messages) ? data.messages : []).map(function(m) {
+                        return {
+                            id: m.id || newUuid(),
+                            role: m.role === 'assistant' ? 'assistant' : 'user',
+                            text: m.content || '',
+                            createdAt: m.createdAt || m.created_at
+                        };
+                    });
+                    const now = new Date().toISOString();
+                    const session = {
+                        id: id,
+                        title: convo.title || (local && local.title) || 'Untitled',
+                        model: convo.model || (local && local.model) || null,
+                        createdAt: convo.created_at || (local && local.createdAt) || now,
+                        updatedAt: convo.updated_at || (local && local.updatedAt) || now,
+                        messages: messages
+                    };
+                    const idx = findSessionIndex(id);
+                    if (idx >= 0) sessions[idx] = session; else sessions.push(session);
+                    await saveSession(session);
+                    syncConversationList();
+                    renderSession(session);
                     return;
                 }
 
-                const convo = data.conversation || {};
-                const messages = Array.isArray(data.messages) ? data.messages : [];
+                if (local) { renderSession(local); return; }
+                // The list was stale (deleted in another tab, say): re-read it.
+                await refreshConversations();
+            }
 
-                activeConversationId = convo.id || id;
-                setModelPicker(modelKeyFromLabel(convo.model));
+            // Paints one session into the main view and mirrors it as the active
+            // local thread, so a refresh restores exactly this conversation.
+            function renderSession(session) {
+                if (!session) return;
+                const messages = Array.isArray(session.messages) ? session.messages : [];
+
+                setActiveConversationId(session.id);
+                setModelPicker(modelKeyFromLabel(session.model));
 
                 messagesWrapper.innerHTML = '';
                 messages.forEach(function(m) {
-                    addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.content);
+                    addMessage(m.role === 'assistant' ? 'assistant' : 'user', m.text || '');
                 });
+                const nodes = messagesWrapper.querySelectorAll('.message');
+                for (let i = 0; i < nodes.length && i < messages.length; i++) {
+                    if (messages[i].id) nodes[i].__clientId = messages[i].id;
+                    if (messages[i].createdAt) nodes[i].__createdAt = messages[i].createdAt;
+                }
+
+                chatHistory = messages.slice();
+                saveHistory(chatHistory);
 
                 // Seed the last turn so Regenerate works on a re-opened thread.
                 for (let k = messages.length - 1; k >= 0; k--) {
                     if (messages[k].role !== 'assistant') {
-                        lastTurn = { raw: messages[k].content, files: [] };
+                        lastTurn = { raw: messages[k].text || '', files: [] };
                         break;
                     }
                 }
@@ -1163,12 +1312,13 @@
                 renderHistory();
                 isPinnedToBottom = true;
                 scrollToBottom(true);
+                updateScrollFab();
             }
 
             function startNewChat() {
-                // A new chat has no id until the first message: the server
-                // creates the conversation then and reports it in `meta`.
-                activeConversationId = null;
+                // A new chat has no id until the first message: the session is
+                // created then, so an untouched "New chat" leaves no stray entry.
+                setActiveConversationId(null);
                 chatStarted = false;
                 welcomeScreen.style.display = '';
                 messagesWrapper.classList.remove('visible');
@@ -1186,14 +1336,17 @@
             }
 
             // ===== LOCAL PERSISTENCE (IndexedDB) =====
-            // The on-screen thread is mirrored to IndexedDB so a refresh (or an
-            // offline reload) never loses it. Additive only: the server remains
-            // the source of truth for the sidebar; this is a device-local echo.
+            // Two stores: `chats` keeps the open thread under `current` (so a
+            // refresh/offline reload never loses it), and `sessions` keeps every
+            // conversation keyed by its id (the sidebar's source of truth).
             const IDB_NAME = 'ChatBotDB';
             const IDB_STORE = 'chats';
+            const IDB_SESSIONS = 'sessions';
             const IDB_KEY = 'current';
+            const IDB_VERSION = 2;
             let chatHistory = [];
             let dbPromise = null;
+            let migrated = false;
 
             function initDB() {
                 if (dbPromise) return dbPromise;
@@ -1201,12 +1354,15 @@
                     if (!('indexedDB' in window)) { resolve(null); return; }
                     let req;
                     try {
-                        req = indexedDB.open(IDB_NAME, 1);
+                        req = indexedDB.open(IDB_NAME, IDB_VERSION);
                     } catch (e) { resolve(null); return; }
                     req.onupgradeneeded = function() {
                         const db = req.result;
                         if (!db.objectStoreNames.contains(IDB_STORE)) {
                             db.createObjectStore(IDB_STORE);
+                        }
+                        if (!db.objectStoreNames.contains(IDB_SESSIONS)) {
+                            db.createObjectStore(IDB_SESSIONS, { keyPath: 'id' });
                         }
                     };
                     req.onsuccess = function() { resolve(req.result); };
@@ -1215,14 +1371,14 @@
                 return dbPromise;
             }
 
-            function idbWrite(mutate) {
+            function idbWrite(storeName, mutate) {
                 return initDB().then(function(db) {
                     if (!db) return null;
                     return new Promise(function(resolve) {
                         let tx;
                         try {
-                            tx = db.transaction(IDB_STORE, 'readwrite');
-                            mutate(tx.objectStore(IDB_STORE));
+                            tx = db.transaction(storeName, 'readwrite');
+                            mutate(tx.objectStore(storeName));
                         } catch (e) { resolve(null); return; }
                         tx.oncomplete = function() { resolve(true); };
                         tx.onerror = function() { resolve(null); };
@@ -1231,32 +1387,100 @@
                 });
             }
 
-            function saveHistory(messages) {
-                return idbWrite(function(store) { store.put(messages || [], IDB_KEY); });
+            function idbRead(storeName, key) {
+                return initDB().then(function(db) {
+                    if (!db) return null;
+                    return new Promise(function(resolve) {
+                        let tx;
+                        try { tx = db.transaction(storeName, 'readonly'); } catch (e) { resolve(null); return; }
+                        const req = tx.objectStore(storeName).get(key);
+                        req.onsuccess = function() { resolve(req.result); };
+                        req.onerror = function() { resolve(null); };
+                    });
+                });
             }
 
-            function clearHistory() {
-                chatHistory = [];
-                return idbWrite(function(store) { store.delete(IDB_KEY); });
-            }
-
-            function loadHistory() {
+            function idbReadAll(storeName) {
                 return initDB().then(function(db) {
                     if (!db) return [];
                     return new Promise(function(resolve) {
                         let tx;
-                        try {
-                            tx = db.transaction(IDB_STORE, 'readonly');
-                        } catch (e) { resolve([]); return; }
-                        const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+                        try { tx = db.transaction(storeName, 'readonly'); } catch (e) { resolve([]); return; }
+                        const req = tx.objectStore(storeName).getAll();
                         req.onsuccess = function() { resolve(Array.isArray(req.result) ? req.result : []); };
                         req.onerror = function() { resolve([]); };
                     });
                 });
             }
 
-            // Reflects the live thread (in DOM order) into memory + IndexedDB.
-            // Regenerate and edit thus persist correctly without special-casing.
+            // The open thread, kept for backwards compatibility with data already
+            // on disk and used to restore the main view on load.
+            function saveHistory(messages) {
+                return idbWrite(IDB_STORE, function(store) { store.put(messages || [], IDB_KEY); });
+            }
+
+            function clearHistory() {
+                chatHistory = [];
+                return idbWrite(IDB_STORE, function(store) { store.delete(IDB_KEY); });
+            }
+
+            function loadHistory() {
+                return idbRead(IDB_STORE, IDB_KEY).then(function(result) {
+                    return Array.isArray(result) ? result : [];
+                });
+            }
+
+            // ===== MULTI-SESSION STORE =====
+            // One record per conversation: { id, title, model, createdAt,
+            // updatedAt, messages }. Many chats coexist instead of one thread
+            // being overwritten every turn.
+            function loadSessions() {
+                return idbReadAll(IDB_SESSIONS);
+            }
+
+            function saveSession(session) {
+                if (!session || !session.id) return Promise.resolve(false);
+                return idbWrite(IDB_SESSIONS, function(store) { store.put(session); });
+            }
+
+            function deleteSession(id) {
+                if (!id) return Promise.resolve(false);
+                return idbWrite(IDB_SESSIONS, function(store) { store.delete(id); });
+            }
+
+            function clearSessions() {
+                return idbWrite(IDB_SESSIONS, function(store) { store.clear(); });
+            }
+
+            // One-time: adopt a thread created before the session store existed, so
+            // upgrading users don't lose their single local conversation.
+            async function ensureMigrated() {
+                if (migrated) return;
+                migrated = true;
+                try {
+                    const existing = await loadSessions();
+                    // `sessions` is the live list and is updated synchronously by
+                    // upsertActiveSession, so this also catches a first message
+                    // that raced ahead while we awaited IndexedDB.
+                    if (existing.length || sessions.length) return;
+                    const legacy = await loadHistory();
+                    if (!legacy.length) return;
+                    const now = new Date().toISOString();
+                    const session = {
+                        id: newUuid(),
+                        title: deriveTitle(legacy),
+                        model: currentModelKey,
+                        createdAt: (legacy[0] && legacy[0].createdAt) || now,
+                        updatedAt: (legacy[legacy.length - 1] && legacy[legacy.length - 1].createdAt) || now,
+                        messages: legacy.slice()
+                    };
+                    await saveSession(session);
+                } catch (e) {}
+            }
+
+            // Reflects the live thread (in DOM order) into memory + IndexedDB, and
+            // rolls it into the active session so the sidebar stays in sync.
+            // Regenerate and edit thus persist without special-casing.
             function persistHistory() {
                 const nodes = messagesWrapper.querySelectorAll('.message');
                 const out = [];
@@ -1276,8 +1500,37 @@
                 }
                 chatHistory = out;
                 saveHistory(chatHistory);
+                upsertActiveSession(out);
                 // Mirror to the cloud when signed in (debounced, never blocking).
                 if (window.ChatBotSync) window.ChatBotSync.scheduleSync();
+            }
+
+            // Writes the live thread into its session record, creating it on the
+            // first turn. No-op until a conversation id exists, so an empty new
+            // chat never leaves a stray sidebar entry.
+            function upsertActiveSession(messages) {
+                if (!activeConversationId) return;
+                const idx = findSessionIndex(activeConversationId);
+                const prev = idx >= 0 ? sessions[idx] : null;
+                const now = new Date().toISOString();
+                // Keep a stored title (a user rename or a server-provided one) and
+                // only derive one for a brand-new / still-placeholder session.
+                const prevTitle = prev && prev.title;
+                const title = (prevTitle && prevTitle !== 'Untitled')
+                    ? prevTitle
+                    : (deriveTitle(messages) || 'Untitled');
+                const session = {
+                    id: activeConversationId,
+                    title: title,
+                    model: currentModelKey,
+                    createdAt: (prev && prev.createdAt) || (messages[0] && messages[0].createdAt) || now,
+                    updatedAt: now,
+                    messages: messages.slice()
+                };
+                if (idx >= 0) sessions[idx] = session; else sessions.push(session);
+                syncConversationList();
+                saveSession(session);
+                renderHistory();
             }
 
             // Rebuilds the chat from IndexedDB on first load. No API call here.
@@ -1286,6 +1539,14 @@
                 const saved = await loadHistory();
                 if (!saved.length) return;
                 chatHistory = saved.slice();
+
+                // Re-adopt the conversation this thread belongs to, so the next
+                // turn appends to it instead of forking a new session.
+                let id = storedActiveConversationId();
+                if (!id || findSessionIndex(id) < 0) id = latestSessionId();
+                if (!id) id = newUuid();
+                setActiveConversationId(id);
+
                 saved.forEach(function(m) {
                     const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', m.text || '');
                     if (bubble && bubble.element) {
@@ -1302,6 +1563,8 @@
                         break;
                     }
                 }
+                // Keep this thread's session record present and current.
+                upsertActiveSession(saved);
                 renderHistory();
                 isPinnedToBottom = true;
                 scrollToBottom(true);
@@ -1627,16 +1890,25 @@
             initCloudSync();
 
             async function deleteConversation(id) {
+                if (!id) return;
+                const wasActive = activeConversationId === id;
+                // Remove locally first: this is what makes delete instant and
+                // reliable with no account backend.
+                await deleteSession(id);
+                sessions = sessions.filter(function(s) { return s && s.id !== id; });
+                syncConversationList();
+                if (wasActive) {
+                    startNewChat();
+                } else {
+                    renderHistory();
+                }
+                // Best-effort server mirror (ignored when there is no backend).
                 try {
                     await fetch(API_BASE + '/conversations/' + encodeURIComponent(id), {
                         method: 'DELETE',
                         credentials: 'same-origin'
                     });
                 } catch (e) {}
-                if (activeConversationId === id) {
-                    startNewChat();
-                }
-                await refreshConversations();
             }
 
             function startRename(item, id) {
@@ -1657,6 +1929,14 @@
                     done = true;
                     const title = input.value.trim();
                     if (save && title && title !== convo.title) {
+                        // Local-first: rename in the session store, then mirror.
+                        const idx = findSessionIndex(id);
+                        if (idx >= 0) {
+                            sessions[idx].title = title;
+                            sessions[idx].updatedAt = new Date().toISOString();
+                            await saveSession(sessions[idx]);
+                            syncConversationList();
+                        }
                         try {
                             await fetch(API_BASE + '/conversations/' + encodeURIComponent(id), {
                                 method: 'PATCH',
@@ -1666,8 +1946,7 @@
                             });
                         } catch (e) {}
                     }
-                    // The server's copy wins whether or not the PATCH landed.
-                    await refreshConversations();
+                    renderHistory();
                 }
                 input.addEventListener('click', function(ev) { ev.stopPropagation(); });
                 input.addEventListener('keydown', function(ev) {
@@ -1761,9 +2040,10 @@
                         scrollToBottom();
                     }, signal, ragText);
                     typer.finish();
-                    // The server created this conversation on its first turn;
-                    // adopt the id so the next message continues the thread.
-                    if (turn.conversationId) activeConversationId = turn.conversationId;
+                    // Adopt the server's id when it created the thread; with a
+                    // stateless backend (no DB) mint a local id instead, so the
+                    // turn lands in a session and shows up in the sidebar.
+                    setActiveConversationId(turn.conversationId || activeConversationId || newUuid());
                 } catch (error) {
                     typer.finish();
                     if (error && error.name === 'AbortError') {
