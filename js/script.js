@@ -300,10 +300,30 @@
                         + 'Based on the context above, answer this question: ' + message;
                 }
 
+                // Send the prior turns so a stateless backend (e.g. the Vercel
+                // serverless function) can rebuild the context without a database.
+                // The current turn is re-sent as `message`, so the history stops
+                // just before the last user message. The local Express backend
+                // ignores this extra field and keeps using its own DB.
+                let lastUserId = -1;
+                for (let i = 0; i < chatHistory.length; i++) {
+                    if (chatHistory[i] && chatHistory[i].role === 'user') lastUserId = i;
+                }
+                const history = (lastUserId > 0 ? chatHistory.slice(0, lastUserId) : [])
+                    .map(function(m) {
+                        return {
+                            role: m.role === 'user' ? 'user' : 'assistant',
+                            content: String(m.text || '')
+                        };
+                    })
+                    .filter(function(m) { return m.content !== ''; })
+                    .slice(-40);
+
                 const payload = {
                     message: message,
                     model: def.label
                 };
+                if (history.length) payload.history = history;
                 if (activeConversationId) payload.conversationId = activeConversationId;
 
                 const headers = Object.assign(
