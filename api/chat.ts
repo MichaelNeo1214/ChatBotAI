@@ -11,7 +11,11 @@
  *     "message": string,                 // the new user turn (required)
  *     "model"?: string,                  // picker label; omitted = server default
  *     "history"?: { role, content }[],   // prior turns (oldest -> newest)
- *     "conversationId"?: string          // accepted but ignored (no server DB)
+ *     "conversationId"?: string,         // accepted but ignored (no server DB)
+ *     "attachments"?: {                  // optional multimodal input
+ *       "images"?: ({ mimeType?, data } | "data:image/...")[],
+ *       "document"?: { name, text }      // plain-text file (.txt/.md/.csv)
+ *     }
  *   }
  *
  * Bring-your-own-key / self-hosted routing (same contract as the Express app):
@@ -28,6 +32,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { config } from '../src/config.ts';
 import { AnthropicProvider } from '../src/providers/anthropic.ts';
+import { documentBlock, parseAttachments } from '../src/providers/attachments.ts';
 import { UpstreamError } from '../src/providers/errors.ts';
 import { MockProvider } from '../src/providers/mock.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
@@ -46,6 +51,7 @@ interface ChatBody {
   model?: unknown;
   history?: unknown;
   conversationId?: unknown;
+  attachments?: unknown;
 }
 
 type Req = IncomingMessage & { body?: unknown };
@@ -315,7 +321,20 @@ export default async function handler(req: Req, res: Res): Promise<void> {
 
     const { provider, model } = selectProvider(body.model, req);
     const history = normalizeHistory(body.history);
-    const messages: ChatMessage[] = [...history, { role: 'user', content: message }];
+
+    // Multimodal input is optional and validated centrally, so a plain-text
+    // turn produces exactly the same ChatMessage it did before this existed.
+    const attachment = parseAttachments(body.attachments);
+    let prompt = message;
+    if (attachment.documentText !== '') {
+      prompt = `${documentBlock(attachment.documentName, attachment.documentText)}\n\n${message}`;
+    }
+    const currentTurn: ChatMessage = {
+      role: 'user',
+      content: prompt,
+      ...(attachment.images.length > 0 ? { images: attachment.images } : {}),
+    };
+    const messages: ChatMessage[] = [...history, currentTurn];
 
     const abort = new AbortController();
     req.on('close', () => abort.abort());

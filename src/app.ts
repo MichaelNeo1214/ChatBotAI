@@ -30,7 +30,11 @@ export function createApp() {
 
   app.disable('x-powered-by');
   app.use(cors);
-  app.use(express.json({ limit: '1mb' }));
+  // A chat turn may carry base64 images, so the body ceiling has to match the
+  // attachment budget in providers/attachments.ts (~3 MB of base64 plus text).
+  // parseAttachments still validates every image; this only stops the parser
+  // from rejecting a legitimate oversized-but-valid body before it gets there.
+  app.use(express.json({ limit: '6mb' }));
 
   app.use('/api/health', healthRouter);
 

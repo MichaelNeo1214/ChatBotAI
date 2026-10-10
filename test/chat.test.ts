@@ -166,3 +166,135 @@ describe('POST /api/chat — validation', () => {
     assert.equal(res.status, 404);
   });
 });
+
+// A 1x1 PNG. Real bytes, so the magic-byte sniffing in parseAttachments is
+// exercised rather than bypassed by a hand-written base64 string.
+const PNG_1PX =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+describe('POST /api/chat — attachments', () => {
+  // Its own cookie jar: these turns exist to prove a payload is accepted, and
+  // reusing `anon` would spend the per-owner rate-limit cap shared with the
+  // suites above.
+  let mm: CookieJar;
+
+  before(() => {
+    mm = new Jar({ baseUrl: server.baseUrl, name: 'attachments' });
+  });
+
+  // The mock provider emits many deltas, so only the frame order is asserted.
+  function assertStreamShape(events: { event: string }[]): void {
+    const names = eventNames(events);
+    assert.equal(names[0], 'meta', 'meta must be the first frame');
+    assert.equal(names[names.length - 1], 'done', 'done must be the last frame');
+    assert.equal(names.filter((n) => n === 'error').length, 0, 'no error frame');
+  }
+
+  test('a text-only turn still succeeds with no attachments field', async () => {
+    const res = await chat(mm, { message: 'plain text only' });
+    assert.equal(res.status, 200);
+    assertStreamShape(await readSse(res));
+  });
+
+  test('an image attachment is accepted and the turn still completes', async () => {
+    const res = await chat(mm, {
+      message: 'What is in this picture?',
+      attachments: { images: [{ mimeType: 'image/png', data: PNG_1PX }] },
+    });
+    assert.equal(res.status, 200);
+    assertStreamShape(await readSse(res));
+  });
+
+  test('a data URL image is accepted in place of a bare base64 payload', async () => {
+    const res = await chat(mm, {
+      message: 'Describe this',
+      attachments: { images: [`data:image/png;base64,${PNG_1PX}`] },
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+  });
+
+  test('the flat { file } shape with an image type is accepted', async () => {
+    const res = await chat(mm, {
+      message: 'Flat shape',
+      attachments: { file: { type: 'image/png', data: PNG_1PX } },
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+  });
+
+  test('a text document is folded into the prompt but not persisted', async () => {
+    const res = await chat(mm, {
+      message: 'Summarise the notes',
+      attachments: { document: { name: 'notes.md', text: '# Heading\nremember the milk' } },
+    });
+    assert.equal(res.status, 200);
+    const events = await readSse(res);
+    const { conversationId } = payloadsOf<{ conversationId: string }>(events, 'meta')[0]!;
+
+    // The stored transcript must show only what the user typed, so the sidebar
+    // and any re-opened thread stay readable.
+    const detail = await mm.get(`/api/conversations/${conversationId}`);
+    const { messages } = (await detail.json()) as {
+      messages: { role: string; content: string }[];
+    };
+    const user = messages.find((m) => m.role === 'user');
+    assert.ok(user, 'the user turn should be persisted');
+    assert.equal(user!.content, 'Summarise the notes');
+    assert.ok(
+      !user!.content.includes('remember the milk'),
+      'the injected document text must not leak into the stored transcript',
+    );
+  });
+
+  test('a document is allowed even when the message is short enough to fail alone', async () => {
+    // The 32000-char limit applies to the typed message. The document is a
+    // separate field, so a large attachment must not turn a valid turn into a
+    // 400, and must not be silently dropped either.
+    const res = await chat(mm, {
+      message: 'Read this',
+      attachments: { document: { name: 'big.txt', text: 'x'.repeat(80_000) } },
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+  });
+
+  test('a corrupt or non-image payload is dropped, not fatal', async () => {
+    const res = await chat(mm, {
+      message: 'Broken image',
+      attachments: { images: [{ mimeType: 'image/png', data: 'not-real-base64!!' }] },
+    });
+    assert.equal(res.status, 200, 'one bad file must not fail the turn');
+    await res.text();
+  });
+
+  test('an SVG masquerading as an image is rejected (no script-bearing vector)', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>').toString('base64');
+    const res = await chat(mm, {
+      message: 'Vector',
+      attachments: { images: [{ mimeType: 'image/svg+xml', data: svg }] },
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+  });
+
+  test('more than four images are capped rather than failing the turn', async () => {
+    const res = await chat(mm, {
+      message: 'Too many',
+      attachments: {
+        images: Array.from({ length: 6 }, () => ({ mimeType: 'image/png', data: PNG_1PX })),
+      },
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+  });
+
+  test('a garbage attachments field is ignored and the text turn still runs', async () => {
+    const res = await chat(mm, {
+      message: 'Weird payload',
+      attachments: { images: 'nope', document: 42, file: true },
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+  });
+});

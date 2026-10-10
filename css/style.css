@@ -1674,6 +1674,57 @@
             white-space: nowrap;
         }
 
+        .file-chip-thumb {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--bg-input, #f4f4f5);
+        }
+
+        .file-chip-doc {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            flex-shrink: 0;
+            background: rgba(120, 120, 140, 0.14);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            color: var(--text-secondary, #71717a);
+        }
+
+        .file-chip-meta {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            line-height: 1.3;
+        }
+
+        .file-chip-size {
+            font-size: 11px;
+            color: var(--text-tertiary, #a1a1aa);
+        }
+
+        .file-chip-error {
+            display: flex;
+            align-items: center;
+            max-width: 100%;
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            font-size: 12px;
+        }
+
+        .btn-attach-mm.needs-vision {
+            color: #f59e0b;
+        }
+
         .file-chip-remove {
             display: flex;
             align-items: center;

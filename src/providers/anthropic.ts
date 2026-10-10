@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ChatProvider, ChatRequest } from './types.ts';
+import type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
   'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
@@ -9,6 +9,45 @@ export interface AnthropicOptions {
   apiKey: string;
   /** Model id sent upstream. */
   model: string;
+}
+
+/** The exact media types the Anthropic image block accepts. */
+type AnthropicMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+/** One block of an Anthropic message: plain text, or an inline base64 image. */
+type AnthropicBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: AnthropicMediaType; data: string } };
+
+/** Widens a validated MIME string, falling back to PNG (our validator never emits others). */
+function anthropicMediaType(mimeType: string): AnthropicMediaType {
+  return mimeType === 'image/jpeg' || mimeType === 'image/gif' || mimeType === 'image/webp'
+    ? mimeType
+    : 'image/png';
+}
+
+/**
+ * Maps one turn onto the Anthropic content shape.
+ *
+ * Text-only turns keep the plain string form every release accepts; only a turn
+ * that carries images becomes a block array, so ordinary text conversations are
+ * unaffected.
+ */
+function toAnthropicMessage(message: ChatMessage): { role: 'user' | 'assistant'; content: string | AnthropicBlock[] } {
+  const images = message.images;
+  if (images === undefined || images.length === 0) {
+    return { role: message.role, content: message.content };
+  }
+
+  const blocks: AnthropicBlock[] = [];
+  if (message.content !== '') blocks.push({ type: 'text', text: message.content });
+  for (const image of images) {
+    blocks.push({
+      type: 'image',
+      source: { type: 'base64', media_type: anthropicMediaType(image.mimeType), data: image.data },
+    });
+  }
+  return { role: message.role, content: blocks };
 }
 
 /**
@@ -38,10 +77,7 @@ export class AnthropicProvider implements ChatProvider {
         model: this.#model,
         max_tokens: 16000,
         system: SYSTEM_PROMPT,
-        messages: request.messages.map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
+        messages: request.messages.map(toAnthropicMessage),
       },
       { signal: request.signal },
     );

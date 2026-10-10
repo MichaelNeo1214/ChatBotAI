@@ -1,5 +1,5 @@
 import { UpstreamError, upstreamErrorInfo } from './errors.ts';
-import type { ChatProvider, ChatRequest } from './types.ts';
+import type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
   'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
@@ -65,6 +65,45 @@ interface StreamChunk {
   error?: { message?: string; code?: string | number; status?: string; type?: string };
 }
 
+interface OpenAIContentPart {
+  type: 'text';
+  text: string;
+}
+
+interface OpenAIImagePart {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+type OpenAIMessage = { role: string; content: string | (OpenAIContentPart | OpenAIImagePart)[] };
+
+/**
+ * Maps one turn onto the OpenAI `messages` shape.
+ *
+ * A text-only turn stays the plain `{ role, content: string }` every vendor
+ * already accepts. Only a turn that actually carries images becomes a content
+ * array, so adding vision support cannot change the wire format of a normal
+ * text conversation — this is what keeps the plain-text path byte-identical.
+ */
+function toOpenAIMessage(message: ChatMessage): OpenAIMessage {
+  const images = message.images;
+  if (images === undefined || images.length === 0) {
+    return { role: message.role, content: message.content };
+  }
+
+  const parts: (OpenAIContentPart | OpenAIImagePart)[] = [];
+  // An empty string part would be rejected by some gateways; only send text
+  // when there is any, and never drop the images that follow it.
+  if (message.content !== '') parts.push({ type: 'text', text: message.content });
+  for (const image of images) {
+    parts.push({
+      type: 'image_url',
+      image_url: { url: `data:${image.mimeType};base64,${image.data}` },
+    });
+  }
+  return { role: message.role, content: parts };
+}
+
 export interface OpenAICompatibleOptions {
   /** Base URL of the vendor, without a trailing slash. */
   baseUrl: string;
@@ -119,7 +158,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
       stream: true,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        ...request.messages.map((m) => ({ role: m.role, content: m.content })),
+        ...request.messages.map(toOpenAIMessage),
       ],
     });
     const url = `${this.#baseUrl}/chat/completions`;

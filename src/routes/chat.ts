@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { config } from '../config.ts';
+import { documentBlock, parseAttachments } from '../providers/attachments.ts';
 import {
   addMessage,
   createConversation,
@@ -41,7 +42,8 @@ const ipLimiter = rateLimit({
 /**
  * POST /api/chat
  *
- * Body: { message: string, conversationId?: string, model?: string }
+ * Body: { message: string, conversationId?: string, model?: string,
+ *          attachments?: { images?, document? } }
  * Responds with Server-Sent Events:
  *   event: meta   — { conversationId, messageId } (sent before any token)
  *   event: delta  — { text } for each chunk
@@ -53,7 +55,7 @@ const ipLimiter = rateLimit({
  */
 chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
   try {
-    const { message, conversationId, model } = req.body ?? {};
+    const { message, conversationId, model, attachments } = req.body ?? {};
 
     if (typeof message !== 'string' || message.trim() === '') {
       throw badRequest('"message" is required and must be a non-empty string');
@@ -70,6 +72,14 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
     }
 
     const text = message.trim();
+
+    // Optional multimodal input. Validated centrally; a plain-text turn is
+    // byte-identical to the request this endpoint accepted before.
+    const attachment = parseAttachments(attachments);
+    let promptText = text;
+    if (attachment.documentText !== '') {
+      promptText = `${documentBlock(attachment.documentName, attachment.documentText)}\n\n${text}`;
+    }
 
     // Resolved before anything is written, so a bad model or a missing key
     // fails as a normal JSON 400 instead of mid-stream.
@@ -90,6 +100,8 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
       .slice(-HISTORY_LIMIT)
       .map((row) => ({ role: row.role as ChatMessage['role'], content: row.content }));
 
+    // Persist what the user actually typed, never the injected document text:
+    // the stored transcript stays readable in the sidebar and on re-open.
     addMessage(conversation.id, 'user', text);
 
     // First real message in a conversation that was created empty: name it.
@@ -117,7 +129,14 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
     let answer = '';
     try {
       for await (const chunk of chatProvider.streamChat({
-        messages: [...history, { role: 'user', content: text }],
+        messages: [
+          ...history,
+          {
+            role: 'user',
+            content: promptText,
+            ...(attachment.images.length > 0 ? { images: attachment.images } : {}),
+          },
+        ],
         model: resolvedModel,
         signal: abort.signal,
       })) {

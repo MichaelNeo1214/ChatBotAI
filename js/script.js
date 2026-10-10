@@ -137,6 +137,9 @@
             let sessions = [];
             let activeConversationId = null;
             let currentModelKey = 'default';
+            // Bumped on every navigation so a slow conversation load cannot
+            // repaint a session the user has already switched away from.
+            let loadConversationToken = 0;
 
             // The open conversation is remembered across reloads so the next turn
             // appends to the same session instead of forking a new one.
@@ -236,6 +239,253 @@
                 return (raw ? raw + '\n' : '') + '[Attached files: ' + names + ']';
             }
 
+            // ===== MULTIMODAL ATTACHMENTS (IMAGE / LIGHT TEXT) =====
+            // A pending attachment the model can actually look at: an image
+            // travels as base64, a .txt/.md/.csv as plain text.
+            //
+            // This is deliberately separate from `attachedFiles` (the legacy
+            // name-only chip list) so that turning this on cannot change how an
+            // existing name-only attachment is rendered or persisted.
+            const MM_ACCEPT = 'image/*,.txt,.md,.csv,text/plain,text/markdown,text/csv';
+            const MM_MAX_IMAGE_BYTES = 2 * 1024 * 1024;   // matches the server budget
+            const MM_MAX_TEXT_BYTES = 400 * 1024;
+            const MM_MAX_DOC_CHARS = 60000;               // matches the server cap
+            const MM_MAX_IMAGES = 4;
+
+            /** @type {{name:string, mimeType:string, bytes:number, dataUrl:string|null, text:string}[]} */
+            let mmAttachments = [];
+
+            function mmTotalBytes() {
+                let total = 0;
+                for (let i = 0; i < mmAttachments.length; i++) total += mmAttachments[i].bytes || 0;
+                return total;
+            }
+
+            function mmImageCount() {
+                let n = 0;
+                for (let i = 0; i < mmAttachments.length; i++) if (mmAttachments[i].dataUrl) n += 1;
+                return n;
+            }
+
+            /** Reads a File as a data URL, or null if it cannot be read. */
+            function readFileAsDataUrl(file) {
+                return new Promise(function(resolve) {
+                    const reader = new FileReader();
+                    reader.onload = function() { resolve(typeof reader.result === 'string' ? reader.result : null); };
+                    reader.onerror = function() { resolve(null); };
+                    reader.onabort = function() { resolve(null); };
+                    try { reader.readAsDataURL(file); } catch (e) { resolve(null); }
+                });
+            }
+
+            function readFileAsText(file) {
+                return new Promise(function(resolve) {
+                    const reader = new FileReader();
+                    reader.onload = function() { resolve(typeof reader.result === 'string' ? reader.result : ''); };
+                    reader.onerror = function() { resolve(''); };
+                    reader.onabort = function() { resolve(''); };
+                    try { reader.readAsText(file); } catch (e) { resolve(''); }
+                });
+            }
+
+            function escapeHtmlAttr(value) {
+                return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            /** One chip above the composer: a thumbnail for images, a name for text. */
+            function renderMmPreview(entry) {
+                const area = document.getElementById('filePreviewArea');
+                if (!area) return;
+                area.hidden = false;
+
+                const chip = document.createElement('div');
+                chip.className = 'file-chip';
+
+                if (entry.dataUrl) {
+                    const thumb = document.createElement('img');
+                    thumb.className = 'file-chip-thumb';
+                    thumb.src = entry.dataUrl;
+                    thumb.alt = entry.name;
+                    thumb.title = entry.name;
+                    chip.appendChild(thumb);
+                } else {
+                    const icon = document.createElement('span');
+                    icon.className = 'file-chip-doc';
+                    icon.textContent = 'TXT';
+                    icon.setAttribute('aria-hidden', 'true');
+                    chip.appendChild(icon);
+                    const meta = document.createElement('span');
+                    meta.className = 'file-chip-meta';
+                    const nameEl = document.createElement('span');
+                    nameEl.className = 'file-chip-name';
+                    nameEl.textContent = entry.name;
+                    nameEl.title = entry.name;
+                    const sizeEl = document.createElement('span');
+                    sizeEl.className = 'file-chip-size';
+                    sizeEl.textContent = formatBytes(entry.bytes);
+                    meta.appendChild(nameEl);
+                    meta.appendChild(sizeEl);
+                    chip.appendChild(meta);
+                }
+
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'file-chip-remove';
+                remove.setAttribute('aria-label', 'Remove attachment');
+                remove.setAttribute('data-mm-name', escapeHtmlAttr(entry.name));
+                remove.textContent = '×';
+                remove.addEventListener('click', function() { removeMmAttachment(entry.name); });
+                chip.appendChild(remove);
+
+                area.appendChild(chip);
+            }
+
+            function formatBytes(bytes) {
+                if (!bytes || bytes < 1024) return (bytes || 0) + ' B';
+                if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+                return (Math.round((bytes / (1024 * 1024)) * 10) / 10) + ' MB';
+            }
+
+            function removeMmAttachment(name) {
+                mmAttachments = mmAttachments.filter(function(e) { return e.name !== name; });
+                const area = document.getElementById('filePreviewArea');
+                if (area) {
+                    // Drop only this chip; a same-named legacy chip is not ours.
+                    const ours = area.querySelectorAll('.file-chip');
+                    ours.forEach(function(chip) {
+                        const btn = chip.querySelector('.file-chip-remove');
+                        if (btn && btn.getAttribute('data-mm-name') === name) chip.remove();
+                    });
+                    if (!area.hasChildNodes()) area.hidden = true;
+                }
+                updateSendState();
+            }
+
+            function clearMmAttachments() {
+                mmAttachments = [];
+                const area = document.getElementById('filePreviewArea');
+                if (area) {
+                    area.innerHTML = '';
+                    area.hidden = true;
+                }
+                updateSendState();
+            }
+
+            function showMmError(text) {
+                const area = document.getElementById('filePreviewArea');
+                if (!area) return;
+                area.hidden = false;
+                const note = document.createElement('div');
+                note.className = 'file-chip-error';
+                note.setAttribute('role', 'alert');
+                note.textContent = text;
+                area.appendChild(note);
+                window.setTimeout(function() {
+                    if (note.parentNode) note.parentNode.removeChild(note);
+                    if (area && !area.hasChildNodes()) area.hidden = true;
+                }, 6000);
+            }
+
+            /** Accepts one picked file: validates it, reads it, adds a chip. */
+            async function addMmFile(file) {
+                if (!file) return;
+                const isImage = (file.type || '').toLowerCase().indexOf('image/') === 0;
+                const isText = /\.(txt|md|csv)$/i.test(file.name || '');
+
+                if (mmAttachments.some(function(e) { return e.name === file.name; })) {
+                    showMmError(file.name + ' is already attached.');
+                    return;
+                }
+
+                if (isImage) {
+                    if (file.size > MM_MAX_IMAGE_BYTES) {
+                        showMmError(file.name + ' is larger than ' + formatBytes(MM_MAX_IMAGE_BYTES) + '.');
+                        return;
+                    }
+                    if (mmImageCount() >= MM_MAX_IMAGES) {
+                        showMmError('You can attach up to ' + MM_MAX_IMAGES + ' images per message.');
+                        return;
+                    }
+                    const dataUrl = await readFileAsDataUrl(file);
+                    if (!dataUrl) {
+                        showMmError('Could not read ' + file.name + '.');
+                        return;
+                    }
+                    mmAttachments.push({
+                        name: file.name,
+                        mimeType: file.type || 'image/*',
+                        bytes: file.size,
+                        dataUrl: dataUrl,
+                        text: ''
+                    });
+                    renderMmPreview(mmAttachments[mmAttachments.length - 1]);
+                } else if (isText) {
+                    if (file.size > MM_MAX_TEXT_BYTES) {
+                        showMmError(file.name + ' is larger than ' + formatBytes(MM_MAX_TEXT_BYTES) + '.');
+                        return;
+                    }
+                    const text = await readFileAsText(file);
+                    if (text === '') {
+                        showMmError('Could not read ' + file.name + '.');
+                        return;
+                    }
+                    mmAttachments.push({
+                        name: file.name,
+                        mimeType: file.type || 'text/plain',
+                        bytes: file.size,
+                        dataUrl: null,
+                        text: text.slice(0, MM_MAX_DOC_CHARS)
+                    });
+                    renderMmPreview(mmAttachments[mmAttachments.length - 1]);
+                } else {
+                    showMmError('Only images, .txt, .md and .csv can be attached.');
+                    return;
+                }
+
+                updateSendState();
+            }
+
+            /** The `attachments` field for the /api/chat payload, or null. */
+            function mmPayload() {
+                if (!mmAttachments.length) return null;
+                const images = [];
+                let document = null;
+                for (let i = 0; i < mmAttachments.length; i++) {
+                    const e = mmAttachments[i];
+                    if (e.dataUrl) {
+                        images.push({ mimeType: e.mimeType, data: e.dataUrl });
+                    } else if (document === null) {
+                        document = { name: e.name, text: e.text };
+                    }
+                }
+                if (images.length === 0 && document === null) return null;
+                const out = {};
+                if (images.length) out.images = images;
+                if (document !== null) out.document = document;
+                return out;
+            }
+
+            /** Names of the multimodal attachments, for the visible user bubble. */
+            function mmNames() {
+                return mmAttachments.map(function(e) { return e.name; });
+            }
+
+            const mmPaperclip = document.getElementById('btnAttachImage');
+            const mmInput = document.getElementById('imageInput');
+
+            if (mmPaperclip && mmInput) {
+                mmPaperclip.addEventListener('click', function() { mmInput.click(); });
+            }
+            if (mmInput) {
+                mmInput.addEventListener('change', async function(e) {
+                    const files = Array.from(e.target.files || []);
+                    // Reset first so picking the same file twice still fires.
+                    mmInput.value = '';
+                    for (let i = 0; i < files.length; i++) await addMmFile(files[i]);
+                });
+            }
+
             // Turns a non-2xx JSON body into an Error carrying the contract's
             // code/model fields, so the caller can react to missing_api_key.
             async function backendError(res) {
@@ -322,7 +572,7 @@
              * { conversationId, content }; the caller adopts the id when the
              * server created a new conversation for this turn.
              */
-            async function callAssistant(modelKey, text, files, onDelta, signal, ragText) {
+            async function callAssistant(modelKey, text, files, onDelta, signal, ragText, mmAttachment) {
                 const def = modelDef(modelKey);
 
                 // Lightweight RAG: fold the attached document's text into this
@@ -359,6 +609,9 @@
                 };
                 if (history.length) payload.history = history;
                 if (activeConversationId) payload.conversationId = activeConversationId;
+                // Only sent when present, so a text-only turn stays byte-for-byte
+                // the request this client made before multimodal existed.
+                if (mmAttachment) payload.attachments = mmAttachment;
 
                 const headers = Object.assign(
                     { 'Content-Type': 'application/json' },
@@ -513,6 +766,7 @@
                     filePreviewArea.innerHTML = '';
                     filePreviewArea.hidden = true;
                 }
+                clearMmAttachments();
                 clearRagDoc();
                 updateSendState();
                 renderHistory();
@@ -537,9 +791,12 @@
                 applyOwner();
                 renderFooter();
                 notifyAccountPanel();
-                // The view is always rebuilt after auth resolves so the history
-                // shown matches the active owner (guest or account).
-                resetChatView();
+                // The view is rebuilt after auth resolves so the history shown
+                // matches the active owner (guest or account) -- but only while
+                // the composer is still idle. Awaiting /auth/me is a network
+                // round trip, and resetting a thread the user has already started
+                // would drop their message and orphan the session it created.
+                if (!chatStarted && !activeConversationId) resetChatView();
                 await refreshConversations();
                 return user;
             }
@@ -559,6 +816,8 @@
                 applyOwner();
                 renderFooter();
                 notifyAccountPanel();
+                // Signing out does switch owner, so the view is reset even if a
+                // turn is in flight: the local thread belongs to the old owner.
                 resetChatView();
                 // Signing out switches the owner the server scopes to, so the
                 // sidebar is re-read rather than assumed.
@@ -596,7 +855,7 @@
                 + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
                 + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
                 + '**Images** — pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
-                + '**Attachments** — the + button can upload files, dictate voice, create image prompts, and attach plugin or skill tags. Only the file names travel with your message; file contents are not uploaded.\n\n'
+                + '**Attachments** — the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
             function showHelpChat() {
@@ -1008,6 +1267,16 @@
             });
 
             // ===== TEXTAREA AUTO RESIZE + SEND STATE =====
+            // Text-file attachment travels as text in the prompt, so it works with any
+// model. An image needs a vision-capable model, so only that one is gated.
+function mmNeedsVisionModel() {
+                return mmImageCount() > 0 && !modelSupportsVision(currentModelKey);
+            }
+
+            function modelSupportsVision(key) {
+                return key !== 'default' && key !== 'deepseek' && key !== 'groq';
+            }
+
             function updateSendState() {
                 if (sending) {
                     btnSend.disabled = false;
@@ -1018,9 +1287,18 @@
                 }
                 btnSend.classList.remove('stopping');
                 btnSend.setAttribute('aria-label', 'Send message');
-                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0 || !!ragDoc;
+                const hasText = chatInput.value.trim() !== '' || attachedFiles.length > 0
+                    || !!ragDoc || mmAttachments.length > 0;
                 btnSend.disabled = !hasText;
                 btnSend.classList.toggle('active', hasText);
+                // A hint, not a block: the turn is still sendable, but the user
+                // should know this model will not look at the picture.
+                if (mmPaperclip) {
+                    mmPaperclip.classList.toggle('needs-vision', mmNeedsVisionModel());
+                    mmPaperclip.title = mmNeedsVisionModel()
+                        ? 'This model cannot read images — pick GPT-4o, Gemini or Claude'
+                        : 'Attach image, .txt, .md or .csv';
+                }
             }
 
             // While a reply streams the composer is locked: the model owns the
@@ -1107,6 +1385,10 @@
              */
             async function refreshConversations() {
                 await ensureMigrated();
+                // Same reason as in ensureMigrated: never read the store while a
+                // session write is still in flight, or the sidebar can flicker
+                // back to a stale (possibly empty) list.
+                await sessionWritesSettled();
                 try {
                     sessions = (await loadSessions()).slice();
                 } catch (e) {
@@ -1236,6 +1518,13 @@
              * backend (local Express dev) for a thread not cached on this device.
              */
             async function loadConversation(id) {
+                // Guard against a slower earlier load resolving after the user
+                // has already moved on, which would paint the wrong session.
+                loadConversationToken = loadConversationToken + 1;
+                const token = loadConversationToken;
+
+                await sessionWritesSettled();
+
                 const local = findSession(id);
                 if (local && Array.isArray(local.messages) && local.messages.length) {
                     renderSession(local);
@@ -1252,6 +1541,10 @@
                 } catch (e) {
                     data = null;
                 }
+
+                // A newer navigation started while this fetch was in flight:
+                // writing its result would repaint a session the user left.
+                if (token !== loadConversationToken) return;
 
                 if (data) {
                     const convo = data.conversation || {};
@@ -1279,6 +1572,8 @@
                     renderSession(session);
                     return;
                 }
+
+                if (token !== loadConversationToken) return;
 
                 if (local) { renderSession(local); return; }
                 // The list was stale (deleted in another tab, say): re-read it.
@@ -1428,9 +1723,15 @@
                 });
             }
 
+            // True once this page load has written the open thread. It tells
+            // ensureMigrated that the legacy record belongs to the live
+            // conversation rather than to pre-upgrade data.
+            let legacyThreadWritten = false;
+
             // The open thread, kept for backwards compatibility with data already
             // on disk and used to restore the main view on load.
             function saveHistory(messages) {
+                legacyThreadWritten = true;
                 return idbWrite(IDB_STORE, function(store) { store.put(messages || [], IDB_KEY); });
             }
 
@@ -1453,14 +1754,35 @@
                 return idbReadAll(IDB_SESSIONS);
             }
 
+            // Every session write is chained here. persistHistory() fires saves
+            // without awaiting them (it runs on every keystroke-driven turn), so
+            // a reader that starts mid-turn can otherwise observe the store
+            // before the write commits and wrongly conclude it is empty.
+            let sessionWriteChain = Promise.resolve();
+
             function saveSession(session) {
                 if (!session || !session.id) return Promise.resolve(false);
-                return idbWrite(IDB_SESSIONS, function(store) { store.put(session); });
+                sessionWriteChain = sessionWriteChain.then(function() {
+                    return idbWrite(IDB_SESSIONS, function(store) { store.put(session); });
+                }, function() {
+                    return idbWrite(IDB_SESSIONS, function(store) { store.put(session); });
+                });
+                return sessionWriteChain;
+            }
+
+            /** Resolves once every queued session write has settled. */
+            function sessionWritesSettled() {
+                return sessionWriteChain;
             }
 
             function deleteSession(id) {
                 if (!id) return Promise.resolve(false);
-                return idbWrite(IDB_SESSIONS, function(store) { store.delete(id); });
+                sessionWriteChain = sessionWriteChain.then(function() {
+                    return idbWrite(IDB_SESSIONS, function(store) { store.delete(id); });
+                }, function() {
+                    return idbWrite(IDB_SESSIONS, function(store) { store.delete(id); });
+                });
+                return sessionWriteChain;
             }
 
             function clearSessions() {
@@ -1473,11 +1795,20 @@
                 if (migrated) return;
                 migrated = true;
                 try {
+                    // Drain the write queue first: a first message may have just
+                    // created a session whose write has not committed yet, and
+                    // migrating on top of it would duplicate the conversation.
+                    await sessionWritesSettled();
                     const existing = await loadSessions();
                     // `sessions` is the live list and is updated synchronously by
                     // upsertActiveSession, so this also catches a first message
                     // that raced ahead while we awaited IndexedDB.
                     if (existing.length || sessions.length) return;
+                    // The legacy thread is the one the open conversation writes to
+                    // on every turn. If it has already been written this page load,
+                    // it belongs to the live turn, which will create its own
+                    // session; adopting it here too would duplicate that chat.
+                    if (legacyThreadWritten) return;
                     const legacy = await loadHistory();
                     if (!legacy.length) return;
                     const now = new Date().toISOString();
@@ -1552,10 +1883,17 @@
             }
 
             // Rebuilds the chat from IndexedDB on first load. No API call here.
+            let restoreToken = 0;
             async function restoreLocalHistory() {
                 if (messagesWrapper.children.length > 0) return;
+                const token = ++restoreToken;
                 const saved = await loadHistory();
                 if (!saved.length) return;
+                // Reading IndexedDB is async, and the user can send a message
+                // while it is in flight. Restoring then would adopt a fresh id
+                // over the live conversation and fork a duplicate session, so
+                // the restore is abandoned instead.
+                if (token !== restoreToken || chatStarted || activeConversationId) return;
                 chatHistory = saved.slice();
 
                 // Re-adopt the conversation this thread belongs to, so the next
@@ -2029,7 +2367,7 @@
             // ===== SEND MESSAGE =====
             // Runs one assistant turn: paints the streaming bubble, honours Stop
             // and reports errors. Shared by send, regenerate and message edit.
-            async function runAssistant(raw, filesSnapshot, ragText) {
+            async function runAssistant(raw, filesSnapshot, ragText, mmAttachment) {
                 // The assistant bubble is created on the first delta, so a turn
                 // that never produces one leaves no empty shell behind.
                 let bubble = null;
@@ -2056,7 +2394,7 @@
                         typingIndicator.classList.remove('visible');
                         typer.push(chunk);
                         scrollToBottom();
-                    }, signal, ragText);
+                    }, signal, ragText, mmAttachment);
                     typer.finish();
                     // Adopt the server's id when it created the thread; with a
                     // stateless backend (no DB) mint a local id instead, so the
@@ -2122,7 +2460,7 @@
             async function sendMessage(text) {
                 if (sending) return;
                 const raw = (text || '').trim();
-                const hasFiles = attachedFiles.length > 0 || !!ragDoc;
+                const hasFiles = attachedFiles.length > 0 || !!ragDoc || mmAttachments.length > 0;
                 if (!raw && !hasFiles) return;
 
                 // Fast path: the key panel already knows this model has no key,
@@ -2142,8 +2480,11 @@
                 // An image turn skips the streaming chat path entirely.
                 const imagePrompt = imagePromptFrom(raw);
                 if (imagePrompt !== null) {
+                    // Generating a picture has nothing to do with attached
+                    // files, so they are dropped rather than silently sent.
                     attachedFiles.length = 0;
                     clearRagDoc();
+                    clearMmAttachments();
                     const preview = document.getElementById('filePreviewArea');
                     if (preview) {
                         preview.innerHTML = '';
@@ -2160,12 +2501,18 @@
                 const filesSnapshot = attachedFiles.map(function(f) {
                     return { name: f.name, type: f.type };
                 });
-                const displayText = buildUserText(raw, filesSnapshot);
+                // Multimodal entries ride along as real bytes; the legacy
+                // name-only files stay names-only so old turns are unchanged.
+                const mmSnapshot = mmPayload();
+                const mmNameSnapshot = mmNames();
+                const allNames = filesSnapshot.map(function(f) { return f.name; }).concat(mmNameSnapshot);
+                const displayText = buildUserText(raw, allNames);
                 // The RAG context is consumed by this one turn: snapshot the text
                 // (so regenerate can reuse it) and clear the indicator right away.
                 const ragSnapshot = ragDoc ? ragDoc.text : '';
                 attachedFiles.length = 0;
                 clearRagDoc();
+                clearMmAttachments();
                 const filePreviewArea = document.getElementById('filePreviewArea');
                 if (filePreviewArea) {
                     filePreviewArea.innerHTML = '';
@@ -2178,7 +2525,7 @@
                 chatInput.style.height = 'auto';
                 lastTurn = { raw: raw, files: filesSnapshot, rag: ragSnapshot };
 
-                await runAssistant(raw, filesSnapshot, ragSnapshot);
+                await runAssistant(raw, filesSnapshot, ragSnapshot, mmSnapshot);
             }
 
             // An image turn is requested either by selecting the Image model or
@@ -3277,6 +3624,9 @@
                 });
             }
 
+// The RAG reader owns the PDF/TXT paperclip, so a document picked there is
+            // not also routed through the multimodal path. It extracts text
+            // client-side instead, which keeps large PDFs off the wire entirely.
             if (docInput) {
                 docInput.addEventListener('change', function(e) {
                     const file = e.target.files && e.target.files[0];
