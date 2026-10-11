@@ -6,6 +6,9 @@ const SYSTEM_PROMPT =
   'Use Markdown for structure and fenced code blocks for code. ' +
   'Render mathematical notation with LaTeX delimiters: $...$ inline and $$...$$ on its own line.';
 
+/** Used when the caller does not cap output length. */
+const DEFAULT_MAX_TOKENS = 16_000;
+
 export interface AnthropicOptions {
   apiKey: string;
   /** Model id sent upstream. */
@@ -73,12 +76,18 @@ export class AnthropicProvider implements ChatProvider {
   }
 
   async *streamChat(request: ChatRequest): AsyncIterable<string> {
+    const parameters = request.parameters ?? {};
+
     const stream = this.#client.messages.stream(
       {
         model: this.#model,
-        max_tokens: 16000,
-        system: SYSTEM_PROMPT,
+        max_tokens: parameters.maxTokens ?? DEFAULT_MAX_TOKENS,
+        system: parameters.systemPrompt ?? SYSTEM_PROMPT,
         messages: request.messages.map(toAnthropicMessage),
+        // Both are optional in the API; sending `undefined` keeps them out of
+        // the request entirely rather than as explicit nulls.
+        ...(parameters.temperature !== undefined ? { temperature: parameters.temperature } : {}),
+        ...(parameters.topP !== undefined ? { top_p: parameters.topP } : {}),
       },
       { signal: request.signal },
     );

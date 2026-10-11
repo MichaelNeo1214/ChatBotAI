@@ -8,14 +8,20 @@
  *
  * Body:
  *   {
- *     "message": string,                 // the new user turn (required)
- *     "model"?: string,                  // picker label; omitted = server default
- *     "history"?: { role, content }[],   // prior turns (oldest -> newest)
- *     "conversationId"?: string,         // accepted but ignored (no server DB)
- *     "attachments"?: {                  // optional multimodal input
- *       "images"?: ({ mimeType?, data } | "data:image/...")[],
- *       "document"?: { name, text }      // plain-text file (.txt/.md/.csv)
- *     }
+ *   "message": string,                 // the new user turn (required)
+ *   "model"?: string,                  // picker label; omitted = server default
+ *   "history"?: { role, content }[],   // prior turns (oldest -> newest)
+ *   "conversationId"?: string,         // accepted but ignored (no server DB)
+ *   "parameters"?: {                   // optional generation settings
+ *     "systemPrompt"?: string,
+ *     "temperature"?: number,          // 0..2
+ *     "topP"?: number,                 // >0..1
+ *     "maxTokens"?: number             // 1..64000
+ *   },
+ *   "attachments"?: {                  // optional multimodal input
+ *     "images"?: ({ mimeType?, data } | "data:image/...")[],
+ *     "document"?: { name, text }      // plain-text file (.txt/.md/.csv)
+ *   }
  *   }
  *
  * Bring-your-own-key / self-hosted routing (same contract as the Express app):
@@ -36,6 +42,7 @@ import { documentBlock, parseAttachments } from '../src/providers/attachments.ts
 import { UpstreamError } from '../src/providers/errors.ts';
 import { MockProvider } from '../src/providers/mock.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
+import { parseChatParameters } from '../src/providers/parameters.ts';
 import { PROVIDER_PRESETS, isDefaultModelLabel } from '../src/providers/presets.ts';
 import type { ChatMessage, ChatProvider } from '../src/providers/types.ts';
 
@@ -51,6 +58,7 @@ interface ChatBody {
   model?: unknown;
   history?: unknown;
   conversationId?: unknown;
+  parameters?: unknown;
   attachments?: unknown;
 }
 
@@ -327,6 +335,16 @@ export default async function handler(req: Req, res: Res): Promise<void> {
       throw new ApiError(400, '"model" must be a string when provided.', { code: 'bad_request' });
     }
 
+    // Validated before the provider is chosen or any bytes are written, so a
+    // bad slider value is a clean JSON 400 rather than a broken stream.
+    const parsedParameters = parseChatParameters(body.parameters);
+    if (!parsedParameters.ok) {
+      throw new ApiError(400, parsedParameters.error ?? 'Invalid parameters.', {
+        code: 'bad_request',
+      });
+    }
+    const parameters = parsedParameters.value;
+
     const { provider, model } = selectProvider(body.model, req);
     const history = normalizeHistory(body.history);
 
@@ -369,7 +387,11 @@ export default async function handler(req: Req, res: Res): Promise<void> {
 
     let answer = '';
     try {
-      for await (const chunk of provider.streamChat({ messages, signal: abort.signal })) {
+      for await (const chunk of provider.streamChat({
+        messages,
+        signal: abort.signal,
+        ...(Object.keys(parameters).length > 0 ? { parameters } : {}),
+      })) {
         if (!started) startSse();
         answer += chunk;
         send('delta', { text: chunk });

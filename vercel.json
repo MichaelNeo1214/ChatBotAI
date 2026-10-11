@@ -9,8 +9,21 @@
     },
     "api/image.ts": {
       "maxDuration": 120
+    },
+    "api/shares.ts": {
+      "maxDuration": 30
     }
   },
+  "rewrites": [
+    {
+      "source": "/c/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/share/:shareId",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

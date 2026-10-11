@@ -52,6 +52,11 @@ function cors(req: Request, res: Response, next: NextFunction): void {
  * root later is private unless it is listed in config.STATIC_MOUNTS /
  * config.STATIC_FILES.
  */
+/** Sends the app shell for a client-side route. */
+function serveShell(_req: Request, res: Response): void {
+  res.sendFile(path.join(ROOT_DIR, 'index.html'));
+}
+
 function serveStatic(app: express.Express): void {
   for (const mount of STATIC_MOUNTS) {
     app.use(`/${mount}`, express.static(path.join(ROOT_DIR, mount), { index: false }));
@@ -73,6 +78,13 @@ function serveStatic(app: express.Express): void {
   app.get('/index.html', (_req: Request, res: Response) => {
     res.sendFile(path.join(ROOT_DIR, 'index.html'));
   });
+
+  // Client-side routes. These must resolve to the shell on a hard load, not
+  // 404 — the whole point of /c/:id and /share/:shareId is that they can be
+  // pasted into another browser. vercel.json declares the same rewrites for the
+  // deployed build, so both environments behave identically.
+  app.get('/c/:id', serveShell);
+  app.get('/share/:shareId', serveShell);
 
   // Anything left is a miss, including every path inside the allowlist that
   // does not exist. Answering here keeps Express from falling through to the

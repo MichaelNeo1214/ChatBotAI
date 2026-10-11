@@ -3341,3 +3341,119 @@
                 margin: 10px 0;
             }
         }
+
+        /* ===== READ-ONLY SHARED VIEW =====
+           Rendered by js/share-view.js. Hidden unless a /share/… link is open;
+           js/share-view.js also sets .read-only-share on <body> to take the
+           sidebar, composer and modals out of the page entirely. */
+
+        .read-only-share .sidebar,
+        .read-only-share .sidebar-overlay,
+        .read-only-share .input-area,
+        .read-only-share .btn-toggle-sidebar {
+            display: none !important;
+        }
+
+        .share-view {
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            padding: 24px 16px 48px;
+        }
+
+        .share-card {
+            max-width: 780px;
+            margin: 0 auto;
+        }
+
+        .share-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 18px;
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        .share-badge-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-color);
+        }
+
+        .share-title {
+            margin: 0 0 6px;
+            color: var(--text-primary);
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .share-desc {
+            margin: 0 0 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.55;
+        }
+
+        .share-transcript {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            padding-bottom: 8px;
+        }
+
+        .share-message {
+            padding: 14px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            background: var(--bg-secondary);
+        }
+
+        .share-message.user {
+            background: var(--bg-tertiary);
+        }
+
+        .share-message-role {
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-size: 11.5px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .share-message-body {
+            color: var(--text-primary);
+            font-size: 14.5px;
+            line-height: 1.65;
+            overflow-wrap: anywhere;
+        }
+
+        .share-image {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+            border-radius: var(--radius-md);
+        }
+
+        .share-fork,
+        .share-back {
+            margin-top: 24px;
+            margin-right: 10px;
+        }
+
+        @media (max-width: 560px) {
+            .share-view { padding: 16px 12px 40px; }
+            .share-fork, .share-back { display: block; width: 100%; margin-right: 0; }
+        }

@@ -701,6 +701,13 @@
                 // Only sent when present, so a text-only turn stays byte-for-byte
                 // the request this client made before multimodal existed.
                 if (mmAttachment) payload.attachments = mmAttachment;
+                // Generation parameters (system prompt, temperature, top-p, max
+                // tokens) come from the settings store and are only present when
+                // the user actually set them, so provider defaults still apply.
+                const chatParams = (window.ChatBotSettings && typeof window.ChatBotSettings.chatParameters === 'function')
+                    ? window.ChatBotSettings.chatParameters()
+                    : {};
+                if (Object.keys(chatParams).length > 0) payload.parameters = chatParams;
 
                 const headers = Object.assign(
                     { 'Content-Type': 'application/json' },
@@ -1713,6 +1720,39 @@ function mmNeedsVisionModel() {
                 scrollToBottom(true);
                 updateScrollFab();
             }
+
+                        // ===== SHARED VIEW BRIDGE =====
+            // js/share-view.js renders shared conversations read-only and has no
+            // access to the app's internals, so the two things it needs are
+            // published here rather than pulling the chat module into it.
+            window.__chatbotFormatText = formatText;
+
+            /**
+             * Copies a shared transcript into a fresh local conversation.
+             *
+             * The copy is local-only: it is saved like any other chat on this
+             * device and is never written back to the original share link.
+             */
+            window.__chatbotForkConversation = function(messages) {
+                startNewChat();
+                messagesWrapper.innerHTML = '';
+                messagesWrapper.classList.add('visible');
+                welcomeScreen.style.display = 'none';
+                chatStarted = true;
+
+                const shared = Array.isArray(messages) ? messages : [];
+                for (let i = 0; i < shared.length; i++) {
+                    const m = shared[i];
+                    if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
+                    addMessage(m.role, m.text || '', m.image ? { image: m.image } : undefined);
+                }
+
+                setActiveConversationId(activeConversationId || newUuid());
+                persistHistory();
+                renderHistory();
+                scrollToBottom(true);
+                chatInput.focus();
+            };
 
             function startNewChat() {
                 // A new chat has no id until the first message: the session is
@@ -3420,49 +3460,105 @@ function mmNeedsVisionModel() {
                 });
             }
 
-            // ===== THEME TOGGLE + APPEARANCE SETTING =====
-            const appearanceSelect = document.getElementById('appearanceSelect');
+            // ===== THEME =====
+            // Persisted preferences live in js/settings.js. This block only
+            // mirrors them onto the DOM and wires the two controls, so the
+            // theme has exactly one owner.
+            const settings = window.ChatBotSettings || null;
+
+            const THEME_LABELS = { dark: 'Dark', light: 'Light', system: 'System' };
 
             function syncAppearanceSelect(theme) {
-                if (appearanceSelect) {
+                if (!appearanceSelect) return;
+                // The stored value is 'system'; the select's option is a label.
+                const wanted = THEME_LABELS[theme] || 'Dark';
+                const has = Array.prototype.some.call(appearanceSelect.options, function(o) {
+                    return o.value === wanted;
+                });
+                if (has) {
+                    appearanceSelect.value = wanted;
+                } else if (theme !== 'system') {
                     appearanceSelect.value = theme === 'light' ? 'Light' : 'Dark';
                 }
             }
 
-            function applyTheme(theme) {
-                document.body.classList.toggle('light', theme === 'light');
-                syncAppearanceSelect(theme);
-                try {
-                    sessionStorage.setItem('chatbot-theme', theme);
-                } catch (e) {}
+            /** Applies the current preference; returns whether dark is in effect. */
+            function applyTheme() {
+                if (!settings) return false;
+                const dark = settings.applyTheme();
+                syncAppearanceSelect(settings.get().theme);
+                return dark;
             }
 
             if (appearanceSelect) {
                 appearanceSelect.addEventListener('change', function() {
-                    applyTheme(this.value === 'Light' ? 'light' : 'dark');
+                    if (!settings) return;
+                    const value = this.value;
+                    const theme = value === 'Light' ? 'light' : value === 'System' ? 'system' : 'dark';
+                    settings.set({ theme: theme });
+                    applyTheme();
                 });
             }
 
-            // Load saved theme (sessionStorage: survives refresh, resets on browser close)
-            (function initTheme() {
-                let savedTheme = null;
-                try {
-                    savedTheme = sessionStorage.getItem('chatbot-theme');
-                } catch (e) {}
-                if (savedTheme) {
-                    applyTheme(savedTheme);
-                } else {
-                    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-                    applyTheme(prefersLight ? 'light' : 'dark');
-                }
-            })();
+            // Restore the saved preference on load, then keep following the OS
+            // while the page is open if the user chose "System".
+            if (settings) {
+                applyTheme();
+                settings.watchSystemTheme();
+                settings.subscribe(applyTheme);
+            }
 
-            // Topbar shortcut mirrors the Appearance setting.
+            // Topbar shortcut cycles dark -> light -> system.
             if (btnThemeToggle) {
                 btnThemeToggle.addEventListener('click', function() {
-                    const isLight = document.body.classList.contains('light');
-                    applyTheme(isLight ? 'dark' : 'light');
+                    if (!settings) return;
+                    const next = settings.cycleTheme();
+                    applyTheme();
+                    notify('Theme: ' + (THEME_LABELS[next] || next), { type: 'info', duration: 1600 });
                 });
+            }
+
+            // ===== SHARE =====
+            // Produces a self-contained read-only link. See js/share.js for why
+            // the conversation travels in the URL rather than a server-side id.
+            const btnShareChat = document.getElementById('btnShareChat');
+
+            async function shareActiveConversation() {
+                if (!window.ChatBotShare) return;
+
+                let title = '';
+                const session = activeConversationId ? findSession(activeConversationId) : null;
+                if (session && session.title) title = session.title;
+
+                const result = window.ChatBotShare.createShareLink({
+                    messages: chatHistory,
+                    title: title || deriveTitle(chatHistory) || 'Shared conversation'
+                });
+
+                if (!result.ok) {
+                    notify(result.message, { type: 'warn', duration: 6000 });
+                    return;
+                }
+
+                try {
+                    await navigator.clipboard.writeText(result.url);
+                    notify('Share link copied - it opens read-only in any browser.', {
+                        type: 'success',
+                        duration: 5000
+                    });
+                } catch (e) {
+                    // Clipboard access is blocked in some contexts; still move to
+                    // the shared view so the link can be copied from the address bar.
+                    notify('Copying was blocked. The link is in the address bar.', {
+                        type: 'warn',
+                        duration: 6000
+                    });
+                    window.location.hash = result.url.split('#')[1];
+                }
+            }
+
+            if (btnShareChat) {
+                btnShareChat.addEventListener('click', shareActiveConversation);
             }
 
             // ===== MODEL DROPDOWN =====

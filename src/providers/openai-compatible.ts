@@ -162,23 +162,36 @@ export class OpenAICompatibleProvider implements ChatProvider {
     return this.#model;
   }
 
-  /**
-   * The request body.
-   *
+/**
+ * The request body.
+ *
  * `reasoning` is included only when an effort was configured — OpenRouter
  * understands it, but the :free endpoints it routes to do not all do, and a
  * plain OpenAI-compatible server may reject the request on an unknown field.
-   */
-  #requestBody(request: ChatRequest): string {
+ *
+ * Generation parameters are included only when the caller supplied them, for
+ * the same reason: a gateway that does not know `top_p` should not fail a turn
+ * that never asked for it.
+ */
+#requestBody(request: ChatRequest): string {
+    const parameters = request.parameters ?? {};
+
     return JSON.stringify({
       model: this.#model,
       stream: true,
       messages: [
-        { role: 'system', content: this.#systemPrompt },
+        { role: 'system', content: parameters.systemPrompt ?? this.#systemPrompt },
         ...request.messages.map(toOpenAIMessage),
       ],
       ...(this.#reasoningEffort !== undefined
         ? { reasoning: { effort: this.#reasoningEffort } }
+        : {}),
+      ...(parameters.temperature !== undefined ? { temperature: parameters.temperature } : {}),
+      ...(parameters.topP !== undefined ? { top_p: parameters.topP } : {}),
+      // OpenAI renamed max_tokens to max_completion_tokens; newer gateways
+      // expect the latter, and the reasoning models reject the old name.
+      ...(parameters.maxTokens !== undefined
+        ? { max_completion_tokens: parameters.maxTokens }
         : {}),
     });
   }

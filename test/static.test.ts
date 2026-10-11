@@ -102,6 +102,35 @@ describe('static file serving', () => {
     assert.equal(response.status, 404);
     assert.match(response.headers.get('content-type') ?? '', /application\/json/);
   });
+
+  it('serves the app shell for client-side routes so deep links resolve', async () => {
+    // /c/:id and /share/:shareId are the whole point of a shareable link: they
+    // get pasted into other browsers, which is a hard navigation. A 404 here
+    // would break sharing for everyone except the person who made the link.
+    for (const route of ['/c/abc-123', '/share/s1.abc', '/c/abc-123/', '/share/s1.a.b_c-d']) {
+      const response = await browser.get(route);
+      assert.equal(response.status, 200, `${route} must serve the shell`);
+      assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+      assert.match(await response.text(), /<div id="shareView"|share-view/);
+    }
+  });
+
+  it('declares the same client-side rewrites on Vercel', () => {
+    const vercelPath = path.join(process.cwd(), 'vercel.json');
+    const vercel = JSON.parse(readFileSync(vercelPath, 'utf8')) as {
+      rewrites?: { source: string; destination: string }[];
+    };
+
+    const sources = (vercel.rewrites ?? []).map((r) => r.source);
+    // Without these, a deployed /c/:id is a 404 while local dev works — the
+    // worst kind of environment-only bug.
+    assert.ok(sources.includes('/c/:id'), 'vercel.json must rewrite /c/:id');
+    assert.ok(sources.includes('/share/:shareId'), 'vercel.json must rewrite /share/:shareId');
+
+    for (const rewrite of vercel.rewrites ?? []) {
+      assert.equal(rewrite.destination, '/index.html');
+    }
+  });
 });
 
 /**
@@ -114,7 +143,6 @@ describe('static file serving', () => {
 describe('asset manifests', () => {
   const root = process.cwd();
   const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
-
   /** Local (non-CDN) references from an HTML attribute such as src or href. */
   function localRefs(html: string, attribute: string): string[] {
     return [...html.matchAll(new RegExp(`${attribute}="([^"]+)"`, 'g'))]
@@ -166,5 +194,25 @@ describe('asset manifests', () => {
     assert.ok(match, 'CACHE_NAME not found in sw.js');
     const version = Number(match![1]!.match(/v(\d+)$/)?.[1]);
     assert.ok(Number.isFinite(version) && version > 0, 'CACHE_NAME must end in v<n>');
+  });
+
+  it('every settings menu item points at a panel that exists', () => {
+    // Removing a panel without its menu item leaves a dead button that toggles
+    // nothing; the reverse leaves a panel nothing can reach.
+    const html = read('index.html');
+    const menuItems = new Set(
+      [...html.matchAll(/class="settings-menu-item[^"]*"[^>]*data-panel="([a-z-]+)"/g)].map((m) => m[1]),
+    );
+    const panels = new Set(
+      [...html.matchAll(/class="settings-panel[^"]*"[^>]*data-panel="([a-z-]+)"/g)].map((m) => m[1]),
+    );
+
+    assert.ok(menuItems.size > 0, 'expected settings menu items to exist');
+
+    const dead = [...menuItems].filter((p) => !panels.has(p));
+    assert.deepEqual(dead, [], 'menu items with no matching panel');
+
+    const unreachable = [...panels].filter((p) => !menuItems.has(p));
+    assert.deepEqual(unreachable, [], 'panels no menu item can reach');
   });
 });

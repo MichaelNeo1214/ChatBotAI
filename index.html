@@ -318,11 +318,9 @@
                     <li class="settings-menu-item" data-title="Plugins" data-panel="plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
                     <li class="settings-menu-item" data-title="API Key" data-panel="api-key"><i class="fa-solid fa-key"></i> API Key</li>
                     <li class="settings-menu-item" data-title="Voice" data-panel="voice"><i class="fa-solid fa-microphone"></i> Voice</li>
-                    <li class="settings-menu-item" data-title="Billing" data-panel="billing"><i class="fa-regular fa-credit-card"></i> Billing</li>
                     <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
                     <li class="settings-menu-item" data-title="Analytics" data-panel="analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
                     <li class="settings-menu-item" data-title="Safety" data-panel="safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
-                    <li class="settings-menu-item" data-title="Security and login" data-panel="security-login"><i class="fa-solid fa-lock"></i> Security and login</li>
                     <li class="settings-menu-item" data-title="Account" data-panel="account"><i class="fa-regular fa-circle-user"></i> Account</li>
                 </ul>
             </div>
@@ -631,26 +629,6 @@
       </div>
     </div>
 
-    <!-- BILLING -->
-    <div class="settings-panel" data-panel="billing">
-      <h2>Billing</h2>
-      <div class="plan-card">
-        <div>
-          <div class="plan-name">Free plan</div>
-          <div class="plan-sub">Basic access with limited usage.</div>
-        </div>
-        <button class="btn primary">Upgrade</button>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Payment method</span>
-        <button class="btn">Add payment method</button>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Billing history</span>
-        <button class="btn">View invoices</button>
-      </div>
-    </div>
-
     <!-- USAGE -->
     <div class="settings-panel" data-panel="usage">
       <h2>Usage</h2>
@@ -715,25 +693,6 @@
       </div>
     </div>
 
-    <!-- SECURITY AND LOGIN -->
-    <div class="settings-panel" data-panel="security-login">
-      <h2>Security and login</h2>
-      <div class="setting-row">
-        <span class="setting-label">Password</span>
-        <button class="btn">Change password</button>
-      </div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Two-factor authentication</div>
-          <div class="setting-desc">Add an extra layer of security to your account.</div>
-        </div>
-        <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Active sessions</span>
-        <button class="btn">Manage sessions</button>
-      </div>
-    </div>
 
     <!-- ACCOUNT -->
     <div class="settings-panel" data-panel="account">
@@ -816,6 +775,12 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
     <!-- LaTeX delimiter rules; must load before script.js consumes them. -->
     <script src="js/markdown-math.js"></script>
+    <!-- Single source of truth for every user preference. -->
+    <script src="js/settings.js"></script>
+    <!-- Share-link encoding, parsing and client-side routing. -->
+    <script src="js/share.js"></script>
+    <!-- Read-only shared-conversation view; renders on load and on hashchange. -->
+    <script src="js/share-view.js"></script>
     <!-- Must load first: installs the global error boundary before anything can throw. -->
     <script src="js/ui.js"></script>
     <script src="js/script.js"></script>

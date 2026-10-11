@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.ts';
 import { documentBlock, parseAttachments } from '../providers/attachments.ts';
+import { parseChatParametersOrThrow } from '../providers/parameters.ts';
 import {
   addMessage,
   createConversation,
@@ -43,6 +44,7 @@ const ipLimiter = rateLimit({
  * POST /api/chat
  *
  * Body: { message: string, conversationId?: string, model?: string,
+ *          parameters?: { systemPrompt?, temperature?, topP?, maxTokens? },
  *          attachments?: { images?, document? } }
  * Responds with Server-Sent Events:
  *   event: meta   — { conversationId, messageId } (sent before any token)
@@ -55,7 +57,7 @@ const ipLimiter = rateLimit({
  */
 chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
   try {
-    const { message, conversationId, model, attachments } = req.body ?? {};
+    const { message, conversationId, model, attachments, parameters } = req.body ?? {};
 
     if (typeof message !== 'string' || message.trim() === '') {
       throw badRequest('"message" is required and must be a non-empty string');
@@ -70,6 +72,9 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
     if (model != null && typeof model !== 'string') {
       throw badRequest('"model" must be a string when provided');
     }
+    // Same validation as the serverless handler, so a bad slider value is a
+    // clean 400 here too rather than a provider-side failure mid-stream.
+    const chatParameters = parseChatParametersOrThrow(parameters);
 
     const text = message.trim();
 
@@ -138,6 +143,7 @@ chatRouter.post('/', ownerLimiter, ipLimiter, async (req, res, next) => {
           },
         ],
         model: resolvedModel,
+        ...(Object.keys(chatParameters).length > 0 ? { parameters: chatParameters } : {}),
         signal: abort.signal,
       })) {
         answer += chunk;

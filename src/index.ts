@@ -1,6 +1,6 @@
 import { createApp } from './app.ts';
 import { config } from './config.ts';
-import { db } from './db/index.ts';
+import { closeDb } from './db/index.ts';
 import { provider } from './providers/index.ts';
 import { purgeExpiredSessions } from './db/users.ts';
 
@@ -17,7 +17,7 @@ const server = createApp().listen(config.port, () => {
 function shutdown(signal: string): void {
   console.log(`\n${signal} received, shutting down.`);
   server.close(() => {
-    db.close();
+    closeDb();
     process.exit(0);
   });
 }
