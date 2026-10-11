@@ -246,7 +246,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
                     <div class="model-dropdown" id="modelDropdown" hidden>
-                        <button class="model-option active" data-model="Free Model">
+                        <button class="model-option active" data-model="OpenRouter Free">
                             <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
                             <span class="model-name">OpenRouter Free</span>
                             <span class="model-desc" data-i18n="modelDescChatbot">Free · no key needed</span>
@@ -317,7 +317,9 @@
                     <li class="settings-menu-item" data-title="Personalization" data-panel="personalization"><i class="fa-solid fa-wand-magic-sparkles"></i> Personalization</li>
                     <li class="settings-menu-item" data-title="Plugins" data-panel="plugins"><i class="fa-solid fa-puzzle-piece"></i> Plugins</li>
                     <li class="settings-menu-item" data-title="API Key" data-panel="api-key"><i class="fa-solid fa-key"></i> API Key</li>
+                    <li class="settings-menu-item" data-title="Model &amp; Behaviour" data-panel="behaviour"><i class="fa-solid fa-sliders"></i> Model &amp; Behaviour</li>
                     <li class="settings-menu-item" data-title="Voice" data-panel="voice"><i class="fa-solid fa-microphone"></i> Voice</li>
+                    <li class="settings-menu-item" data-title="Data &amp; privacy" data-panel="data-privacy"><i class="fa-solid fa-shield-halved"></i> Data &amp; privacy</li>
                     <li class="settings-menu-item" data-title="Usage" data-panel="usage"><i class="fa-solid fa-chart-simple"></i> Usage</li>
                     <li class="settings-menu-item" data-title="Analytics" data-panel="analytics"><i class="fa-solid fa-chart-line"></i> Analytics</li>
                     <li class="settings-menu-item" data-title="Safety" data-panel="safety"><i class="fa-solid fa-shield-halved"></i> Safety</li>
@@ -602,6 +604,105 @@
       </form>
     </div>
 
+<!-- MODEL & BEHAVIOUR -->
+    <div class="settings-panel" data-panel="behaviour">
+      <h2>Model &amp; Behaviour</h2>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Send these overrides</div>
+          <div class="setting-desc">When off, every value below is left unset so the model's own defaults apply. Recommended: different models disagree about what a good temperature is.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="behaviourOverridesEnabled">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">System instructions</span>
+        <div class="setting-desc">Prepended to every request as the system prompt. Leave empty to use the default.</div>
+        <textarea id="systemPromptInput" class="settings-textarea" rows="4" maxlength="8000"
+                  placeholder="e.g. Answer concisely. Show code before explaining it."></textarea>
+        <div class="setting-desc" id="systemPromptCount">0 / 8000</div>
+      </div>
+
+      <div class="setting-row setting-row-column" data-requires-overrides>
+        <div class="setting-label-row">
+          <span class="setting-label">Temperature</span>
+          <span class="setting-value" id="temperatureValue">model default</span>
+        </div>
+        <div class="setting-desc">Higher is more varied and less predictable. 0 is near-deterministic.</div>
+        <input type="range" id="temperatureSlider" min="0" max="2" step="0.05" value="1"
+               aria-label="Temperature" aria-describedby="temperatureValue">
+      </div>
+
+      <div class="setting-row setting-row-column" data-requires-overrides>
+        <div class="setting-label-row">
+          <span class="setting-label">Top-P</span>
+          <span class="setting-value" id="topPValue">model default</span>
+        </div>
+        <div class="setting-desc">Nucleus sampling. Lower narrows the set of tokens considered.</div>
+        <input type="range" id="topPSlider" min="0.05" max="1" step="0.01" value="1"
+               aria-label="Top-P" aria-describedby="topPValue">
+      </div>
+
+      <div class="setting-row setting-row-column" data-requires-overrides>
+        <div class="setting-label-row">
+          <span class="setting-label">Max tokens</span>
+          <span class="setting-value" id="maxTokensValue">model default</span>
+        </div>
+        <div class="setting-desc">Upper bound on the reply length. Higher costs more on paid models.</div>
+        <input type="range" id="maxTokensSlider" min="256" max="8192" step="256" value="2048"
+               aria-label="Max tokens" aria-describedby="maxTokensValue">
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-label">Enter sends the message</span>
+        <label class="switch">
+          <input type="checkbox" id="sendOnEnterToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- DATA & PRIVACY -->
+    <div class="settings-panel" data-panel="data-privacy">
+      <h2>Data &amp; privacy</h2>
+      <div class="setting-desc settings-intro">
+        Conversations and API keys live in this browser only. Nothing is uploaded unless you sign in
+        and enable cloud sync.
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Export chat history</div>
+          <div class="setting-desc" id="exportSummary">Downloads every conversation stored on this device.</div>
+        </div>
+        <div class="setting-row-actions">
+          <button class="btn" id="btnExportJson" type="button">JSON</button>
+          <button class="btn" id="btnExportMarkdown" type="button">Markdown</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Clear all local data</div>
+          <div class="setting-desc">Deletes every conversation, attachment and API key stored in this browser. This cannot be undone.</div>
+        </div>
+        <button class="btn danger" id="btnClearLocalData" type="button">Clear</button>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-label">Sign out</span>
+        <button class="btn" id="btnSettingsSignOut" type="button">Sign out</button>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-label">Delete account</span>
+        <button class="btn danger" id="btnDeleteAccount" type="button">Delete account</button>
+      </div>
+    </div>
     <!-- VOICE -->
     <div class="settings-panel" data-panel="voice">
       <h2>Voice</h2>
@@ -629,38 +730,64 @@
       </div>
     </div>
 
-    <!-- USAGE -->
+<!-- USAGE -->
     <div class="settings-panel" data-panel="usage">
       <h2>Usage</h2>
-      <div class="setting-row" style="display:block;">
-        <span class="setting-label">Messages this month</span>
-        <div class="usage-bar-track"><div class="usage-bar-fill" style="width:42%;"></div></div>
-        <div class="setting-desc" style="margin-top:6px;">420 / 1,000 messages used</div>
+      <div class="setting-desc settings-intro">Counted from the conversations stored in this browser. Nothing is measured on a server.</div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">Conversations</span>
+        <div class="setting-desc" id="statConversations">Calculating…</div>
       </div>
-      <div class="setting-row" style="display:block;">
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">Messages</span>
+        <div class="setting-desc" id="statMessages">Calculating…</div>
+      </div>
+
+      <div class="setting-row setting-row-column">
         <span class="setting-label">Storage used</span>
-        <div class="usage-bar-track"><div class="usage-bar-fill" style="width:18%;"></div></div>
-        <div class="setting-desc" style="margin-top:6px;">1.8 GB / 10 GB used</div>
+        <div class="usage-bar-track"><div class="usage-bar-fill" id="storageBar" style="width:0%;"></div></div>
+        <div class="setting-desc" id="statStorage">Calculating…</div>
+      </div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">Images attached</span>
+        <div class="setting-desc" id="statImages">Calculating…</div>
+      </div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">Busiest day</span>
+        <div class="setting-desc" id="statBusiest">Calculating…</div>
       </div>
     </div>
 
     <!-- ANALYTICS -->
     <div class="settings-panel" data-panel="analytics">
       <h2>Analytics</h2>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Share usage analytics</div>
-          <div class="setting-desc">Help improve the product by sharing anonymous usage data.</div>
-        </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+      <div class="setting-desc settings-intro">A breakdown of what is stored on this device. It is read locally and is never transmitted.</div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">By role</span>
+        <div class="usage-bar-track"><div class="usage-bar-fill" id="roleUserBar" style="width:0%;"></div></div>
+        <div class="setting-desc" id="statByRole">Calculating…</div>
       </div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Crash reports</div>
-          <div class="setting-desc">Automatically send crash logs when something breaks.</div>
-        </div>
-        <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">By model</span>
+        <div class="setting-desc" id="statByModel">Calculating…</div>
       </div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">First conversation</span>
+        <div class="setting-desc" id="statFirstUsed">Calculating…</div>
+      </div>
+
+      <div class="setting-row setting-row-column">
+        <span class="setting-label">Newest conversation</span>
+        <div class="setting-desc" id="statLastUsed">Calculating…</div>
+      </div>
+    </div>
     </div>
 
     <!-- SAFETY -->

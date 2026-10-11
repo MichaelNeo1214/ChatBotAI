@@ -209,13 +209,143 @@ describe('api/auth — routing and guards', () => {
 });
 
 /**
- * The handler must ALWAYS answer.
+ * Upstream failure handling.
  *
- * A function that never writes a response is reported by the platform as a
- * 502 Bad Gateway, which blames the deployment rather than the code. The way
- * that happens here is a request body whose stream already ended: no 'end'
- * event is ever emitted, so an unguarded read never settles.
+ * The reported symptom was a 502 on signup while Supabase showed the user was
+ * created. A 502 means the invocation never produced a response, which happens
+ * when the platform kills a function that outlives maxDuration — not when code
+ * throws. So the contract these tests pin down is: whatever Supabase does, this
+ * handler answers, and it answers with a status that names the real cause.
  */
+describe('api/auth — upstream failures answer cleanly', () => {
+  const saved = {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_ANON_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_ANON_KEY = 'anon-key';
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (saved.url === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = saved.url;
+    if (saved.key === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = saved.key;
+  });
+
+  it('answers 503 when Supabase cannot be reached', async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed');
+    }) as typeof fetch;
+
+    const handler = await load();
+    const { res, captured } = fakeRes();
+    await handler(fakeReq('POST', '/api/auth/signup', { email: 'a@b.co', password: 'password123', name: 'A' }), res);
+
+    assert.equal(captured.status, 503, 'an unreachable dependency is 503, never 502');
+    const body = JSON.parse(captured.body) as { error: { status: number; message: string } };
+    assert.equal(body.error.status, 503);
+    assert.doesNotMatch(body.error.message, /supabase\.co|fetch failed/);
+  });
+
+  it('answers 503 with a timeout reason when Supabase stalls', async () => {
+    globalThis.fetch = (async () => {
+      const error = new Error('The operation was aborted');
+      error.name = 'TimeoutError';
+      throw error;
+    }) as typeof fetch;
+
+    const handler = await load();
+    const { res, captured } = fakeRes();
+    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }), res);
+
+    assert.equal(captured.status, 503, 'a stalled dependency must not be reported as a bad password');
+    assert.match(captured.body, /did not respond in time/);
+  });
+
+  it('does not report an outage as a wrong password', async () => {
+    // The worst version of this bug: Supabase is down and every visitor is
+    // told their credentials were rejected, so they all reset passwords.
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed');
+    }) as typeof fetch;
+
+    const handler = await load();
+    const { res, captured } = fakeRes();
+    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }), res);
+
+    assert.equal(captured.status, 503);
+    assert.doesNotMatch(captured.body, /invalid_credentials|Incorrect email or password/);
+  });
+
+  it('still answers 401 for a genuine credential rejection', async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ msg: 'Invalid login credentials' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch;
+
+    const handler = await load();
+    const { res, captured } = fakeRes();
+    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'wrongpassword' }), res);
+
+    assert.equal(captured.status, 401);
+    assert.match(captured.body, /invalid_credentials/);
+  });
+
+  it('sets a bounded timeout on every upstream call', async () => {
+    let signal: AbortSignal | null | undefined;
+    globalThis.fetch = (async (_url: string, init: RequestInit = {}) => {
+      signal = init.signal;
+      return new Response(JSON.stringify({ access_token: 'tok', user: { id: 'u1', email: 'a@b.co' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const handler = await load();
+    const { res, captured } = fakeRes();
+    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }), res);
+
+    assert.equal(captured.status, 200);
+    assert.ok(signal, 'the upstream call must carry an abort signal');
+  });
+
+  it('never relays a 502 to the client for an upstream fault', async () => {
+    // A 502 tells the caller the deployment is broken, which sends them
+    // debugging the wrong system.
+    globalThis.fetch = (async () => {
+      throw new Error('socket hang up');
+    }) as typeof fetch;
+
+    const handler = await load();
+    for (const [method, url, body] of [
+      ['POST', '/api/auth/signup', { email: 'a@b.co', password: 'password123', name: 'A' }],
+      ['POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }],
+      ['GET', '/api/auth/me', undefined],
+    ] as const) {
+      const { res, captured } = fakeRes();
+      await handler(fakeReq(method, url, body, method === 'GET' ? 'cbai_session=tok' : undefined), res);
+      assert.notEqual(captured.status, 502, `${method} ${url} must not answer 502`);
+    }
+  });
+
+  it('survives a malformed cookie value instead of throwing', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+    const handler = await load();
+    // A stray '%' is not a valid escape and decodeURIComponent throws on it.
+    const { res, captured } = fakeRes();
+    await handler(fakeReq('GET', '/api/auth/me', undefined, 'cbai_session=100%off; other=%zz'), res);
+
+    assert.equal(captured.status, 200, 'a malformed cookie must degrade to anonymous, not crash');
+  });
+});
 describe('api/auth — always responds', () => {
   const saved = {
     url: process.env.SUPABASE_URL,

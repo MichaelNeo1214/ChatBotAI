@@ -145,3 +145,106 @@ describe('image and title wiring', () => {
     assert.ok(readFileSync(path.join(process.cwd(), 'api', 'title.ts'), 'utf8').length > 0);
   });
 });
+
+/**
+ * Settings panels.
+ *
+ * These were the last pieces of the settings modal with no behaviour behind
+ * them: no temperature/top-p/max-tokens controls, no system-prompt field, no
+ * way to export or clear local data, and a Usage panel showing invented
+ * numbers ("420 / 1,000").
+ */
+describe('settings panels', () => {
+  const read = (file: string) => readFileSync(path.join(process.cwd(), file), 'utf8');
+  const html = () => read('index.html');
+  const script = () => read('js/script.js');
+
+  it('every menu item still has a panel and every panel a menu item', () => {
+    const source = html();
+    const menu = new Set(
+      [...source.matchAll(/class="settings-menu-item[^"]*"[^>]*data-panel="([a-z-]+)"/g)].map((m) => m[1]),
+    );
+    const panels = new Set(
+      [...source.matchAll(/class="settings-panel[^"]*"[^>]*data-panel="([a-z-]+)"/g)].map((m) => m[1]),
+    );
+    assert.deepEqual([...menu].filter((p) => !panels.has(p)), []);
+    assert.deepEqual([...panels].filter((p) => !menu.has(p)), []);
+  });
+
+  it('provides controls for every generation parameter', () => {
+    const source = html();
+    for (const id of ['temperatureSlider', 'topPSlider', 'maxTokensSlider', 'systemPromptInput']) {
+      assert.ok(source.includes(`id="${id}"`), `missing control: ${id}`);
+    }
+    // System prompt must be a textarea, not an input: it is multi-line and the
+    // backend caps it at 8000 characters.
+    assert.match(source, /<textarea[^>]*id="systemPromptInput"[^>]*maxlength="8000"/);
+  });
+
+  it('binds the behaviour controls to the settings store', () => {
+    const source = script();
+    assert.match(source, /function initBehaviourPanel\(\)/);
+    // Writes must go through the store, never to localStorage directly.
+    assert.match(source, /settings\.set\(\{ systemPrompt:/);
+    assert.match(source, /settings\.set\(patch\)/);
+    assert.match(source, /settings\.subscribe\(render\)/);
+  });
+
+  it('sends the parameters on the wire', () => {
+    const source = script();
+    assert.match(source, /chatParameters\(\)[\s\S]{0,200}payload\.parameters = chatParams/);
+  });
+
+  it('offers export in both formats and a guarded clear', () => {
+    const source = html();
+    assert.ok(source.includes('id="btnExportJson"'));
+    assert.ok(source.includes('id="btnExportMarkdown"'));
+    assert.ok(source.includes('id="btnClearLocalData"'));
+
+    const js = script();
+    assert.match(js, /async function exportAsJson\(\)/);
+    assert.match(js, /async function exportAsMarkdown\(\)/);
+    // Destruction requires typing CLEAR, not a single click.
+    assert.match(js, /input\.value\.trim\(\)\.toUpperCase\(\) !== 'CLEAR'/);
+  });
+
+  it('shows real local statistics instead of invented numbers', () => {
+    const source = html();
+    assert.doesNotMatch(source, /420 \/ 1,000/, 'hardcoded usage must be gone');
+    assert.doesNotMatch(source, /1\.8 GB \/ 10 GB/);
+    for (const id of ['statConversations', 'statMessages', 'statStorage', 'statByModel']) {
+      assert.ok(source.includes(`id="${id}"`), `missing stat target: ${id}`);
+    }
+    assert.match(script(), /async function refreshUsageStats\(\)/);
+    // Computed on open, not on every boot.
+    assert.match(script(), /panel === 'usage' \|\| panel === 'analytics'\) refreshUsageStats\(\)/);
+  });
+
+  it('honours the Enter-to-send preference', () => {
+    const source = script();
+    assert.match(source, /settings\.get\(\)\.sendOnEnter !== false/);
+    assert.ok(html().includes('id="sendOnEnterToggle"'));
+  });
+
+  it('uses a model label the server actually accepts', () => {
+    // data-model is the wire value. A label the backend does not recognise is
+    // answered with 400 unknown_model on every send.
+    const source = html();
+    const defaultOption = /data-model="([^"]+)"[\s\S]{0,400}?class="model-name">([^<]+)</.exec(source);
+    assert.ok(defaultOption, 'default model option not found');
+
+    const presets = read('src/providers/presets.ts');
+    const accepted = [
+      ...[...presets.matchAll(/DEFAULT_MODEL_LABEL = '([^']+)'/g)].map((m) => m[1] ?? ''),
+      ...[...presets.matchAll(/DEFAULT_MODEL_ALIASES: readonly string\[\] = \[([^\]]+)\]/g)]
+        .flatMap((m) => [...(m[1] ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1] ?? '')),
+    ];
+
+    assert.ok(
+      accepted.includes(defaultOption[1] ?? ''),
+      `data-model="${defaultOption[1]}" is not a label the server accepts (${accepted.join(', ')})`,
+    );
+    // The visible name and the wire value must not drift apart.
+    assert.equal(defaultOption[2]!.trim(), defaultOption[1]!.trim());
+  });
+});

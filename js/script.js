@@ -3515,7 +3515,13 @@ function mmNeedsVisionModel() {
 
             // Enter to send (Shift+Enter for newline)
             chatInput.addEventListener('keydown', function(e) {
+                // Shift+Enter is always a newline. Enter-to-send is a
+                // preference, not a constant, because plenty of people prefer
+                // a newline key in a chat box.
                 if (e.key === 'Enter' && !e.shiftKey) {
+                    const sendOnEnter = settings ? settings.get().sendOnEnter !== false : true;
+                    if (!sendOnEnter) return;
+
                     e.preventDefault();
                     if (this.value.trim()) {
                         sendMessage(this.value);
@@ -4480,6 +4486,412 @@ function mmNeedsVisionModel() {
             }
 
             initApiKeys();
+
+// ===== MODEL & BEHAVIOUR PANEL =====
+            // Binds the settings store (js/settings.js) to the controls. The
+            // store is the single source of truth: this only mirrors it, so a
+            // change made here and one made anywhere else behave identically.
+            function initBehaviourPanel() {
+                if (!settings) return;
+
+                const toggle = document.getElementById('behaviourOverridesEnabled');
+                const promptInput = document.getElementById('systemPromptInput');
+                const promptCount = document.getElementById('systemPromptCount');
+                const sendOnEnter = document.getElementById('sendOnEnterToggle');
+                const sliders = {
+                    temperature: {
+                        input: document.getElementById('temperatureSlider'),
+                        label: document.getElementById('temperatureValue')
+                    },
+                    topP: {
+                        input: document.getElementById('topPSlider'),
+                        label: document.getElementById('topPValue')
+                    },
+                    maxTokens: {
+                        input: document.getElementById('maxTokensSlider'),
+                        label: document.getElementById('maxTokensValue')
+                    }
+                };
+
+                const overridesOn = function () {
+                    return !!(toggle && toggle.checked);
+                };
+
+                function render() {
+                    const s = settings.get();
+                    if (toggle) toggle.checked = s.temperature !== null
+                        || s.topP !== null || s.maxTokens !== null;
+                    if (sendOnEnter) sendOnEnter.checked = s.sendOnEnter !== false;
+                    if (promptInput && document.activeElement !== promptInput) promptInput.value = s.systemPrompt;
+                    if (promptCount) promptCount.textContent = s.systemPrompt.length + ' / 8000';
+
+                    Object.keys(sliders).forEach(function (key) {
+                        const row = sliders[key];
+                        if (!row.input) return;
+
+                        // Greyed out while the overrides are off: the value is
+                        // not being sent, so editing it would be a lie.
+                        row.input.disabled = !overridesOn();
+
+                        if (s[key] !== null && s[key] !== undefined) {
+                            row.input.value = String(s[key]);
+                            row.label.textContent = key === 'maxTokens'
+                                ? Number(s[key]).toLocaleString()
+                                : Number(s[key]).toFixed(2);
+                        } else {
+                            row.label.textContent = 'model default';
+                        }
+                    });
+
+                    document.querySelectorAll('[data-requires-overrides]').forEach(function (row) {
+                        row.classList.toggle('is-disabled', !overridesOn());
+                    });
+                }
+
+                function writeSliders() {
+                    if (!overridesOn()) {
+                        // Turning the override off clears the values rather than
+                        // leaving them stored-but-unsent.
+                        settings.set({ temperature: null, topP: null, maxTokens: null });
+                        return;
+                    }
+                    const patch = {};
+                    Object.keys(sliders).forEach(function (key) {
+                        const row = sliders[key];
+                        if (!row.input) return;
+                        const value = Number(row.input.value);
+                        if (isFinite(value)) patch[key] = value;
+                    });
+                    settings.set(patch);
+                }
+
+                if (toggle) toggle.addEventListener('change', writeSliders);
+                Object.keys(sliders).forEach(function (key) {
+                    const row = sliders[key];
+                    if (row.input) row.input.addEventListener('input', writeSliders);
+                });
+                if (promptInput) {
+                    promptInput.addEventListener('input', function () {
+                        settings.set({ systemPrompt: promptInput.value });
+                        if (promptCount) promptCount.textContent = promptInput.value.length + ' / 8000';
+                    });
+                }
+                if (sendOnEnter) {
+                    sendOnEnter.addEventListener('change', function () {
+                        settings.set({ sendOnEnter: sendOnEnter.checked });
+                    });
+                }
+
+                settings.subscribe(render);
+                render();
+            }
+
+            // ===== DATA & PRIVACY PANEL =====
+            function downloadFile(filename, mime, contents) {
+                const blob = new Blob([contents], { type: mime });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = filename;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                // Revoking immediately can cancel the download in some browsers.
+                setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+            }
+
+            function exportFilename(extension) {
+                const now = new Date().toISOString().slice(0, 10);
+                return 'chatbot-conversations-' + now + '.' + extension;
+            }
+
+            async function collectSessions() {
+                const list = [];
+                try {
+                    const stored = await loadSessions();
+                    for (let i = 0; i < stored.length; i++) {
+                        const s = stored[i];
+                        list.push({
+                            id: s.id,
+                            title: s.title || 'Untitled',
+                            model: s.model || null,
+                            createdAt: s.createdAt || null,
+                            updatedAt: s.updatedAt || null,
+                            messages: Array.isArray(s.messages) ? s.messages : []
+                        });
+                    }
+                } catch (e) {
+                    // An unreadable store still exports as an empty set rather
+                    // than throwing out of a button handler.
+                }
+                return list;
+            }
+
+            async function exportAsJson() {
+                const sessions = await collectSessions();
+                if (sessions.length === 0) {
+                    notify('There are no conversations to export.', { type: 'warn' });
+                    return;
+                }
+                const payload = {
+                    exportedAt: new Date().toISOString(),
+                    version: 1,
+                    count: sessions.length,
+                    conversations: sessions
+                };
+                downloadFile(exportFilename('json'), 'application/json', JSON.stringify(payload, null, 2));
+                notify('Exported ' + sessions.length + ' conversation(s) as JSON.', { type: 'success' });
+            }
+
+            async function exportAsMarkdown() {
+                const sessions = await collectSessions();
+                if (sessions.length === 0) {
+                    notify('There are no conversations to export.', { type: 'warn' });
+                    return;
+                }
+                const parts = ['# Chat history', '', 'Exported ' + new Date().toLocaleString(), ''];
+                sessions.forEach(function (session) {
+                    const messages = Array.isArray(session.messages) ? session.messages : [];
+                    const body = window.ChatBotShare
+                        ? window.ChatBotShare.toMarkdown({ title: session.title, messages: messages })
+                        : '# ' + session.title;
+                    parts.push(body, '', '---', '');
+                });
+                downloadFile(exportFilename('md'), 'text/markdown', parts.join('\n'));
+                notify('Exported ' + sessions.length + ' conversation(s) as Markdown.', { type: 'success' });
+            }
+
+            /**
+             * Wipes everything this browser owns.
+             *
+             * Requires a typed confirmation because it destroys unsaved work and
+             * there is no server-side copy to restore from.
+             */
+            function confirmAndClearLocalData() {
+                const panel = document.querySelector('.settings-panel[data-panel="data-privacy"]');
+                if (!panel) return;
+
+                const existing = panel.querySelector('.confirm-clear');
+                if (existing) { existing.remove(); return; }
+
+                const box = document.createElement('div');
+                box.className = 'confirm-clear';
+
+                const label = document.createElement('label');
+                label.className = 'setting-label';
+                label.textContent = 'Type CLEAR to confirm';
+                label.htmlFor = 'confirmClearInput';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = 'confirmClearInput';
+                input.className = 'settings-textarea';
+                input.autocomplete = 'off';
+                input.placeholder = 'CLEAR';
+
+                const actions = document.createElement('div');
+                actions.className = 'confirm-clear-actions';
+
+                const cancel = document.createElement('button');
+                cancel.type = 'button';
+                cancel.className = 'btn';
+                cancel.textContent = 'Cancel';
+                cancel.addEventListener('click', function () { box.remove(); });
+
+                const go = document.createElement('button');
+                go.type = 'button';
+                go.className = 'btn danger';
+                go.textContent = 'Delete everything';
+                go.disabled = true;
+
+                // The exact token is required: a stray click must never wipe
+                // a history the user cannot recover.
+                input.addEventListener('input', function () {
+                    go.disabled = input.value.trim().toUpperCase() !== 'CLEAR';
+                });
+
+                go.addEventListener('click', async function () {
+                    go.disabled = true;
+                    try {
+                        await clearSessions();
+                        await idbWrite(IDB_STORE, function (store) { store.clear(); });
+                        try {
+                            localStorage.removeItem('chatbot.apikeys.v1');
+                            localStorage.removeItem('chatbot.profile.v1');
+                            localStorage.removeItem('chatbot.translationCache');
+                        } catch (e) {}
+
+                        sessions = [];
+                        chatHistory = [];
+                        messagesWrapper.innerHTML = '';
+                        messagesWrapper.classList.remove('visible');
+                        welcomeScreen.style.display = '';
+                        chatStarted = false;
+                        setActiveConversationId(null);
+                        renderHistory();
+                        syncConversationList();
+
+                        box.remove();
+                        notify('All local data cleared from this browser.', { type: 'success', duration: 6000 });
+                    } catch (e) {
+                        go.disabled = false;
+                        notify('Could not clear local data. Some items may remain.', { type: 'error' });
+                    }
+                });
+
+                actions.appendChild(cancel);
+                actions.appendChild(go);
+                box.appendChild(label);
+                box.appendChild(input);
+                box.appendChild(actions);
+                panel.appendChild(box);
+                input.focus();
+            }
+
+            function initDataPrivacyPanel() {
+                const exportSummary = document.getElementById('exportSummary');
+                if (exportSummary && loadSessions) {
+                    loadSessions().then(function (list) {
+                        const n = Array.isArray(list) ? list.length : 0;
+                        exportSummary.textContent = n === 1
+                            ? '1 conversation stored on this device.'
+                            : n + ' conversations stored on this device.';
+                    }).catch(function () {});
+                }
+
+                const bind = function (id, handler) {
+                    const node = document.getElementById(id);
+                    if (node) node.addEventListener('click', handler);
+                };
+
+                bind('btnExportJson', exportAsJson);
+                bind('btnExportMarkdown', exportAsMarkdown);
+                bind('btnClearLocalData', confirmAndClearLocalData);
+                bind('btnSettingsSignOut', function () { doSignOut(false); });
+                bind('btnDeleteAccount', function () { deleteAccount(); });
+            }
+
+// ===== USAGE / ANALYTICS =====
+            // Computed from the IndexedDB store. Everything here is read locally;
+            // there is no telemetry endpoint, and the panels say so rather than
+            // showing invented numbers. formatBytes() is already declared above
+            // and is reused rather than redefined.
+
+            function setStat(id, text) {
+                const node = document.getElementById(id);
+                if (node) node.textContent = text;
+            }
+
+            async function refreshUsageStats() {
+                let stored = [];
+                try {
+                    stored = (await loadSessions()) || [];
+                } catch (e) {
+                    stored = [];
+                }
+
+                let messages = 0;
+                let images = 0;
+                let bytes = 0;
+                let userMessages = 0;
+                let assistantMessages = 0;
+                const byModel = {};
+                const byDay = {};
+                let earliest = null;
+                let latest = null;
+
+                stored.forEach(function (session) {
+                    const list = Array.isArray(session.messages) ? session.messages : [];
+                    messages += list.length;
+
+                    const created = session.createdAt ? Date.parse(session.createdAt) : NaN;
+                    if (!Number.isNaN(created)) {
+                        if (earliest === null || created < earliest) earliest = created;
+                        if (latest === null || created > latest) latest = created;
+                        const day = new Date(created).toISOString().slice(0, 10);
+                        byDay[day] = (byDay[day] || 0) + list.length;
+                    }
+
+                    const modelKey = session.model || 'unknown';
+                    byModel[modelKey] = (byModel[modelKey] || 0) + list.length;
+
+                    list.forEach(function (m) {
+                        if (!m) return;
+                        const text = typeof m.text === 'string' ? m.text : (typeof m.content === 'string' ? m.content : '');
+                        const image = typeof m.image === 'string' ? m.image : '';
+                        // Approximate the stored size without a second pass:
+                        // UTF-16 in memory, and base64 is ~1.33x its binary.
+                        bytes += text.length * 2 + (image ? image.length : 0);
+                        if (image) images += 1;
+                        if (m.role === 'user') userMessages += 1;
+                        else assistantMessages += 1;
+                    });
+                });
+
+                setStat('statConversations', stored.length === 0
+                    ? 'No conversations stored yet.'
+                    : stored.length === 1 ? '1 conversation.' : stored.length + ' conversations.');
+                setStat('statMessages', messages === 0
+                    ? 'No messages yet.'
+                    : messages === 1 ? '1 message.' : messages + ' messages.');
+                setStat('statStorage', formatBytes(bytes) + ' (including attached images)');
+                setStat('statImages', images === 0 ? 'None attached.' : images + (images === 1 ? ' image.' : ' images.'));
+
+                const days = Object.keys(byDay);
+                if (days.length > 0) {
+                    let best = days[0];
+                    days.forEach(function (d) { if (byDay[d] > byDay[best]) best = d; });
+                    setStat('statBusiest', best + ' — ' + byDay[best] + ' message(s)');
+                } else {
+                    setStat('statBusiest', 'No activity yet.');
+                }
+
+                // Storage bar against a soft 5 MB reference, so the bar means
+                // something without claiming a quota the app does not enforce.
+                const bar = document.getElementById('storageBar');
+                if (bar) {
+                    const percent = Math.min(100, Math.round((bytes / (5 * 1024 * 1024)) * 100));
+                    bar.style.width = percent + '%';
+                }
+
+                const roleBar = document.getElementById('roleUserBar');
+                if (roleBar) {
+                    const total = userMessages + assistantMessages;
+                    roleBar.style.width = (total > 0 ? Math.round((userMessages / total) * 100) : 0) + '%';
+                }
+                setStat('statByRole', (userMessages + assistantMessages) === 0
+                    ? 'No messages yet.'
+                    : userMessages + ' sent · ' + assistantMessages + ' received');
+
+                const modelKeys = Object.keys(byModel).filter(function (k) { return k !== 'unknown'; });
+                setStat('statByModel', modelKeys.length === 0
+                    ? 'No conversations yet.'
+                    : modelKeys.sort(function (a, b) { return byModel[b] - byModel[a]; })
+                        .slice(0, 4)
+                        .map(function (k) { return modelLabelFor(k) + ' (' + byModel[k] + ')'; })
+                        .join(' · '));
+
+                setStat('statFirstUsed', earliest === null ? 'No activity yet.' : new Date(earliest).toLocaleDateString());
+                setStat('statLastUsed', latest === null ? 'No activity yet.' : new Date(latest).toLocaleDateString());
+            }
+
+            initBehaviourPanel();
+            initDataPrivacyPanel();
+
+            // Computed lazily: walking every stored message on boot would slow
+            // first paint for a panel most visitors never open.
+            const settingsPanelsHost = document.getElementById('settingsPanels');
+            if (settingsPanelsHost) {
+                settingsPanelsHost.addEventListener('click', function (event) {
+                    const item = event.target && event.target.closest
+                        ? event.target.closest('.settings-menu-item')
+                        : null;
+                    const panel = item && item.getAttribute('data-panel');
+                    if (panel === 'usage' || panel === 'analytics') refreshUsageStats();
+                }, true);
+            }
+            initBehaviourPanel();
+            initDataPrivacyPanel();
         })();
 
 
@@ -4758,7 +5170,7 @@ function enhanceAllSelects() {
 }
 
 document.addEventListener('DOMContentLoaded', enhanceAllSelects);
-
+            initDataPrivacyPanel();
 function initSettingsMenu() {
   const items = document.querySelectorAll('#settingsMenuList .settings-menu-item');
   const panels = document.querySelectorAll('#settingsPanels .settings-panel');

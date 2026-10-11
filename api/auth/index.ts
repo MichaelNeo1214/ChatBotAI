@@ -53,6 +53,14 @@ const MAX_BODY_BYTES = 16 * 1024;
  * instead of at the real problem.
  */
 const BODY_READ_TIMEOUT_MS = 3_000;
+/**
+ * Ceiling on a single call to Supabase Auth.
+ *
+ * Must stay well under this function's maxDuration (15s in vercel.json) so the
+ * handler always gets to write its own response. A platform-level kill is
+ * indistinguishable from a broken deployment to the caller.
+ */
+const UPSTREAM_TIMEOUT_MS = 8_000;
 
 /** Supabase's GoTrue requires a project URL and an API key. */
 function supabaseConfig(): { url: string; anonKey: string; serviceKey: string } | null {
@@ -150,12 +158,24 @@ function cookiesOf(req: Req): Record<string, string> {
   if (typeof header !== 'string') return {};
 
   const out: Record<string, string> = {};
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator === -1) continue;
-    const key = part.slice(0, separator).trim();
-    if (key !== '') out[key] = decodeURIComponent(part.slice(separator + 1).trim());
-  }
+for (const part of header.split(';')) {
+      const separator = part.indexOf('=');
+      if (separator === -1) continue;
+      const key = part.slice(0, separator).trim();
+      if (key === '') continue;
+
+      const raw = part.slice(separator + 1).trim();
+      // decodeURIComponent throws on a stray '%' that is not a valid escape.
+      // A cookie header is attacker-controlled, so this must never throw out of
+      // a parser: an undecodable value is simply treated as literal.
+      let value = raw;
+      try {
+        value = decodeURIComponent(raw);
+      } catch {
+        value = raw;
+      }
+      out[key] = value;
+    }
   return out;
 }
 
@@ -214,11 +234,27 @@ async function gotrue(
       method: init.method,
       headers,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      // A hard ceiling well under the function's maxDuration.
+      //
+      // Without this a stalled upstream holds the invocation open until the
+      // platform kills it, and a killed invocation is reported to the client as
+      // a 502 Bad Gateway — which blames the deployment rather than the slow
+      // dependency. Answering first with a 503 keeps the real cause visible.
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
   } catch (error) {
-    // A network fault talking to Supabase is a 502, never a 500 with a stack
-    // trace leaking upstream URLs.
-    return { status: 502, data: { message: 'Could not reach the authentication service.' } };
+    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    // 503, not 502: this gateway is healthy, the dependency is not. Relaying a
+    // 502 would tell the caller the deployment is broken, which it is not.
+    return {
+      status: 503,
+      data: {
+        message: timedOut
+          ? 'The authentication service did not respond in time.'
+          : 'Could not reach the authentication service.',
+        reason: timedOut ? 'upstream_timeout' : 'upstream_unreachable',
+      },
+    };
   }
 
   const text = await response.text();
@@ -296,6 +332,12 @@ async function login(res: Res, body: Record<string, unknown>, secure: boolean): 
   });
 
   if (status >= 400) {
+    // A transport failure must not masquerade as a credential rejection.
+    // Telling someone their password is wrong when the auth service is down
+    // sends them to reset a password that was never the problem.
+    if (status === 503) {
+      return fail(res, 503, 'auth_unavailable', messageFrom(data, 'The authentication service is unavailable.'));
+    }
     // One message for "no such account" and "wrong password" alike, so the
     // response cannot be used to enumerate registered addresses.
     return fail(res, 401, 'invalid_credentials', 'Incorrect email or password.');
