@@ -17,6 +17,18 @@ import { isDemoProvider } from '../src/providers/index.ts';
 type Req = IncomingMessage;
 type Res = ServerResponse;
 
+/**
+ * Whether accounts are usable on this deployment.
+ *
+ * Exposed on /api/health so the frontend can discover it once instead of
+ * probing /api/auth/me on every page load and logging a 404 each time.
+ */
+function isAuthConfigured(): boolean {
+  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
+  const key = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  return url !== '' && key !== '';
+}
+
 export default function handler(req: Req, res: Res): void {
   if ((req.method ?? 'GET').toUpperCase() === 'OPTIONS') {
     res.statusCode = 204;
@@ -43,6 +55,8 @@ export default function handler(req: Req, res: Res): void {
       provider: isDemoProvider() ? 'mock' : config.provider.name,
       defaultModel: DEFAULT_MODEL_LABEL,
       demo: isDemoProvider(),
+      /** Accounts are optional; the app works as a guest when this is false. */
+      auth: isAuthConfigured(),
       uptimeSeconds: Math.round(process.uptime()),
     }),
   );

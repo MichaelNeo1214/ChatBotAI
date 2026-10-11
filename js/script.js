@@ -874,15 +874,60 @@
                 }
             }
 
-            async function refreshAuth() {
-                let user = null;
-                try {
-                    const r = await fetch(API_BASE + '/auth/me', { credentials: 'same-origin' });
-                    const d = await r.json();
-                    user = d && d.user ? d.user : null;
-                } catch (e) {
-                    user = null;
+            // Accounts are optional. A deployment without Supabase configured has
+            // no /api/auth/* function at all, and probing it on every load only
+            // fills the console with 404s. The capability is read once from
+            // /api/health, which always exists, and cached for the session.
+            let authCapability = null;
+            let authCapabilityChecked = false;
+
+            function authAvailable() {
+                if (!authCapabilityChecked) {
+                    // Optimistic default until health answers: asking once costs
+                    // nothing, and a wrong guess only means a single 404.
+                    authCapability = true;
+                    authCapabilityChecked = true;
                 }
+                return authCapability === true;
+            }
+
+            /** Reads /api/health once and remembers whether accounts exist. */
+            async function probeAuthCapability() {
+                try {
+                    const res = await fetch(API_BASE + '/health', { headers: { Accept: 'application/json' } });
+                    if (res.ok) {
+                        const info = await res.json();
+                        authCapability = !!(info && info.auth === true);
+                        authCapabilityChecked = true;
+                    }
+                } catch (e) {
+                    // Offline or the function is cold-starting. Leave the
+                    // optimistic default so a transient failure does not
+                    // disable sign-in for the rest of the session.
+                }
+                return authCapability === true;
+            }
+
+            async function refreshAuth() {
+                const available = await probeAuthCapability();
+
+                let user = null;
+                if (available) {
+                    try {
+                        const r = await fetch(API_BASE + '/auth/me', { credentials: 'same-origin' });
+                        if (r.status === 404 || r.status === 503) {
+                            // The capability probe raced a deployment with no auth
+                            // function. Stop asking for the rest of this session.
+                            authCapability = false;
+                        } else if (r.ok) {
+                            const d = await r.json();
+                            user = d && d.user ? d.user : null;
+                        }
+                    } catch (e) {
+                        user = null;
+                    }
+                }
+
                 currentUser = user;
                 applyOwner();
                 renderFooter();

@@ -83,24 +83,27 @@ describe('api/health (Vercel)', () => {
       demo: boolean;
       defaultModel: string;
       provider: string;
+      auth: boolean;
     };
     assert.equal(body.status, 'ok');
     // AI_PROVIDER=mock in this suite, so the UI banner path is what we assert.
     assert.equal(body.demo, true);
     assert.equal(body.provider, 'mock');
     assert.equal(body.defaultModel, 'OpenRouter Free');
+
+    // The frontend reads this to decide whether to call /api/auth/* at all.
+    // Without it, every page load probes an endpoint that may not exist.
+    assert.equal(typeof body.auth, 'boolean', 'health must advertise the auth capability');
   });
 
-  it('never echoes a key, base URL or database path', async () => {
-    const { default: handler } = await import('../api/health.ts');
+    it('never echoes a key, base URL or database path', async () => {    const { default: handler } = await import('../api/health.ts');
     const { res, captured } = fakeRes();
     handler(fakeReq('GET'), res);
 
     assert.doesNotMatch(captured.body, /AI_API_KEY|apiKey|baseUrl|databasePath|\.db/i);
   });
 
-  it('rejects a non-GET method with 405', async () => {
-    const { default: handler } = await import('../api/health.ts');
+  it('rejects a non-GET method with 405', async () => {    const { default: handler } = await import('../api/health.ts');
     const { res, captured } = fakeRes();
     handler(fakeReq('POST'), res);
 

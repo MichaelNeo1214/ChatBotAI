@@ -12,6 +12,9 @@
     },
     "api/health.ts": {
       "maxDuration": 10
+    },
+    "api/auth.ts": {
+      "maxDuration": 15
     }
   },
   "rewrites": [
