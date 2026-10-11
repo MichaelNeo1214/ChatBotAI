@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
@@ -115,8 +115,41 @@ describe('static file serving', () => {
     }
   });
 
-  it('declares the same client-side rewrites on Vercel', () => {
+  it('every function declared in vercel.json actually exists', () => {
+    // Vercel fails the whole deploy with "The pattern X defined in functions
+    // doesn't match any Serverless Functions inside the api directory" when a
+    // path here does not resolve. That is a hard build break, and it is easy to
+    // cause by removing or renaming a handler without editing this list.
     const vercelPath = path.join(process.cwd(), 'vercel.json');
+    const vercel = JSON.parse(readFileSync(vercelPath, 'utf8')) as {
+      functions?: Record<string, { maxDuration?: number }>;
+    };
+
+    const declared = Object.keys(vercel.functions ?? {});
+    assert.ok(declared.length > 0, 'expected at least one declared function');
+
+    const missing = declared.filter((relative) => !existsSync(path.join(process.cwd(), relative)));
+    assert.deepEqual(missing, [], 'vercel.json declares functions that do not exist');
+  });
+
+  it('every handler in api/ is reachable at its own route', () => {
+    // A handler that exists but is misnamed is silently never invoked, which
+    // looks identical to "the feature is broken".
+    const apiDir = path.join(process.cwd(), 'api');
+    const handlers = readdirSync(apiDir).filter((f) => f.endsWith('.ts'));
+
+    assert.ok(handlers.length > 0, 'expected handlers in api/');
+    for (const file of handlers) {
+      const source = readFileSync(path.join(apiDir, file), 'utf8');
+      assert.match(
+        source,
+        /export default (async )?function handler/,
+        `api/${file} must default-export a handler for Vercel to route to it`,
+      );
+    }
+  });
+
+  it('declares the same client-side rewrites on Vercel', () => {    const vercelPath = path.join(process.cwd(), 'vercel.json');
     const vercel = JSON.parse(readFileSync(vercelPath, 'utf8')) as {
       rewrites?: { source: string; destination: string }[];
     };

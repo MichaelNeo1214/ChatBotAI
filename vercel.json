@@ -10,8 +10,8 @@
     "api/image.ts": {
       "maxDuration": 120
     },
-    "api/shares.ts": {
-      "maxDuration": 30
+    "api/health.ts": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
