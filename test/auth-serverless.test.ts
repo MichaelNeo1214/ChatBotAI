@@ -207,3 +207,103 @@ describe('api/auth — routing and guards', () => {
     assert.equal(body.user, null, 'no cookie must be a normal anonymous visit, not an error');
   });
 });
+
+/**
+ * The handler must ALWAYS answer.
+ *
+ * A function that never writes a response is reported by the platform as a
+ * 502 Bad Gateway, which blames the deployment rather than the code. The way
+ * that happens here is a request body whose stream already ended: no 'end'
+ * event is ever emitted, so an unguarded read never settles.
+ */
+describe('api/auth — always responds', () => {
+  const saved = {
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_ANON_KEY,
+  };
+
+  beforeEach(() => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_ANON_KEY = 'anon-key';
+  });
+
+  afterEach(() => {
+    if (saved.url === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = saved.url;
+    if (saved.key === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = saved.key;
+  });
+
+  /**
+   * A request whose body stream has already been fully consumed.
+   *
+   * A plain object rather than a real Readable: `readableEnded` is getter-only
+   * on a stream, and the point here is to model "the runtime already parsed the
+   * body", where no further 'end' event will ever be emitted.
+   */
+  function alreadyEndedReq(method: string, url: string): IncomingMessage {
+    return {
+      method,
+      url,
+      headers: {},
+      body: undefined,
+      readableEnded: true,
+      destroyed: true,
+      on: () => {},
+    } as unknown as IncomingMessage;
+  }
+
+  it('answers instead of hanging when the body stream has already ended', async () => {
+    const handler = await load();
+    const { res, captured } = fakeRes();
+
+    const pending = handler(alreadyEndedReq('POST', '/api/auth/login'), res);
+    const guard = Symbol('handler never responded');
+
+    const outcome = await Promise.race([
+      pending.then(() => 'responded' as const),
+      new Promise<typeof guard>((resolve) => setTimeout(() => resolve(guard), 2000)),
+    ]);
+
+    assert.notEqual(outcome, guard, 'the handler must settle, not hang');
+    // With no body it cannot validate an email, so it answers 400 — not a hang.
+    assert.equal(captured.status, 400);
+    assert.match(captured.body, /invalid_email/);
+  });
+
+  it('answers an oversized body rather than destroying the request stream', async () => {
+    const handler = await load();
+    const { res, captured } = fakeRes();
+
+    let destroyed = false;
+    let emitted = 0;
+    const huge = 'x'.repeat(64 * 1024);
+
+    const stream = {
+      method: 'POST',
+      url: '/api/auth/signup',
+      headers: {},
+      body: undefined,
+      readableEnded: false,
+      destroyed: false,
+      on(event: string, fn: (chunk?: Buffer) => void) {
+        if (event === 'data') {
+          emitted++;
+          fn(Buffer.from(huge, 'utf8'));
+        }
+        return this;
+      },
+      destroy() {
+        destroyed = true;
+      },
+    } as unknown as IncomingMessage;
+
+    await handler(stream, res);
+
+    // Destroying the socket mid-request can prevent the response from being
+    // written at all, which the platform reports as a 502.
+    assert.equal(destroyed, false, 'the request stream must not be destroyed');
+    assert.ok(emitted > 0, 'the fixture must actually deliver a body');
+    assert.notEqual(captured.status, 0, 'a response must have been written');
+  });
+});

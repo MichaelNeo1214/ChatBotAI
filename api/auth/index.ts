@@ -45,6 +45,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_NAME_LENGTH = 80;
 const MAX_BODY_BYTES = 16 * 1024;
+/**
+ * How long to wait for a request body before answering anyway.
+ *
+ * Every path out of readBody must settle. A handler that never responds is
+ * reported by the platform as a 502, which points at the infrastructure
+ * instead of at the real problem.
+ */
+const BODY_READ_TIMEOUT_MS = 3_000;
 
 /** Supabase's GoTrue requires a project URL and an API key. */
 function supabaseConfig(): { url: string; anonKey: string; serviceKey: string } | null {
@@ -88,7 +96,14 @@ function readBody(req: Req): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+
       const text = Buffer.concat(chunks).toString('utf8');
       if (text === '') return resolve({});
       try {
@@ -99,16 +114,27 @@ function readBody(req: Req): Promise<Record<string, unknown>> {
       }
     };
 
-    const stream = req as unknown as Readable;
+    const stream = req as unknown as Readable & { readableEnded?: boolean; destroyed?: boolean };
     if (typeof stream.on !== 'function') return finish();
 
+    // A stream that has already ended will never emit 'end' again. Without
+    // this check the promise below never settles, the handler never responds,
+    // and the platform reports a gateway error rather than the 400 this
+    // actually is. Runtimes that pre-parse the body hit this path.
+    if (stream.readableEnded === true || stream.destroyed === true) return finish();
+
+    // Backstop: never leave the function waiting on a socket that goes quiet.
+    timer = setTimeout(finish, BODY_READ_TIMEOUT_MS);
+
     stream.on('data', (chunk: Buffer | Uint8Array | string) => {
+      if (settled) return;
       size += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
-      // A body past the cap is refused rather than buffered: this endpoint
-      // only ever needs an email and a password.
+
       if (size > MAX_BODY_BYTES) {
+        // Stop accumulating and answer now. The stream is deliberately NOT
+        // destroyed: tearing down the request mid-flight can stop the response
+        // from being written at all, which surfaces as a 502 rather than a 413.
         chunks.length = 0;
-        stream.destroy();
         return finish();
       }
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
