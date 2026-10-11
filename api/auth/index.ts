@@ -1,5 +1,5 @@
 /**
- * Authentication — Vercel Serverless Function.
+ * Authentication â€” Vercel Serverless Function.
  *
  * Handles the same contract the Express build serves from src/routes/auth.ts,
  * because the frontend calls these unconditionally:
@@ -26,7 +26,7 @@
  *
  * The Express build in src/ keeps users in node:sqlite. A serverless function
  * has no writable filesystem and no state between invocations, so nothing in
- * api/ reads or writes one — the handler holds no storage of any kind.
+ * api/ reads or writes one â€” the handler holds no storage of any kind.
  *
  * ## When Supabase is not configured
  *
@@ -41,6 +41,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { cleanSupabaseKey, cleanSupabaseUrl } from '../../src/supabase-url.ts';
 
 type Req = IncomingMessage & { body?: unknown };
 type Res = ServerResponse;
@@ -69,12 +70,16 @@ const BODY_READ_TIMEOUT_MS = 3_000;
  */
 const UPSTREAM_TIMEOUT_MS = 8_000;
 
+/** Strips stray quotes/whitespace from a pasted key. */
+
 /** Supabase's GoTrue requires a project URL and an API key. */
 function supabaseConfig(): { url: string; anonKey: string; serviceKey: string } | null {
-  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
-  const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const url = cleanSupabaseUrl(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
+  const anonKey = cleanSupabaseKey(
+    process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
   if (url === '' || anonKey === '') return null;
-  return { url, anonKey, serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '' };
+  return { url, anonKey, serviceKey: cleanSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY) };
 }
 
 const isConfigured = (): boolean => supabaseConfig() !== null;
@@ -235,10 +240,14 @@ function toPublicUser(user: GoTrueUser): Record<string, unknown> {
  * global, which is what makes this safe under every Vercel runtime.
  */
 function supabaseClient(key?: string): SupabaseClient {
-  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
-  const anonKey = key ?? process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const config = supabaseConfig();
+  if (config === null) {
+    // Callers gate on isConfigured() before reaching here; this keeps the
+    // failure legible rather than handing the SDK an empty URL.
+    throw new Error('Supabase is not configured on this deployment.');
+  }
 
-  return createClient(url, anonKey, {
+  return createClient(config.url, key ? cleanSupabaseKey(key) : config.anonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -320,7 +329,7 @@ async function userFromToken(token: string): Promise<GoTrueUser | null> {
  * caller still clears the local cookie.
  */
 async function revokeToken(token: string): Promise<void> {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const serviceKey = cleanSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (serviceKey === '') return;
   try {
     const supabase = supabaseClient(serviceKey);
@@ -337,8 +346,9 @@ async function revokeToken(token: string): Promise<void> {
  * supabase-js exposes no equivalent for this operation.
  */
 async function adminDeleteUser(userId: string): Promise<boolean> {
-  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  const config = supabaseConfig()!;
+  const url = config.url;
+  const serviceKey = config.serviceKey;
   if (url === '' || serviceKey === '') return false;
 
   try {

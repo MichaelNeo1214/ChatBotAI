@@ -1,5 +1,5 @@
 /**
- * GET /api/health — Vercel Serverless Function.
+ * GET /api/health â€” Vercel Serverless Function.
  *
  * Mirrors the Express route of the same name so the frontend behaves
  * identically in both deployments. The UI reads `demo` to decide whether to
@@ -13,6 +13,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { config } from '../src/config.ts';
 import { DEFAULT_MODEL_LABEL } from '../src/providers/presets.ts';
 import { isDemoProvider } from '../src/providers/index.ts';
+import { supabaseIsConfigured } from '../src/supabase-url.ts';
 
 type Req = IncomingMessage;
 type Res = ServerResponse;
@@ -20,13 +21,15 @@ type Res = ServerResponse;
 /**
  * Whether accounts are usable on this deployment.
  *
- * Exposed on /api/health so the frontend can discover it once instead of
- * probing /api/auth/me on every page load and logging a 404 each time.
+ * Exposed so the frontend can discover it once instead of probing
+ * /api/auth/me on every page load and logging a 404 each time.
+ *
+ * Reuses the same URL normalisation as the auth handler: a SUPABASE_URL
+ * pasted with /rest/v1 still means accounts ARE configured, and reporting
+ * otherwise would hide a working deployment behind a 'not enabled' banner.
  */
 function isAuthConfigured(): boolean {
-  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
-  const key = process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
-  return url !== '' && key !== '';
+  return supabaseIsConfigured();
 }
 
 export default function handler(req: Req, res: Res): void {
