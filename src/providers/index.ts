@@ -3,11 +3,15 @@ import { badRequest } from '../middleware/errors.ts';
 import { AnthropicProvider } from './anthropic.ts';
 import { MockProvider } from './mock.ts';
 import { OpenAICompatibleProvider } from './openai-compatible.ts';
-import { DEFAULT_MODEL_LABEL, PROVIDER_PRESETS, isKnownModelLabel } from './presets.ts';
+import {
+  PROVIDER_PRESETS,
+  isDefaultModelLabel,
+  isKnownModelLabel,
+} from './presets.ts';
 import type { ChatProvider } from './types.ts';
 
 export type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
-export { DEFAULT_MODEL_LABEL, PROVIDER_PRESETS } from './presets.ts';
+export { DEFAULT_MODEL_LABEL, PROVIDER_PRESETS, isDefaultModelLabel } from './presets.ts';
 
 export const PROVIDER_NAMES = ['mock', 'anthropic', 'openai-compatible'] as const;
 
@@ -71,10 +75,21 @@ function build(): ChatProvider {
       if (baseUrl === '') {
         throw new Error('AI_PROVIDER=openai-compatible requires AI_BASE_URL');
       }
+      if (apiKey === '') {
+        // Auto-selection only ever reaches this branch when a key was set, so
+        // an empty one here means AI_PROVIDER was forced without a key. Serving
+        // a free tier with no credential would 401 on every turn.
+        console.warn(
+          '[providers] AI_PROVIDER=openai-compatible but AI_API_KEY is empty — falling back to mock.',
+        );
+        return new MockProvider();
+      }
       return new OpenAICompatibleProvider({
         baseUrl,
         apiKey,
         model: config.provider.model,
+        reasoningEffort: config.provider.reasoningEffort,
+        systemPrompt: config.provider.systemPrompt,
       });
 
     default:
@@ -87,9 +102,8 @@ function build(): ChatProvider {
 /** The single provider this process talks to, chosen once at boot. */
 export const provider: ChatProvider = build();
 
-/** The model label that means "use the server's provider", not a BYOK preset. */
-export const isDefaultModelLabel = (label: string | undefined): boolean =>
-  label === undefined || label === '' || label === DEFAULT_MODEL_LABEL;
+/** True when this deployment has no real key and is serving canned replies. */
+export const isDemoProvider = (): boolean => provider.name === 'mock';
 
 /**
  * Maps a boot-time picker label to the server's configured model id, so the

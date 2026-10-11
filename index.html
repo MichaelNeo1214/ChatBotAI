@@ -19,6 +19,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- KaTeX: LaTeX rendering for replies. Fonts come from the same CDN; if they
+         fail to load the maths still renders, just in a fallback typeface. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -239,14 +242,14 @@
             <div class="input-actions-right">
                 <div class="model-selector-wrap input-model-wrap">
                     <button class="model-selector input-model-selector" id="btnModelDropdown">
-                        <span class="model-selector-label" id="currentModel">ChatBot AI</span>
+                        <span class="model-selector-label" id="currentModel">SpaceBunny Free MAX</span>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
                     <div class="model-dropdown" id="modelDropdown" hidden>
-                        <button class="model-option active" data-model="ChatBot AI">
+                        <button class="model-option active" data-model="SpaceBunny Free MAX">
                             <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                            <span class="model-name">ChatBot AI</span>
-                            <span class="model-desc" data-i18n="modelDescChatbot">Default assistant</span>
+                            <span class="model-name">SpaceBunny Free MAX</span>
+                            <span class="model-desc" data-i18n="modelDescChatbot">Free · no key needed</span>
                         </button>
                         <button class="model-option" data-model="GPT-4o">
                             <span class="model-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
@@ -808,6 +811,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <!-- Supabase: optional cloud sync (auth + Postgres). IndexedDB stays the UI source of truth. -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- KaTeX: renders $...$ and $$...$$ in replies. Optional — the Markdown
+         pipeline falls back to showing raw LaTeX when it is absent. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <!-- LaTeX delimiter rules; must load before script.js consumes them. -->
+    <script src="js/markdown-math.js"></script>
+    <!-- Must load first: installs the global error boundary before anything can throw. -->
+    <script src="js/ui.js"></script>
     <script src="js/script.js"></script>
 </body>
 </html>

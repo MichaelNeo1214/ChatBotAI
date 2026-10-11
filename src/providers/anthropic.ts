@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
-  'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
-  'Use Markdown for structure and fenced code blocks for code.';
+  'You are SpaceBunny Free MAX, a helpful assistant. Answer clearly and concisely. ' +
+  'Use Markdown for structure and fenced code blocks for code. ' +
+  'Render mathematical notation with LaTeX delimiters: $...$ inline and $$...$$ on its own line.';
 
 export interface AnthropicOptions {
   apiKey: string;

@@ -1,6 +1,7 @@
+import path from 'node:path';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { ROOT_DIR, config } from './config.ts';
+import { ROOT_DIR, STATIC_FILES, STATIC_MOUNTS, config } from './config.ts';
 import { errorHandler, notFoundHandler } from './middleware/errors.ts';
 import { identifyOwner } from './middleware/owner.ts';
 import { authRouter } from './routes/auth.ts';
@@ -9,26 +10,85 @@ import { conversationsRouter } from './routes/conversations.ts';
 import { healthRouter } from './routes/health.ts';
 import { imageRouter } from './routes/image.ts';
 
+/**
+ * Headers a browser may send on a cross-origin request.
+ *
+ * The three X-Provider-* headers carry the caller's bring-your-own-key, so a
+ * whitelisted origin is useless without them being allowed here.
+ */
+const ALLOWED_REQUEST_HEADERS = [
+  'Content-Type',
+  'X-Provider-Key',
+  'X-Provider-Base-Url',
+  'X-Provider-Model',
+].join(', ');
+
 function cors(req: Request, res: Response, next: NextFunction): void {
   const origin = req.headers.origin;
   if (origin && config.corsOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', ALLOWED_REQUEST_HEADERS);
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Max-Age', '600');
     res.setHeader('Vary', 'Origin');
   }
   if (req.method === 'OPTIONS') {
+    // The preflight is only answered with CORS headers for allowlisted origins
+    // above, so an unknown origin gets a bare 204 that grants it nothing.
     res.sendStatus(204);
     return;
   }
   next();
 }
 
+/**
+ * Mounts the frontend from an explicit allowlist.
+ *
+ * The previous implementation served ROOT_DIR, which put data/chatbot.db —
+ * every user's password hash, session token hash and stored message — plus
+ * src/, test/ and node_modules/ on the open web. Only the handful of paths the
+ * browser actually requests are mounted now, so anything added to the repo
+ * root later is private unless it is listed in config.STATIC_MOUNTS /
+ * config.STATIC_FILES.
+ */
+function serveStatic(app: express.Express): void {
+  for (const mount of STATIC_MOUNTS) {
+    app.use(`/${mount}`, express.static(path.join(ROOT_DIR, mount), { index: false }));
+  }
+
+  for (const file of STATIC_FILES) {
+    app.get(`/${file}`, (_req: Request, res: Response) => {
+      res.sendFile(path.join(ROOT_DIR, file), (err?: Error) => {
+        if (err && !res.headersSent) res.status(404).end();
+      });
+    });
+  }
+
+  // The app shell. SPA-style extension resolution is intentionally NOT enabled:
+  // a request for "/src/app" must 404, not silently return index.html.
+  app.get('/', (_req: Request, res: Response) => {
+    res.sendFile(path.join(ROOT_DIR, 'index.html'));
+  });
+  app.get('/index.html', (_req: Request, res: Response) => {
+    res.sendFile(path.join(ROOT_DIR, 'index.html'));
+  });
+
+  // Anything left is a miss, including every path inside the allowlist that
+  // does not exist. Answering here keeps Express from falling through to the
+  // error handler with a stack trace.
+  app.use(notFoundHandler);
+}
+
 export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+
+  // Off unless TRUST_PROXY says otherwise — see config.parseTrustProxy for why
+  // enabling it blindly would let anyone spoof X-Forwarded-For.
+  app.set('trust proxy', config.trustProxy);
+
   app.use(cors);
   // A chat turn may carry base64 images, so the body ceiling has to match the
   // attachment budget in providers/attachments.ts (~3 MB of base64 plus text).
@@ -47,8 +107,7 @@ export function createApp() {
 
   app.use('/api', notFoundHandler);
 
-  // The existing static frontend is served from the repo root.
-  app.use(express.static(ROOT_DIR, { index: 'index.html', extensions: ['html'] }));
+  serveStatic(app);
 
   app.use(errorHandler);
 

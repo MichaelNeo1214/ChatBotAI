@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { DEFAULT_MODEL_LABEL } from '../providers/presets.ts';
 import { db, type ConversationRow, type MessageRow } from './index.ts';
 
 const MAX_TITLE_LENGTH = 60;
@@ -55,7 +56,7 @@ export function createConversation(
     id,
     ownerId,
     options.title ?? 'New chat',
-    options.model ?? 'ChatBot AI',
+    options.model ?? DEFAULT_MODEL_LABEL,
   );
   const created = getConversation(id, ownerId);
   if (!created) throw new Error(`Conversation ${id} vanished immediately after insert`);

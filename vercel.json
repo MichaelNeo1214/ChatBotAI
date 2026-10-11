@@ -1,8 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "echo \"static PWA: no build step\"",
+  "buildCommand": "node -e \"process.stdout.write('static PWA + serverless functions: no build step\\n')\"",
   "outputDirectory": ".",
+  "functions": {
+    "api/chat.ts": {
+      "maxDuration": 300
+    },
+    "api/image.ts": {
+      "maxDuration": 120
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -18,6 +26,27 @@
         {
           "key": "X-Frame-Options",
           "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-DNS-Prefetch-Control",
+          "value": "on"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), geolocation=(), microphone=(self), interest-cohort=()"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
         }
       ]
     },

@@ -2,8 +2,17 @@ import { UpstreamError, upstreamErrorInfo } from './errors.ts';
 import type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
-  'You are ChatBot AI, a helpful assistant. Answer clearly and concisely. ' +
-  'Use Markdown for structure and fenced code blocks for code.';
+  'You are SpaceBunny Free MAX, a helpful assistant. Answer clearly and concisely. ' +
+  'Use Markdown for structure and fenced code blocks for code. ' +
+  'Render mathematical notation with LaTeX delimiters: $...$ inline and $$...$$ on its own line.';
+
+/**
+ * Reasoning-effort levels that Space Bunny Alpha accepts. Sent as
+ * `reasoning: { effort }` only when the deployment configures one, because a
+ * gateway that does not recognise the field rejects the entire request.
+ */
+export const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 /**
  * Statuses worth retrying: transient overloads (503), rate limits (429) and
@@ -111,6 +120,10 @@ export interface OpenAICompatibleOptions {
   apiKey: string;
   /** Model id sent upstream when the request does not pick one. */
   model: string;
+  /** Sent as `reasoning.effort`; omitted entirely when undefined. */
+  reasoningEffort?: ReasoningEffort | undefined;
+  /** Replaces the built-in assistant prompt. */
+  systemPrompt?: string | undefined;
 }
 
 /**
@@ -130,16 +143,41 @@ export class OpenAICompatibleProvider implements ChatProvider {
   readonly #baseUrl: string;
   readonly #apiKey: string;
   readonly #model: string;
+  readonly #reasoningEffort: ReasoningEffort | undefined;
+  readonly #systemPrompt: string;
 
   constructor(options: OpenAICompatibleOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.#apiKey = options.apiKey;
     this.#model = options.model;
+    this.#reasoningEffort = options.reasoningEffort;
+    this.#systemPrompt = options.systemPrompt?.trim() || SYSTEM_PROMPT;
   }
 
   /** The model id this instance sends unless the caller overrides it. */
   get model(): string {
     return this.#model;
+  }
+
+  /**
+   * The request body.
+   *
+   * `reasoning` is included only when an effort was configured — OpenRouter
+   * and the Space Bunny route understand it, but a plain OpenAI-compatible
+   * server may reject the request outright on an unknown field.
+   */
+  #requestBody(request: ChatRequest): string {
+    return JSON.stringify({
+      model: this.#model,
+      stream: true,
+      messages: [
+        { role: 'system', content: this.#systemPrompt },
+        ...request.messages.map(toOpenAIMessage),
+      ],
+      ...(this.#reasoningEffort !== undefined
+        ? { reasoning: { effort: this.#reasoningEffort } }
+        : {}),
+    });
   }
 
   /**
@@ -153,14 +191,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
     // Local runtimes such as Ollama accept an empty key; don't send the header.
     if (this.#apiKey !== '') headers.Authorization = `Bearer ${this.#apiKey}`;
 
-    const body = JSON.stringify({
-      model: this.#model,
-      stream: true,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...request.messages.map(toOpenAIMessage),
-      ],
-    });
+    const body = this.#requestBody(request);
     const url = `${this.#baseUrl}/chat/completions`;
 
     for (let attempt = 0; ; attempt += 1) {

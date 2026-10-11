@@ -33,7 +33,70 @@ function positiveInt(name: string, fallback: number): number {
   return value;
 }
 
+/**
+ * How much of the X-Forwarded-For chain to believe when resolving req.ip.
+ *
+ * Off by default on purpose. A hop count above zero makes Express trust a
+ * client-supplied X-Forwarded-For header, which anyone can forge to dodge the
+ * per-IP rate limits. Only turn it on when the app really does sit behind a
+ * proxy you control (nginx, Vercel, Cloudflare) — otherwise every visitor
+ * collapses into one shared bucket.
+ *
+ *   TRUST_PROXY=false            off (default; req.ip is the socket address)
+ *   TRUST_PROXY=1                trust exactly one hop
+ *   TRUST_PROXY=loopback         trust loopback/CIDR entries only
+ */
+export function parseTrustProxy(raw: string): boolean | number | string {
+  const value = raw.trim().toLowerCase();
+  if (value === '' || value === 'false' || value === 'off' || value === 'no') return false;
+  if (value === 'true' || value === 'on' || value === 'yes') return true;
+  if (/^\d+$/.test(value)) return Number.parseInt(value, 10);
+  return raw;
+}
+
 const databasePath = str('DATABASE_PATH', './data/chatbot.db');
+
+/**
+ * Where the free tier talks to by default.
+ *
+ * Space Bunny Alpha is served through OpenRouter, which speaks the standard
+ * `/chat/completions` shape, so it reuses the openai-compatible adapter. A
+ * 1M-token window means the request is rarely the limiting factor — the
+ * backend sends the last 40 turns and never truncates them itself.
+ */
+const SPACEBUNNY_BASE_URL = 'https://openrouter.ai/api/v1';
+const SPACEBUNNY_MODEL = 'stealth/space-bunny-alpha';
+
+/**
+ * Reasoning effort levels accepted by Space Bunny Alpha. Sent only when
+ * AI_REASONING_EFFORT is set: gateways that do not know the field reject the
+ * whole request, so this stays opt-in.
+ */
+const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+function parseReasoningEffort(raw: string): ReasoningEffort | undefined {
+  const value = raw.trim().toLowerCase();
+  if (value === '') return undefined;
+  if ((REASONING_EFFORTS as readonly string[]).includes(value)) return value as ReasoningEffort;
+  throw new Error(
+    `AI_REASONING_EFFORT must be one of ${REASONING_EFFORTS.join(', ')}, got "${raw}"`,
+  );
+}
+
+/**
+ * Picks the boot provider.
+ *
+ * An explicit AI_PROVIDER always wins. Otherwise the server adapts to what it
+ * was given: with a key it serves Space Bunny Alpha (the keyless-to-the-visitor
+ * free tier), and with no key at all it falls back to the mock provider so a
+ * fresh clone still runs offline instead of failing every request with a 401.
+ */
+function resolveProviderName(explicit: string, apiKey: string): string {
+  const name = explicit.trim();
+  if (name !== '') return name;
+  return apiKey !== '' ? 'openai-compatible' : 'mock';
+}
 
 function parseModelMap(raw: string): Readonly<Record<string, string>> {
   if (raw.trim() === '') return {};
@@ -55,6 +118,8 @@ function parseModelMap(raw: string): Readonly<Record<string, string>> {
   return Object.fromEntries(entries as [string, string][]);
 }
 
+const providerApiKey = str('AI_API_KEY', '');
+
 export const config = {
   env: str('NODE_ENV', 'development'),
   port: int('PORT', 3000),
@@ -63,18 +128,24 @@ export const config = {
   databasePath: path.isAbsolute(databasePath) ? databasePath : path.join(ROOT_DIR, databasePath),
 
   provider: {
-    name: str('AI_PROVIDER', 'mock'),
-    apiKey: str('AI_API_KEY', ''),
-    model: str('AI_MODEL', 'claude-opus-5'),
+    name: resolveProviderName(str('AI_PROVIDER', ''), providerApiKey),
+    apiKey: providerApiKey,
+    model: str('AI_MODEL', SPACEBUNNY_MODEL),
 
     /** Base URL for the openai-compatible provider, without a trailing slash. */
-    baseUrl: str('AI_BASE_URL', 'https://api.openai.com/v1').replace(/\/+$/, ''),
+    baseUrl: str('AI_BASE_URL', SPACEBUNNY_BASE_URL).replace(/\/+$/, ''),
 
     /**
      * Maps a frontend picker label ("GPT-4o", "DeepSeek", ...) to the model id
      * the upstream API expects. Anything unmapped falls back to AI_MODEL.
      */
     modelMap: parseModelMap(str('AI_MODEL_MAP', '')),
+
+    /** Passed to the upstream as `reasoning.effort`; undefined means omit it. */
+    reasoningEffort: parseReasoningEffort(str('AI_REASONING_EFFORT', '')),
+
+    /** Overrides the adapter's built-in system prompt. */
+    systemPrompt: str('AI_SYSTEM_PROMPT', ''),
   },
 
   /**
@@ -93,6 +164,22 @@ export const config = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+
+  /** See parseTrustProxy. Only enable behind a proxy you control. */
+  trustProxy: parseTrustProxy(str('TRUST_PROXY', 'false')),
 } as const;
+
+/**
+ * The only top-level entries the static file server is allowed to expose.
+ *
+ * Everything else in the repo — data/chatbot.db (password + session hashes and
+ * every stored message), src/, test/, node_modules/, package.json, .env
+ * backups — must never be served. Keep this list in sync when adding an asset
+ * directory to the frontend.
+ */
+export const STATIC_MOUNTS: readonly string[] = ['css', 'js', 'icons', 'components'];
+
+/** Individual files served straight from the repo root. */
+export const STATIC_FILES: readonly string[] = ['manifest.json', 'sw.js', 'favicon.ico'];
 
 export const isProduction = config.env === 'production';

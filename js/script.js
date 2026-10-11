@@ -160,8 +160,10 @@
             // ===== MODELS =====
             // `label` is the wire value: it is what the server routes on. The
             // matching localStorage key for a BYOK model is `key`.
+            // `aliases` are labels older builds stored in conversation history;
+            // they still resolve so saved chats keep rendering their model name.
             const MODEL_DEFS = [
-                { key: 'default',  label: 'ChatBot AI', provider: 'default' },
+                { key: 'default',  label: 'SpaceBunny Free MAX', provider: 'default', aliases: ['ChatBot AI'] },
                 { key: 'openai',   label: 'GPT-4o',     provider: 'openai' },
                 { key: 'gemini',   label: 'Gemini',     provider: 'gemini' },
                 { key: 'claude',   label: 'Claude',     provider: 'anthropic' },
@@ -177,11 +179,18 @@
                 return MODEL_DEFS[0];
             }
 
-            function modelKeyFromLabel(label) {
+            function modelDefForLabel(label) {
                 for (let i = 0; i < MODEL_DEFS.length; i++) {
-                    if (MODEL_DEFS[i].label === label) return MODEL_DEFS[i].key;
+                    const def = MODEL_DEFS[i];
+                    if (def.label === label) return def;
+                    if (def.aliases && def.aliases.indexOf(label) !== -1) return def;
                 }
-                return 'default';
+                return null;
+            }
+
+            function modelKeyFromLabel(label) {
+                const def = modelDefForLabel(label);
+                return def ? def.key : 'default';
             }
 
             /**
@@ -191,9 +200,8 @@
              * ("GPT-4o"), so lookups accept both spellings.
              */
             function modelLabelFor(value) {
-                for (let i = 0; i < MODEL_DEFS.length; i++) {
-                    if (MODEL_DEFS[i].key === value || MODEL_DEFS[i].label === value) return MODEL_DEFS[i].label;
-                }
+                const def = modelDefForLabel(value);
+                if (def) return def.label;
                 return value ? String(value) : 'This model';
             }
 
@@ -498,7 +506,88 @@
                 out.status = res.status;
                 out.code = err ? err.code : undefined;
                 out.model = err ? err.model : undefined;
+                out.retryAfter = err ? err.retryAfter : undefined;
                 return out;
+            }
+
+            // ===== NOTIFICATIONS =====
+            // The toast stack and the global error boundary live in js/ui.js,
+            // which is installed before this file. The shims below only cover
+            // the case where it failed to load, so a missing module degrades to
+            // console output instead of throwing on every call site.
+            const notify = (window.ChatBotUI && window.ChatBotUI.toast)
+                ? window.ChatBotUI.toast
+                : function (message, options) {
+                    console.warn('[toast]', message, options || {});
+                    return { dismiss() {} };
+                };
+
+            const describeError = (window.ChatBotUI && window.ChatBotUI.describe)
+                ? window.ChatBotUI.describe
+                : function (error, fallback) {
+                    if (error && typeof error.message === 'string' && error.message) return error.message;
+                    return fallback;
+                };
+
+            /**
+             * A 429 is expected on a busy free tier, so it gets a timed notice
+             * with the countdown instead of only an inline card.
+             */
+            function reportTurnError(error) {
+                if (!error || error.status !== 429) return;
+                notify(describeError(error, 'You have reached the message limit. Please wait a moment.'), {
+                    type: 'warn',
+                    duration: 9000
+                });
+            }
+
+            /**
+             * Renders a failed turn with a Retry button.
+             *
+             * The message is set with textContent, so a vendor error string is
+             * never interpreted as markup. Any partial text that did stream is
+             * kept above the notice so the user does not lose it.
+             */
+            function renderTurnFailure(bubble, error, onRetry) {
+                const message = describeError(error, 'The request failed.');
+
+                if (error && error.partial) {
+                    bubble.setText(error.partial + '\n\n— the reply stopped early.');
+                } else {
+                    bubble.setText('');
+                }
+
+                const host = bubble.element.querySelector('.message-body');
+                const actions = bubble.element.querySelector('.message-actions');
+                if (!host) return;
+
+                const card = document.createElement('div');
+                card.className = 'turn-error';
+                card.setAttribute('role', 'alert');
+
+                const heading = document.createElement('div');
+                heading.className = 'turn-error-title';
+                heading.textContent = 'This message could not be sent';
+
+                const detail = document.createElement('div');
+                detail.className = 'turn-error-detail';
+                detail.textContent = message;
+
+                card.appendChild(heading);
+                card.appendChild(detail);
+
+                const retry = document.createElement('button');
+                retry.type = 'button';
+                retry.className = 'btn primary turn-error-retry';
+                retry.textContent = 'Retry';
+                retry.addEventListener('click', function () {
+                    card.remove();
+                    onRetry();
+                });
+                card.appendChild(retry);
+
+                if (actions) host.insertBefore(card, actions);
+                else host.appendChild(card);
             }
 
             // ===== PROVIDER REQUEST ERRORS =====
@@ -853,7 +942,7 @@
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
                 + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
                 + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
-                + '**Models** — pick a model from the dropdown in the input box. "ChatBot AI" is the server\'s own model; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
+                + '**Models** — pick a model from the dropdown in the input box. "SpaceBunny Free MAX" runs on the server\'s own key, so it costs you nothing and needs no setup; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
                 + '**Images** — pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
                 + '**Attachments** — the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
@@ -2405,19 +2494,21 @@ function mmNeedsVisionModel() {
                     if (error && error.name === 'AbortError') {
                         // Keep whatever streamed before the user hit Stop.
                         if (bubble) bubble.setText(bubble.getText() + '\n\n— stopped by you.');
+                    } else if (error && error.code === 'missing_api_key') {
+                        // The server refused before writing anything, so point
+                        // at the setting that fixes it and keep the alert as the
+                        // only feedback.
+                        showKeyAlert(error.model);
                     } else {
-                        const message = (error && error.message) ? error.message : 'request failed.';
-                        if (error && error.code === 'missing_api_key') {
-                            // The server refused before writing anything, so point
-                            // at the setting that fixes it and keep the alert as the
-                            // only feedback.
-                            showKeyAlert(error.model);
-                        } else if (error && error.partial) {
-                            // Keep the text that did arrive, and say why it stopped.
-                            ensureBubble().setText(error.partial + '\n\n— the reply stopped early: ' + message);
-                        } else {
-                            ensureBubble().setText('Sorry — ' + message);
-                        }
+                        // A busy free tier also rate limits: the toast carries the
+                        // countdown while the card keeps a one-click retry, since
+                        // a toast alone would leave nothing behind in the thread.
+                        reportTurnError(error);
+                        renderTurnFailure(ensureBubble(), error, function () {
+                            const failed = bubble ? bubble.element : null;
+                            if (failed) failed.remove();
+                            runAssistant(raw, filesSnapshot, ragText, mmAttachment);
+                        });
                     }
                 } finally {
                     typingIndicator.classList.remove('visible');
@@ -2620,7 +2711,7 @@ function mmNeedsVisionModel() {
                     ? 'U'
                     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 
-                const senderName = role === 'user' ? 'You' : 'ChatBot AI';
+                const senderName = role === 'user' ? 'You' : 'SpaceBunny Free MAX';
                 const formattedText = formatText(text);
 
                 const copyAction = '<button class="btn-msg-action" type="button" data-action="copy" aria-label="Copy">'
@@ -2818,7 +2909,14 @@ function mmNeedsVisionModel() {
             function sanitizeHtml(html) {
                 if (typeof window !== 'undefined' && window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
                     return window.DOMPurify.sanitize(html, {
-                        ADD_ATTR: ['target', 'rel', 'data-code-copy', 'data-action']
+                        ADD_ATTR: ['target', 'rel', 'data-code-copy', 'data-action', 'aria-hidden'],
+                        // KaTeX emits an <annotation encoding="application/x-tex">
+                        // copy of the source inside its MathML. Nothing renders
+                        // it, so it is dropped along with any other injected node.
+                        FORBID_TAGS: ['annotation', 'annotation-xml'],
+                        // MathML and SVG are not in the default HTML profile, so
+                        // the katex-mathml / katex-svg wrappers are allowed here.
+                        USE_PROFILES: { html: true, mathMl: true, svg: true }
                     });
                 }
                 return html;
@@ -2857,6 +2955,26 @@ function mmNeedsVisionModel() {
                     + '</div>';
             }
 
+            // ===== MATH (KaTeX) =====
+            // The delimiter rules live in js/markdown-math.js so they can be unit
+            // tested; this section only wires them into the parser below.
+            //
+            // Math is lifted out of the Markdown source *before* escapeHtml runs.
+            // That ordering is not cosmetic: LaTeX uses & for alignment and
+            // escapeHtml would turn it into &amp;, silently corrupting every
+            // matrix, array and aligned equation.
+            //
+            // KaTeX itself is optional and loaded with `defer`, so its presence
+            // is tested at render time rather than captured at module scope.
+            const ChatBotMath = window.ChatBotMath;
+
+            /** Renders one expression, or escaped source when KaTeX is absent. */
+            function renderMath(tex, displayMode) {
+                return ChatBotMath
+                    ? ChatBotMath.render(tex, displayMode)
+                    : '<code class="math-raw">' + escapeHtml(tex) + '</code>';
+            }
+
             function inlineMarkdown(s) {
                 const codes = [];
                 // Pull inline code out first so emphasis rules cannot touch its body.
@@ -2864,6 +2982,11 @@ function mmNeedsVisionModel() {
                     codes.push(c);
                     return '\u0002IC' + (codes.length - 1) + '\u0002';
                 });
+
+                // Then math, so a `$` inside a code span is already protected.
+                const inlines = [];
+                if (ChatBotMath) t = ChatBotMath.extractInline(t, inlines);
+
                 t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function(_, label, href) {
                     const safe = href.replace(/["']/g, '');
                     return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
@@ -2874,7 +2997,7 @@ function mmNeedsVisionModel() {
                 t = t.replace(/\u0002IC(\d+)\u0002/g, function(_, n) {
                     return '<code>' + codes[Number(n)] + '</code>';
                 });
-                return t;
+                return ChatBotMath ? ChatBotMath.restore(t, [], inlines) : t;
             }
 
             function splitTableRow(line) {
@@ -2897,6 +3020,7 @@ function mmNeedsVisionModel() {
 
             function isBlockStart(line) {
                 return /^\u0001CODE\d+\u0001$/.test(line)
+                    || (ChatBotMath && ChatBotMath.isBlockPlaceholder(line))
                     || /^(#{1,6})\s+/.test(line)
                     || /^\s*([-*_])\s*(\1\s*){2,}$/.test(line)
                     || /^\s*&gt;\s?/.test(line)
@@ -2916,7 +3040,14 @@ function mmNeedsVisionModel() {
                     return '\n\u0001CODE' + (codeBlocks.length - 1) + '\u0001\n';
                 });
 
-                const lines = escapeHtml(stripped).split('\n');
+                // Display math next, so `$$` inside an already-lifted code block
+                // is never seen here and LaTeX escapes before escapeHtml does.
+                const mathBlocks = [];
+                const withoutMath = ChatBotMath
+                    ? ChatBotMath.extractBlocks(stripped, mathBlocks)
+                    : stripped;
+
+                const lines = escapeHtml(withoutMath).split('\n');
                 const html = [];
                 let i = 0;
 
@@ -2930,6 +3061,14 @@ function mmNeedsVisionModel() {
                         i++;
                         continue;
                     }
+
+                    if (ChatBotMath && ChatBotMath.isBlockPlaceholder(line)) {
+                        const rendered = renderMath(mathBlocks[ChatBotMath.blockIndex(line)], true);
+                        html.push('<div class="math-block">' + rendered + '</div>');
+                        i++;
+                        continue;
+                    }
+
                     if (blank) { i++; continue; }
 
                     const heading = line.match(/^(#{1,6})\s+(.*)$/);
@@ -3178,6 +3317,13 @@ function mmNeedsVisionModel() {
             // re-reads it once the server has said who is asking.
             setModelPicker('default');
             renderHistory();
+
+            // ===== SERVER STATUS =====
+            // Surfaces the demo-mode banner when the deployment has no AI key.
+            // Best-effort: an unreachable server must not block the first paint.
+            if (window.ChatBotUI && typeof window.ChatBotUI.checkServerStatus === 'function') {
+                window.ChatBotUI.checkServerStatus();
+            }
 
             // ===== PWA: SERVICE WORKER =====
             if ('serviceWorker' in navigator) {
@@ -3835,7 +3981,10 @@ function mmNeedsVisionModel() {
             }
 
             // MFA Banner Close
-            if (btnCloseBanner) {
+            // Both elements are optional (the banner is not always rendered),
+            // and the click handler touches mfaBanner, so it is guarded too —
+            // a close button without a banner would otherwise throw on click.
+            if (btnCloseBanner && mfaBanner) {
                 btnCloseBanner.addEventListener('click', () => {
                     mfaBanner.classList.add('dismissed');
                 });

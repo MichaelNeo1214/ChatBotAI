@@ -1,304 +1,250 @@
-# ChatBotAI 🤖
+# SpaceBunny
 
-> A friendly, intelligent conversation layer for turning ideas, questions, and workflows into meaningful interactions.
+> A free, keyless-to-the-visitor AI chat: Space Bunny Alpha answers on the
+> server's own key, and anyone who wants more can bring their own.
 
-ChatBotAI is a modern chatbot project designed to make human–AI communication feel natural, useful, and approachable. Whether you are building a personal assistant, customer-support experience, productivity tool, or experimental AI companion, this project provides a clear foundation for creating engaging conversations.
+## What it does
 
-## ✨ What It Does
+- **Works immediately.** A visitor can open the app and chat. The default
+  `SpaceBunny Free MAX` model runs on a key the deployment holds, so nobody is
+  asked to sign up for an API key.
+- **Bring your own key.** Save a key for OpenAI, Google, Anthropic, DeepSeek or
+  Groq in Settings → API Key and those models become selectable. Keys are held
+  in the browser's IndexedDB and travel only on the request that needs them.
+- **Rich replies.** Markdown, tables, syntax-highlighted code with a working
+  copy button, and LaTeX rendered by KaTeX.
+- **Your history, on your device.** Conversations are stored in IndexedDB and
+  grouped by date. Optional cloud sync via Supabase.
+- **Installable.** A PWA: offline shell, maskable icons, no app store required.
 
-- 💬 Understands and responds to natural-language messages
-- 🧠 Supports context-aware conversations
-- ⚡ Helps users find answers quickly
-- 🛠️ Provides a flexible foundation for customization
-- 🌱 Can grow from a simple chatbot into a complete AI assistant
+---
 
-## 🎯 Vision
-
-ChatBotAI aims to make intelligent technology feel less like a machine and more like a helpful teammate. The goal is simple: create conversations that are clear, useful, respectful, and easy to extend.
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Node.js 22.5 or newer** (24+ recommended). The backend runs TypeScript directly
-  and uses the built-in `node:sqlite` module, so there is no build step and no
-  native database dependency to compile.
-- Git.
-- An API key for a model provider — optional; the default `mock` provider runs
-  without one.
-
-### Installation
+## Quick start (local)
 
 ```bash
 git clone https://github.com/MichaelNeo1214/ChatBotAI.git
 cd ChatBotAI
 npm install
-```
-
-### Configuration
-
-Copy the example environment file and edit it:
-
-```bash
-cp .env.example .env
-```
-
-The backend runs with no configuration at all — it defaults to the `mock`
-provider, which streams canned replies so you can develop the frontend without
-an API key. To get real answers, set `AI_PROVIDER` to one of:
-
-| `AI_PROVIDER` | What it calls | Required settings |
-| --- | --- | --- |
-| `mock` | Nothing. Streams placeholder text. | none |
-| `anthropic` | Claude, via the official SDK. | `AI_API_KEY`, `AI_MODEL` |
-| `openai-compatible` | Any service exposing `POST /chat/completions`. | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` |
-
-`openai-compatible` covers OpenAI, OpenRouter, Groq, Together, DeepSeek, and
-local runtimes such as Ollama and LM Studio — they all speak the same wire
-format, so you switch vendors by changing `AI_BASE_URL`.
-
-`AI_MODEL_MAP` connects the model picker in the UI to real model ids. Anything
-unmapped falls back to `AI_MODEL`:
-
-```env
-AI_PROVIDER=openai-compatible
-AI_BASE_URL=https://openrouter.ai/api/v1
-AI_API_KEY=sk-...
-AI_MODEL=openai/gpt-4o-mini
-AI_MODEL_MAP={"GPT-4o":"openai/gpt-4o","Gemini":"google/gemini-2.0-flash-001","DeepSeek":"deepseek/deepseek-chat"}
-```
-
-Never commit `.env` — it is already in `.gitignore`.
-
-### Run the Project
-
-```bash
 npm run dev
 ```
 
-This starts the API and serves the frontend from the same origin at
-<http://localhost:3000>. `npm start` runs it without file watching, and
-`npm run typecheck` checks types without emitting anything.
+Open <http://localhost:3000>. With no `.env` at all the server runs in **demo
+mode** and streams canned replies — useful for frontend work, and clearly
+labelled in the UI so it is never mistaken for a real model.
 
-## 🔌 API
+To get real answers, set one variable:
 
-All endpoints live under `/api`. Conversations are scoped to the caller by an
-`httpOnly` cookie, so each browser sees only its own history.
+```bash
+AI_API_KEY=your-key-here
+```
 
-| Method | Path | Purpose |
+That is the whole production configuration. See `.env.example` for the rest.
+
+---
+
+## Deployment (Vercel)
+
+The canonical deployment is **Vercel**, running as a static PWA plus three
+serverless functions.
+
+1. Push the repo and import it into Vercel. No build step is required.
+2. Set **one** environment variable in the project settings:
+
+   | Variable | Value |
+   | --- | --- |
+   | `AI_API_KEY` | Your OpenRouter (or other gateway) key for Space Bunny Alpha |
+
+3. Deploy. `chat.michaelap.my.id` should now serve the free tier.
+
+There is no database to provision. The serverless handlers are stateless: the
+browser keeps conversation history in IndexedDB and sends the recent turns with
+each request, so nothing about a user is stored server-side.
+
+`.vercelignore` is load-bearing, not cosmetic. `vercel.json` sets
+`outputDirectory: "."`, so anything not excluded there would be uploaded and
+served publicly — including `.env` and `data/chatbot.db`. Keep it in sync when
+you add files.
+
+### If you deploy somewhere else
+
+`src/` is a complete Express server with SQLite persistence, email/password
+accounts and server-side sessions. Run it with `npm start`. It serves the same
+frontend and the same API contract, and it is what the test suite exercises.
+
+---
+
+## The free tier
+
+Space Bunny Alpha is a 1,000,000-token-context model. It is reached through
+OpenRouter, which speaks the standard `/chat/completions` shape, so it reuses
+the same OpenAI-compatible adapter as every other vendor.
+
+**There is no anonymous public Space Bunny endpoint.** Every documented route —
+OpenRouter, BeatAPI, and the various third-party resellers — requires an API
+key, and free tiers are typically capped at a handful of requests per minute
+per account. That is why the key lives on the server:
+
+- a visitor never has to obtain one;
+- the key is never exposed to the browser;
+- the per-owner and per-IP rate limits are what keep it from being drained.
+
+Set `AI_REASONING_EFFORT` to `low`…`max` to control reasoning depth. Leave it
+empty to omit the field — gateways that do not recognise it reject the request.
+
+---
+
+## Bring your own key
+
+`GPT-4o`, `Gemini`, `Claude`, `DeepSeek` and `Groq` are presets in
+`src/providers/presets.ts`. Selecting one sends your saved key with the request:
+
+| Header | Required | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/health` | Liveness, active provider, uptime. |
-| `POST` | `/api/auth/signup` | Create an account and start a session. |
-| `POST` | `/api/auth/login` | Start a session. |
-| `POST` | `/api/auth/logout` | End the current session. |
-| `POST` | `/api/auth/logout-all` | End every session for the account. |
-| `DELETE` | `/api/auth/account` | Delete the account and its conversations. |
-| `GET` | `/api/auth/me` | The signed-in user, or `null`. |
-| `POST` | `/api/chat` | Send a message; streams the reply. |
-| `GET` | `/api/conversations` | List conversations, most recent first. |
-| `POST` | `/api/conversations` | Create an empty conversation. |
-| `GET` | `/api/conversations/:id` | One conversation with all its messages. |
-| `PATCH` | `/api/conversations/:id` | Rename a conversation. |
-| `DELETE` | `/api/conversations/:id` | Delete a conversation and its messages. |
+| `X-Provider-Key` | yes | Your API key. |
+| `X-Provider-Base-Url` | no | Point at a self-hosted OpenAI-compatible server. |
+| `X-Provider-Model` | no | Pin a specific model id. |
+
+**The key is never stored by the server.** It is read from the request, handed
+to a provider instance that lives only for that request, and discarded. It is
+never written to the database, never logged, and never echoed in a response or
+an error. Browser-side, it lives only in IndexedDB on your device.
+
+A known label with no key returns `400 {"code":"missing_api_key"}`; an unknown
+label returns `400 {"code":"unknown_model"}`.
+
+---
+
+## API
+
+| Method | Path | Availability | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/health` | Both | Liveness, active provider, whether demo mode is on. |
+| `POST` | `/api/chat` | Both | Send a message; streams the reply as SSE. |
+| `POST` | `/api/image` | Both | Generate an image. Requires a BYOK key. |
+| `GET` | `/api/auth/me` | Express only | The signed-in user, or `null`. |
+| `POST` | `/api/auth/signup` | Express only | Create an account. |
+| `POST` | `/api/auth/login` | Express only | Start a session. |
+| `POST` | `/api/auth/logout` | Express only | End the session. |
+| `GET` | `/api/conversations` | Express only | List conversations. |
+| `GET` | `/api/conversations/:id` | Express only | One conversation with its messages. |
+| `PATCH` | `/api/conversations/:id` | Express only | Rename. |
+| `DELETE` | `/api/conversations/:id` | Express only | Delete. |
+
+The frontend treats the Express-only endpoints as optional: when they 404 it
+falls back to guest mode with local-only history, which is what makes the same
+build work on Vercel.
 
 ### `POST /api/chat`
 
 ```json
-{ "message": "Hello", "conversationId": "optional-uuid", "model": "GPT-4o" }
+{ "message": "Hello", "model": "SpaceBunny Free MAX", "history": [] }
 ```
 
-Omit `conversationId` to start a new conversation; the response names the one
-that was created. The reply streams back as Server-Sent Events:
+The reply streams back as Server-Sent Events:
 
 ```text
 event: meta
-data: {"conversationId":"...","model":"ChatBot AI"}
+data: {"model":"stealth/space-bunny-alpha"}
 
 event: delta
 data: {"text":"Hello"}
 
 event: done
-data: {"messageId":"...","content":"Hello there"}
+data: {"content":"Hello there"}
 ```
 
-A failure mid-stream arrives as `event: error` instead of `event: done`; any
-text generated before the failure is still saved.
+A failure before the first token is a real non-2xx JSON error, carrying the
+upstream vendor's own status and message. A failure *after* streaming starts
+arrives as `event: error`, and any text already generated is kept.
 
-Turns are rate limited per owner (browser or account) and per IP, with
-defaults of 20 and 60 per minute. Over the cap the endpoint answers before
-streaming anything:
+Over the rate limit the endpoint answers `429` with `Retry-After` before writing
+anything. The UI shows that as a toast with a countdown plus an inline retry.
 
-```json
-HTTP 429, Retry-After: 42
-{ "error": { "code": "rate_limited", "status": 429, "retryAfter": 42, "message": "..." } }
-```
+---
 
-Tune it with `CHAT_RATE_LIMIT_WINDOW_MS`, `CHAT_RATE_LIMIT_PER_OWNER` and
-`CHAT_RATE_LIMIT_PER_IP`. The counters live in memory, so they reset on
-restart and are per instance.
+## Configuration
 
-### Bring your own key
+Every variable is documented in `.env.example`. The ones that matter most:
 
-The model picker's `ChatBot AI` option uses the server's own provider and
-`.env` key. Every other label uses the caller's key, sent per request:
-
-| Header | Required | Purpose |
+| Variable | Default | Notes |
 | --- | --- | --- |
-| `X-Provider-Key` | yes, for non-default labels | The user's own API key. |
-| `X-Provider-Base-Url` | no | Overrides the preset base URL. |
-| `X-Provider-Model` | no | Overrides the preset model id. |
+| `AI_PROVIDER` | *(empty)* | Empty auto-selects: real provider if a key exists, `mock` if not. |
+| `AI_API_KEY` | *(empty)* | The deployment's key. This is the one you need. |
+| `AI_MODEL` | `stealth/space-bunny-alpha` | Free-tier model id. |
+| `AI_BASE_URL` | `https://openrouter.ai/api/v1` | Swap to hit another gateway. |
+| `AI_REASONING_EFFORT` | *(empty)* | `low`…`max`. Omitted when empty. |
+| `TRUST_PROXY` | `0` | See the warning below. |
+| `CORS_ORIGINS` | localhost only | Comma-separated allowlist. |
 
-Presets live in `src/providers/presets.ts`:
+### `TRUST_PROXY` matters
 
-| Label | Adapter | Base URL | Model |
-| --- | --- | --- | --- |
-| `GPT-4o` | openai-compatible | `https://api.openai.com/v1` | `gpt-4o` |
-| `Gemini` | openai-compatible | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-3.8-flash` |
-| `DeepSeek` | openai-compatible | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| `Groq` | openai-compatible | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` |
-| `Claude` | anthropic | — | `claude-opus-5` |
+It is **off by default**, and that default is load-bearing. Any non-zero value
+makes Express believe the `X-Forwarded-For` header — which the client controls
+— when resolving `req.ip`, so a visitor could forge a new address on every
+request and walk straight through the per-IP rate limit. Turn it on only when
+the app genuinely sits behind a proxy you control, and set it to the number of
+proxies in front of it.
 
-The headers are ignored for `ChatBot AI`. An unknown label returns
-`400 {"code":"unknown_model"}`; a known label with no key returns
-`400 {"code":"missing_api_key","model":"<label>"}`.
+---
 
-**The key is never stored.** It lives only for the duration of the request: not
-written to the database, not logged, and never echoed in a response or error.
+## Security notes
 
-## 🗄️ Data
+- The static file server mounts an **allowlist** (`css/`, `js/`, `icons/`,
+  `components/`, `manifest.json`, `sw.js`), never the repository root. Serving
+  the root would expose `data/chatbot.db` — every user's password hash, session
+  token hash and message — along with `src/`, `test/` and `node_modules/`.
+- Passwords use scrypt from `node:crypto`. Sessions store only a SHA-256 hash of
+  the token, in an `httpOnly`, `sameSite=lax` cookie.
+- Failed logins verify against a dummy hash when the account does not exist, so
+  response time does not reveal which emails are registered.
+- All model output is sanitised with DOMPurify before it reaches the DOM.
+  KaTeX runs with `trust: false`, which is what blocks `\href` and `\htmlClass`
+  from injecting markup.
+- `.env` is gitignored and excluded from the Vercel deployment.
 
-Messages are stored in SQLite at `DATABASE_PATH` (default `./data/chatbot.db`,
-which is gitignored). The schema in `src/db/schema.sql` is applied on every
-boot and is idempotent, so there are no migrations to run yet.
+---
 
-Conversations carry an `owner_id`: the user id when signed in, otherwise an
-anonymous per-browser id. That means **you can chat before creating an account**,
-and signing up moves those conversations onto the new account rather than
-discarding them.
-
-## 🔑 Accounts
-
-Email and password, with server-side sessions:
-
-- Passwords are hashed with **scrypt** from `node:crypto` — memory-hard, and no
-  native dependency to compile.
-- Sessions live in the database and the cookie holds a random token; only a
-  SHA-256 hash of it is stored, so a database leak does not yield usable cookies.
-- The session cookie is `httpOnly` and `sameSite=lax`, and `secure` in production.
-- Login and signup are rate limited per IP **and** email, so one attacker cannot
-  lock out everyone behind a shared IP.
-- A failed login verifies against a dummy hash when the account does not exist,
-  so response time does not reveal which emails are registered.
-
-Sign-in is optional — anonymous browsing still works.
-
-Not implemented yet: email verification, password reset, and the Google / GitHub
-/ Apple buttons, which now say so instead of silently doing nothing.
-
-## 🧩 Suggested Capabilities
-
-ChatBotAI can be extended with features such as:
-
-- Conversation history and persistent memory
-- Streaming responses for a faster experience
-- Markdown and code rendering
-- File and document analysis
-- Custom system prompts and personalities
-- Authentication and user profiles
-- Voice input and text-to-speech output
-- Tool calling and external service integrations
-- Rate limiting, moderation, and usage analytics
-
-## 🏗️ Recommended Architecture
-
-For a maintainable implementation, separate the application into clear layers:
-
-1. **Interface** – Presents messages, loading states, errors, and conversation history.
-2. **Conversation service** – Validates requests and manages chat context.
-3. **AI provider layer** – Connects to the selected model through a replaceable adapter.
-4. **Data layer** – Stores users, conversations, messages, and optional memories.
-5. **Safety layer** – Handles input validation, privacy, moderation, and request limits.
-
-This structure makes it easier to change models, add features, and test individual components without rewriting the entire application.
-
-## 💡 Example Conversation
-
-```text
-User: Help me plan my day.
-
-ChatBotAI: Absolutely. Tell me your top priorities, available time, and any fixed appointments,
-and I’ll help you turn them into a practical schedule.
-```
-
-## 🎾 Function and Feature
-
-- Sign In and Sign Up
-- Security and Best Usage for Daily and Task
-- Saved API Key in Account (If you logout in your browser, your api key will be blank and safety. Can't be leak or abuse)
-- Saved History Conversation in Account
-- Personalization
-- Upload Your Picture Profile and Rename Username
-- Support for OpenAI, Gemini, Claude, Deepseek and Your Local Model)
-
-
-## 🔒 Security and Privacy
-
-When deploying ChatBotAI:
-
-- Store credentials in environment variables or a secure secrets manager.
-- Validate and sanitize user input.
-- Avoid logging private conversations unnecessarily.
-- Add authentication before exposing personal data.
-- Apply rate limits to protect the service from abuse.
-- Clearly explain how messages are processed and stored.
-
-## 🧪 Testing
-
-Add tests for both normal and unexpected interactions, including:
-
-- Empty or excessively long messages
-- Provider timeouts and unavailable services
-- Malformed responses
-- Conversation-history limits
-- Authentication and authorization rules
-- Sensitive or unsafe input handling
-
-Run the test command configured by the project, for example:
+## Development
 
 ```bash
-npm test
+npm run dev        # watch mode
+npm run typecheck  # tsc --noEmit
+npm test           # node --test
 ```
 
-## 🤝 Contributing
+The suite covers the SSE contract, validation, attachments, conversation CRUD
+and ownership, auth, rate limiting, CORS, provider auto-selection, the
+serverless handlers, static-file exposure, and the LaTeX delimiter rules.
 
-Contributions are welcome. To propose an improvement:
+### Layout
 
-1. Fork the repository.
-2. Create a focused branch: `git checkout -b feature/my-improvement`
-3. Make and test your changes.
-4. Commit with a clear message.
-5. Open a pull request describing what changed and why.
+```
+index.html              app shell
+css/style.css           all styling, dark and light
+js/ui.js                toasts, error boundary, server-status banner
+js/markdown-math.js     LaTeX extraction and rendering (unit tested)
+js/script.js            the chat application
+sw.js                   service worker
+api/                    Vercel serverless functions (stateless)
+src/                    Express server, providers, SQLite, auth
+test/                   node:test suite
+```
 
-Please keep pull requests focused, document new configuration, and preserve user privacy and security.
+---
 
-## 🗺️ Roadmap
+## Not implemented
 
-- [x] Persist conversations and messages
-- [x] Add authentication (email + password, server-side sessions)
-- [ ] Email verification and password reset
-- [ ] Improve conversation memory
-- [ ] Add configurable assistant personalities
-- [x] Support multiple AI providers
-- [x] Add streaming and rich message rendering
-- [ ] Introduce analytics and administration tools
-- [ ] Provide production deployment examples
+Stated plainly rather than left to look finished:
 
-## 📄 License
+- Email verification and password reset (Express build only).
+- Google / GitHub / Apple sign-in buttons say so instead of failing silently.
+- The Settings panels for Billing, Usage, Analytics, 2FA and password change
+  are presentational; they do not call a billing or identity service.
+- Plugins and Skills menus are placeholders.
 
-No license has been specified yet. Add a license before distributing or accepting external contributions.
+---
 
-## 🌟 Final Thought
+## License
 
-Great assistants do more than generate answers—they listen, adapt, and help people move forward. ChatBotAI is a starting point for building that kind of experience, one thoughtful conversation at a time.
-
-## Big Thanks for Yer and Max
+No license has been specified yet. Add one before distributing this or
+accepting external contributions.

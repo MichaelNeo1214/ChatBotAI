@@ -1,0 +1,37 @@
+# Files that must never reach the Vercel deployment.
+#
+# vercel.json sets outputDirectory to ".", so anything not listed here is
+# uploaded and served as a public static file. That is the same exposure class
+# as serving the repo root from Express, so the exclusions are the real
+# security boundary for the deployed app.
+#
+# src/ is deliberately NOT excluded: api/chat.ts and api/image.ts import
+# ../src/config.ts and ../src/providers/*, so the build needs them. They are
+# public source with no secrets in them — the same code is on GitHub.
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+
+# The SQLite database: password hashes, session token hashes, every message.
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Not needed to build or serve
+test/
+supabase/
+.github/
+node_modules/
+coverage/
+*.log
+*.tsbuildinfo
+
+# Documentation and editor noise
+README.md
+.DS_Store
+Thumbs.db

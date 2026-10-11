@@ -3132,3 +3132,212 @@
             flex: 1;
         }
 
+
+        /* ===== TOASTS, RETRY CARD, DEMO BANNER =====
+           js/ui.js renders these. Every colour comes from the theme tokens
+           above, so light mode is covered without a second block. */
+
+        .toast-stack {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: min(380px, calc(100vw - 36px));
+            pointer-events: none;
+        }
+
+        .toast {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 12px 12px 14px;
+            border: 1px solid var(--border-color);
+            border-left: 3px solid var(--accent-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+            box-shadow: var(--shadow-lg);
+            color: var(--text-primary);
+            font-size: 13.5px;
+            line-height: 1.45;
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(10px) scale(0.98);
+            transition: opacity 0.2s var(--transition), transform 0.2s var(--transition);
+        }
+
+        .toast.toast-visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        .toast.toast-leaving {
+            opacity: 0;
+            transform: translateX(24px);
+        }
+
+        .toast-success { border-left-color: #22c55e; }
+        .toast-warn    { border-left-color: #f59e0b; }
+        .toast-error   { border-left-color: #ef4444; }
+        .toast-info    { border-left-color: var(--accent-color); }
+
+        .toast-icon {
+            display: inline-flex;
+            flex: 0 0 auto;
+            margin-top: 1px;
+            color: var(--text-muted);
+        }
+
+        .toast-icon svg {
+            width: 17px;
+            height: 17px;
+        }
+
+        .toast-success .toast-icon { color: #22c55e; }
+        .toast-warn .toast-icon    { color: #f59e0b; }
+        .toast-error .toast-icon   { color: #ef4444; }
+
+        .toast-message {
+            flex: 1 1 auto;
+            min-width: 0;
+            /* Vendor error strings can be long single-token blobs. */
+            overflow-wrap: anywhere;
+        }
+
+        .toast-action,
+        .toast-close {
+            flex: 0 0 auto;
+            border: 0;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .toast-action {
+            padding: 4px 10px;
+            border: 1px solid var(--accent-color);
+            border-radius: var(--radius-sm);
+            color: var(--accent-color);
+            font-size: 12.5px;
+            font-weight: 600;
+        }
+
+        .toast-action:hover { background: var(--accent-color); color: #fff; }
+
+        .toast-close {
+            display: inline-flex;
+            padding: 3px;
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+        }
+
+        .toast-close svg { width: 15px; height: 15px; }
+        .toast-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+        .toast:focus-within { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+
+        /* Inline failure card shown in the assistant bubble when a turn fails. */
+        .turn-error {
+            margin-top: 10px;
+            padding: 12px 14px;
+            border: 1px solid var(--border-color);
+            border-left: 3px solid #ef4444;
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+        }
+
+        .turn-error-title {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .turn-error-detail {
+            margin-top: 4px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            overflow-wrap: anywhere;
+        }
+
+        .turn-error-retry { margin-top: 10px; }
+
+        /* Persistent notice when the deployment has no AI key configured. */
+        .demo-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin: 10px auto 0;
+            padding: 10px 12px;
+            max-width: 860px;
+            border: 1px solid #f59e0b;
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 12.5px;
+            line-height: 1.45;
+        }
+
+        .demo-banner-text { flex: 1 1 auto; }
+
+        .demo-banner-close {
+            flex: 0 0 auto;
+            border: 0;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .demo-banner-close svg { width: 15px; height: 15px; }
+        .demo-banner-close:hover { color: var(--text-primary); }
+
+        @media (max-width: 560px) {
+            .toast-stack {
+                right: 10px;
+                left: 10px;
+                bottom: 10px;
+                width: auto;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .toast {
+                transition: none;
+                transform: none;
+                opacity: 1;
+            }
+        }
+
+        /* ===== MATH (KaTeX) =====
+           katex.min.css supplies the typography; these rules only handle the
+           block wrapper, spacing, and the degraded no-KaTeX case where the raw
+           LaTeX is rendered in a plain <code> element instead. */
+
+        .math-block {
+            margin: 12px 0;
+            padding: 4px 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .math-block .katex-display {
+            margin: 0;
+        }
+
+        /* An inline formula should never force the line to grow taller than the
+           text around it. */
+        .message-text .katex {
+            font-size: 1.05em;
+        }
+
+        .message-text code {
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 560px) {
+            .math-block {
+                margin: 10px 0;
+            }
+        }

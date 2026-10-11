@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   id          TEXT PRIMARY KEY,
   owner_id    TEXT NOT NULL,
   title       TEXT NOT NULL DEFAULT 'New chat',
-  model       TEXT NOT NULL DEFAULT 'ChatBot AI',
+  model       TEXT NOT NULL DEFAULT 'SpaceBunny Free MAX',
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
   updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
 );

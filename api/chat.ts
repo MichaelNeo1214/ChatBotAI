@@ -36,7 +36,7 @@ import { documentBlock, parseAttachments } from '../src/providers/attachments.ts
 import { UpstreamError } from '../src/providers/errors.ts';
 import { MockProvider } from '../src/providers/mock.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
-import { DEFAULT_MODEL_LABEL, PROVIDER_PRESETS } from '../src/providers/presets.ts';
+import { PROVIDER_PRESETS, isDefaultModelLabel } from '../src/providers/presets.ts';
 import type { ChatMessage, ChatProvider } from '../src/providers/types.ts';
 
 const MAX_MESSAGE_LENGTH = 32_000;
@@ -141,16 +141,17 @@ function normalizeHistory(value: unknown): ChatMessage[] {
 /**
  * Chooses the upstream provider for this request — the multi-model switch.
  *
- *   - no label / "ChatBot AI" -> the server's own env-configured provider
+ *   - no label / the default label -> the server's own env-configured provider
  *   - "GPT-4o" / "Gemini" / "DeepSeek" / "Groq" -> OpenAI-compatible, using the caller's key
  *   - "Claude" -> Anthropic Messages API, using the caller's key
  *   - X-Provider-Base-Url on any preset -> talk to a self-hosted endpoint instead
  */
 function selectProvider(modelLabel: unknown, req: Req): { provider: ChatProvider; model: string } {
   const label = typeof modelLabel === 'string' ? modelLabel.trim() : '';
-  const useDefault = label === '' || label === DEFAULT_MODEL_LABEL;
 
-  if (useDefault) {
+  // isDefaultModelLabel also accepts the pre-rename "ChatBot AI" label, which
+  // is what every conversation saved before the free tier was named carries.
+  if (isDefaultModelLabel(label)) {
     switch (config.provider.name) {
       case 'anthropic': {
         if (config.provider.apiKey === '') {
@@ -168,11 +169,18 @@ function selectProvider(modelLabel: unknown, req: Req): { provider: ChatProvider
       }
 
       case 'openai-compatible': {
+        if (config.provider.apiKey === '') {
+          throw new ApiError(400, 'The server has no AI_API_KEY set for the default model.', {
+            code: 'missing_api_key',
+          });
+        }
         return {
           provider: new OpenAICompatibleProvider({
             baseUrl: config.provider.baseUrl,
             apiKey: config.provider.apiKey,
             model: config.provider.model,
+            reasoningEffort: config.provider.reasoningEffort,
+            systemPrompt: config.provider.systemPrompt,
           }),
           model: config.provider.model,
         };

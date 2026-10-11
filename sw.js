@@ -1,30 +1,40 @@
 /* ChatBot AI — Service Worker
-   Cache-First strategy for the app shell and static assets, so the app can
-   boot and render offline. API traffic is never cached.
-   Bump CACHE_NAME to invalidate old caches on the next deploy.
+   Stale-while-revalidate for the app shell and static assets, so the app boots
+   offline and a returning visitor still picks up a new deploy on the next load.
+   API traffic is never cached.
 
-   Because the strategy is cache-first, a returning visitor keeps running the
-   previously cached js/script.js until the name changes. Every bump must be
-   paired with a deploy, or fixes silently do not reach the browser. */
+   The previous strategy was cache-first, which meant a returning visitor kept
+   running the previously cached js/script.js until CACHE_NAME changed — fixes
+   silently did not reach the browser. Now a cached asset is served immediately
+   and refreshed in the background for the next load. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v3';
+const CACHE_NAME = 'chatbotai-static-v4';
 const OFFLINE_URL = '/index.html';
 const CDN_DOMPURIFY = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js';
 const CDN_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
 const CDN_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const CDN_KATEX_JS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js';
+const CDN_KATEX_CSS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
 
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/css/style.css',
+  '/js/markdown-math.js',
+  '/js/ui.js',
   '/js/script.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   CDN_DOMPURIFY,
   CDN_PDFJS,
-  CDN_PDFJS_WORKER
+  CDN_PDFJS_WORKER,
+  // KaTeX's ~60 font files are deliberately NOT precached. The stylesheet and
+  // script are enough for formulas to render offline; only the typeface falls
+  // back until the next online load.
+  CDN_KATEX_CSS,
+  CDN_KATEX_JS
 ];
 
 self.addEventListener('install', function (event) {
@@ -66,20 +76,33 @@ self.addEventListener('fetch', function (event) {
   // API traffic must always reach the network.
   if (isSameOrigin && url.pathname.indexOf('/api/') === 0) return;
 
-  const isCdnAsset = url.href === CDN_DOMPURIFY || url.hostname === 'cdnjs.cloudflare.com';
+  const isCdnAsset = url.href === CDN_DOMPURIFY
+    || url.hostname === 'cdnjs.cloudflare.com'
+    || url.hostname === 'cdn.jsdelivr.net';
   if (!isSameOrigin && !isCdnAsset) return;
 
   event.respondWith((async function () {
-    const cached = await caches.match(request);
-    if (cached) return cached;
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
 
-    try {
-      const response = await fetch(request);
+    // Exactly one network request either way: it refreshes the cache and its
+    // response is returned only when there was nothing cached to serve.
+    const fromNetwork = fetch(request).then(function (response) {
       if (response && (response.ok || response.type === 'opaque')) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(function (cache) { cache.put(request, copy); });
+        cache.put(request, response.clone());
       }
       return response;
+    });
+
+    if (cached) {
+      // Serve immediately; refresh for next load. A failed refresh while
+      // offline must not surface as an error, so it is swallowed.
+      event.waitUntil(fromNetwork.catch(function () {}));
+      return cached;
+    }
+
+    try {
+      return await fromNetwork;
     } catch (e) {
       // Offline navigation falls back to the cached app shell.
       if (request.mode === 'navigate') {

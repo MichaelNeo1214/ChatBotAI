@@ -225,7 +225,7 @@ describe('GET /api/auth/me and logout', () => {
     assert.equal(me.status, 200);
     const meBody = (await me.json()) as { user: PublicUser | null };
     assert.equal(meBody.user?.id, account.user.id);
-    assert.ok(meBody.user && !('password_hash' in (meBody.user as Record<string, unknown>)));
+    assert.ok(meBody.user && !('password_hash' in (meBody.user as unknown as Record<string, unknown>)));
 
     const logout = await account.jar.post('/api/auth/logout');
     assert.equal(logout.status, 204);

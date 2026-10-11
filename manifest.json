@@ -1,13 +1,17 @@
 {
-  "name": "ChatBot AI",
-  "short_name": "ChatBot AI",
-  "description": "ChatBot AI - Your intelligent assistant",
+  "name": "SpaceBunny — AI Chat",
+  "short_name": "SpaceBunny",
+  "description": "Chat with SpaceBunny Free MAX for free, or bring your own key for GPT-4o, Claude, Gemini and DeepSeek.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "orientation": "any",
+  "background_color": "#171717",
+  "theme_color": "#171717",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "icons/icon-192.png",

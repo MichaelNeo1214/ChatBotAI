@@ -1,11 +1,11 @@
 /**
- * Presets for "bring your own key" models.
+ * Model labels, presets, and the default free engine.
  *
- * The frontend model picker shows these labels. `ChatBot AI` is deliberately
- * NOT here: it is the team's default model, served by the boot-time provider
- * with the server's own `.env` key. Every preset below is instead called with
- * the key the client sends on the request (X-Provider-Key), which is never
- * stored on the server.
+ * The frontend model picker shows these labels. The default label is
+ * deliberately NOT here: it is served by the server's own env-configured
+ * provider, so a visitor needs no API key of their own. Every preset below is
+ * instead called with the key the client sends on the request
+ * (X-Provider-Key), which is never stored on the server.
  *
  * `baseUrl` is omitted for adapters that talk to a fixed endpoint of their own
  * (anthropic) and present for adapters that need a vendor URL.
@@ -56,18 +56,36 @@ export const PROVIDER_PRESETS: Readonly<Record<string, ProviderPreset>> = {
   Claude: {
     adapter: 'anthropic',
     /**
-     * Shipped verbatim from the agreed contract: the preset model id is
-     * "claude-opus-5". NOTE: that is not a model id Anthropic publishes, and an
-     * empty id is not usable either (the SDK rejects it before sending), so a
-     * bare "Claude" request with no X-Provider-Model cannot succeed upstream.
-     * Callers must send X-Provider-Model. Flagged in the PR as unverifiable.
+     * claude-opus-5 is a real Anthropic API id (GA 2026-07-24, alias and id
+     * are identical). An earlier version of this comment claimed it was not a
+     * published id; that was wrong. Callers can still pin a cheaper or faster
+     * model — claude-sonnet-5, claude-haiku-4-5 — with X-Provider-Model.
      */
     model: 'claude-opus-5',
   },
 };
 
-/** The label that means "the server's own provider", not a BYOK preset. */
-export const DEFAULT_MODEL_LABEL = 'ChatBot AI';
+/**
+ * The picker label for the server's own provider — Space Bunny Alpha, served
+ * on the deployment's key so that visitors never need to supply one.
+ */
+export const DEFAULT_MODEL_LABEL = 'SpaceBunny Free MAX';
+
+/**
+ * Labels that also mean "the server's own provider".
+ *
+ * `ChatBot AI` was the label before the free tier was renamed, and it is what
+ * every conversation saved in an older deployment still carries. Accepting it
+ * keeps that history readable instead of 400-ing as an unknown model.
+ */
+export const DEFAULT_MODEL_ALIASES: readonly string[] = ['ChatBot AI'];
+
+/** True when a picker label routes to the server's own provider. */
+export const isDefaultModelLabel = (label: string | undefined | null): boolean => {
+  if (label === undefined || label === null) return true;
+  const trimmed = label.trim();
+  return trimmed === '' || trimmed === DEFAULT_MODEL_LABEL || DEFAULT_MODEL_ALIASES.includes(trimmed);
+};
 
 export const isKnownModelLabel = (label: string): boolean =>
   Object.prototype.hasOwnProperty.call(PROVIDER_PRESETS, label);

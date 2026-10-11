@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { CookieJar, TestServer } from './helpers.ts';
+import type { CookieJar, SseEvent, TestServer } from './helpers.ts';
 
 // src/config.ts, src/db/index.ts and src/providers/index.ts read the
 // environment the first time they are evaluated, so these have to be in place
@@ -183,7 +183,7 @@ describe('POST /api/chat — attachments', () => {
   });
 
   // The mock provider emits many deltas, so only the frame order is asserted.
-  function assertStreamShape(events: { event: string }[]): void {
+  function assertStreamShape(events: SseEvent[]): void {
     const names = eventNames(events);
     assert.equal(names[0], 'meta', 'meta must be the first frame');
     assert.equal(names[names.length - 1], 'done', 'done must be the last frame');
