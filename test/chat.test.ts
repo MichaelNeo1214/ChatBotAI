@@ -11,6 +11,11 @@ import type { CookieJar, SseEvent, TestServer } from './helpers.ts';
 // dynamic rather than static.
 process.env.DATABASE_PATH = path.join(tmpdir(), `chatbotai-chat-${randomUUID()}.db`);
 process.env.AI_PROVIDER = 'mock';
+// Rate limits are pinned per suite so that tightening the production default
+// (which the free tier's daily budget requires) cannot break these tests.
+// The limiting behaviour has its own suite in rate-limit.test.ts.
+process.env.CHAT_RATE_LIMIT_PER_OWNER = '1000';
+process.env.CHAT_RATE_LIMIT_PER_IP = '1000';
 
 const { CookieJar: Jar, createTestServer, eventNames, joinDeltas, payloadsOf, readSse } =
   await import('./helpers.ts');

@@ -163,7 +163,7 @@
             // `aliases` are labels older builds stored in conversation history;
             // they still resolve so saved chats keep rendering their model name.
             const MODEL_DEFS = [
-                { key: 'default',  label: 'SpaceBunny Free MAX', provider: 'default', aliases: ['ChatBot AI'] },
+                { key: 'default',  label: 'OpenRouter Free', provider: 'default', aliases: ['SpaceBunny Free MAX', 'ChatBot AI'] },
                 { key: 'openai',   label: 'GPT-4o',     provider: 'openai' },
                 { key: 'gemini',   label: 'Gemini',     provider: 'gemini' },
                 { key: 'claude',   label: 'Claude',     provider: 'anthropic' },
@@ -942,7 +942,7 @@
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
                 + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
                 + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
-                + '**Models** — pick a model from the dropdown in the input box. "SpaceBunny Free MAX" runs on the server\'s own key, so it costs you nothing and needs no setup; GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
+                + '**Models** — pick a model from the dropdown in the input box. "OpenRouter Free" runs on the server\'s own OpenRouter key, so it costs you nothing and needs no setup (the free tier is rate limited, so it can be busy); GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings → API Key.\n\n'
                 + '**Images** — pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
                 + '**Attachments** — the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
@@ -2711,7 +2711,7 @@ function mmNeedsVisionModel() {
                     ? 'U'
                     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 
-                const senderName = role === 'user' ? 'You' : 'SpaceBunny Free MAX';
+                const senderName = role === 'user' ? 'You' : 'OpenRouter Free';
                 const formattedText = formatText(text);
 
                 const copyAction = '<button class="btn-msg-action" type="button" data-action="copy" aria-label="Copy">'

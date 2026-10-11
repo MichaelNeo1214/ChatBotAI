@@ -1,7 +1,7 @@
 {
-  "name": "SpaceBunny — AI Chat",
-  "short_name": "SpaceBunny",
-  "description": "Chat with SpaceBunny Free MAX for free, or bring your own key for GPT-4o, Claude, Gemini and DeepSeek.",
+  "name": "OpenRouter Free — AI Chat",
+  "short_name": "AI Chat",
+  "description": "Chat free using OpenRouter's free model tier, or bring your own key for GPT-4o, Claude, Gemini and DeepSeek.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

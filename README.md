@@ -1,12 +1,12 @@
-# SpaceBunny
+# OpenRouter Free — AI Chat
 
-> A free, keyless-to-the-visitor AI chat: Space Bunny Alpha answers on the
-> server's own key, and anyone who wants more can bring their own.
+> A free, keyless-to-the-visitor AI chat: OpenRouter's free model tier answers
+> on the server's own key, and anyone who wants more can bring their own.
 
 ## What it does
 
 - **Works immediately.** A visitor can open the app and chat. The default
-  `SpaceBunny Free MAX` model runs on a key the deployment holds, so nobody is
+  `OpenRouter Free` model runs on a key the deployment holds, so nobody is
   asked to sign up for an API key.
 - **Bring your own key.** Save a key for OpenAI, Google, Anthropic, DeepSeek or
   Groq in Settings → API Key and those models become selectable. Keys are held
@@ -52,7 +52,7 @@ serverless functions.
 
    | Variable | Value |
    | --- | --- |
-   | `AI_API_KEY` | Your OpenRouter (or other gateway) key for Space Bunny Alpha |
+   | `AI_API_KEY` | Your OpenRouter key (from <https://openrouter.ai/keys>) |
 
 3. Deploy. `chat.michaelap.my.id` should now serve the free tier.
 
@@ -75,21 +75,53 @@ frontend and the same API contract, and it is what the test suite exercises.
 
 ## The free tier
 
-Space Bunny Alpha is a 1,000,000-token-context model. It is reached through
-OpenRouter, which speaks the standard `/chat/completions` shape, so it reuses
-the same OpenAI-compatible adapter as every other vendor.
+The default model is `openrouter/free`, OpenRouter's **Free Models Router**. It
+chooses among the `:free` endpoints at request time, which means the app keeps
+working when an individual free model is retired, and needs no change when
+OpenRouter rotates its free roster.
 
-**There is no anonymous public Space Bunny endpoint.** Every documented route —
-OpenRouter, BeatAPI, and the various third-party resellers — requires an API
-key, and free tiers are typically capped at a handful of requests per minute
-per account. That is why the key lives on the server:
+OpenRouter speaks the standard `/chat/completions` shape, so it reuses the same
+adapter as every other vendor here.
+
+### The daily ceiling is the real limit
+
+**OpenRouter's free tier allows roughly 50 requests per day for the whole
+account**, rising to ~1,000/day after a one-time $10 top-up, with a ceiling of
+20 requests per minute. There is no anonymous endpoint — a key is always
+required — so the key lives on the server:
 
 - a visitor never has to obtain one;
 - the key is never exposed to the browser;
-- the per-owner and per-IP rate limits are what keep it from being drained.
+- the per-owner and per-IP limits exist to stop one visitor draining the shared
+  daily budget for everyone.
 
-Set `AI_REASONING_EFFORT` to `low`…`max` to control reasoning depth. Leave it
-empty to omit the field — gateways that do not recognise it reject the request.
+Be clear-eyed about what the app's own rate limiting can do. `CHAT_RATE_LIMIT_*`
+is a **per-minute** window; it limits burst damage, not total spend. Nothing in
+this codebase can express a daily budget, and the daily cap belongs to
+OpenRouter and is shared across every visitor of the deployment. When it runs
+out, requests fail with an upstream 429, which the UI surfaces as a toast with a
+retry rather than a crash.
+
+For anything beyond casual use, add credits to the OpenRouter account or have
+visitors supply their own key.
+
+### Pinning a specific free model
+
+`AI_MODEL` accepts any OpenRouter model id. Current `:free` options, roughly
+best-first:
+
+| Model | Context | Notes |
+| --- | --- | --- |
+| `openrouter/free` | 200K | Router; picks for you. The default. |
+| `thinkingmachines/inkling:free` | 1M | Reasoning + vision. |
+| `nvidia/nemotron-3.5-lightning:free` | 1M | Fast, tools. |
+| `qwen/qwen3.8-27b:free` | 262K | Vision + tools. |
+| `cohere/north-mini-code:free` | 256K | Coding. |
+
+Verify against <https://openrouter.ai/models> before pinning — the roster turns
+over. Leave `AI_REASONING_EFFORT` empty: the `:free` endpoints do not all
+accept a `reasoning` field, and a gateway that rejects an unknown field fails
+the whole request.
 
 ---
 
@@ -137,14 +169,14 @@ build work on Vercel.
 ### `POST /api/chat`
 
 ```json
-{ "message": "Hello", "model": "SpaceBunny Free MAX", "history": [] }
+{ "message": "Hello", "model": "OpenRouter Free", "history": [] }
 ```
 
 The reply streams back as Server-Sent Events:
 
 ```text
 event: meta
-data: {"model":"stealth/space-bunny-alpha"}
+data: {"model":"openrouter/free"}
 
 event: delta
 data: {"text":"Hello"}
@@ -169,10 +201,11 @@ Every variable is documented in `.env.example`. The ones that matter most:
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `AI_PROVIDER` | *(empty)* | Empty auto-selects: real provider if a key exists, `mock` if not. |
-| `AI_API_KEY` | *(empty)* | The deployment's key. This is the one you need. |
-| `AI_MODEL` | `stealth/space-bunny-alpha` | Free-tier model id. |
+| `AI_API_KEY` | *(empty)* | Your OpenRouter key. This is the one you need. |
+| `AI_MODEL` | `openrouter/free` | Free-tier model id. |
 | `AI_BASE_URL` | `https://openrouter.ai/api/v1` | Swap to hit another gateway. |
 | `AI_REASONING_EFFORT` | *(empty)* | `low`…`max`. Omitted when empty. |
+| `CHAT_RATE_LIMIT_PER_OWNER` | `5` | Turns per minute, per browser/account. |
 | `TRUST_PROXY` | `0` | See the warning below. |
 | `CORS_ORIGINS` | localhost only | Comma-separated allowlist. |
 

@@ -52,7 +52,7 @@ describe('provider auto-selection', () => {
     const provider = resolveProvider({ AI_API_KEY: 'sk-or-v1-test' });
     assert.equal(provider.name, 'openai-compatible');
     assert.equal(provider.baseUrl, 'https://openrouter.ai/api/v1');
-    assert.equal(provider.model, 'stealth/space-bunny-alpha');
+    assert.equal(provider.model, 'openrouter/free');
   });
 
   it('falls back to mock when there is no key at all', () => {

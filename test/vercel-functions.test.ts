@@ -88,7 +88,7 @@ describe('api/health (Vercel)', () => {
     // AI_PROVIDER=mock in this suite, so the UI banner path is what we assert.
     assert.equal(body.demo, true);
     assert.equal(body.provider, 'mock');
-    assert.equal(body.defaultModel, 'SpaceBunny Free MAX');
+    assert.equal(body.defaultModel, 'OpenRouter Free');
   });
 
   it('never echoes a key, base URL or database path', async () => {
@@ -163,13 +163,25 @@ describe('api/chat (Vercel)', () => {
     assert.equal(names[names.length - 1], 'done');
   });
 
-  it('treats the pre-rename "ChatBot AI" label as the default model', async () => {
+  it('routes every retired default label to the default provider', async () => {
+    const { default: handler } = await import('../api/chat.ts');
+
+    // The default model has been renamed twice. Conversations saved under the
+    // older labels must keep working rather than 400-ing as unknown_model.
+    for (const label of ['OpenRouter Free', 'SpaceBunny Free MAX', 'ChatBot AI', '']) {
+      const { res, captured } = fakeRes();
+      await handler(fakeReq('POST', { message: 'hi', model: label }), res);
+
+      assert.equal(captured.status, 200, `"${label}" should reach the default provider`);
+      assert.match(captured.headers['content-type'] ?? '', /event-stream/);
+    }
+  });
+
+  it('omits the model entirely and still routes to the default provider', async () => {
     const { default: handler } = await import('../api/chat.ts');
     const { res, captured } = fakeRes();
-    await handler(fakeReq('POST', { message: 'hi', model: 'ChatBot AI' }), res);
+    await handler(fakeReq('POST', { message: 'hi' }), res);
 
-    // Streaming proves it routed to the default provider rather than 400-ing
-    // as an unknown label.
     assert.equal(captured.status, 200);
     assert.match(captured.headers['content-type'] ?? '', /event-stream/);
   });

@@ -66,19 +66,19 @@ export const PROVIDER_PRESETS: Readonly<Record<string, ProviderPreset>> = {
 };
 
 /**
- * The picker label for the server's own provider — Space Bunny Alpha, served
- * on the deployment's key so that visitors never need to supply one.
+ * The picker label for the server's own provider — the OpenRouter free tier,
+ * served on the deployment's key so that visitors never supply one.
  */
-export const DEFAULT_MODEL_LABEL = 'SpaceBunny Free MAX';
+export const DEFAULT_MODEL_LABEL = 'OpenRouter Free';
 
 /**
  * Labels that also mean "the server's own provider".
  *
- * `ChatBot AI` was the label before the free tier was renamed, and it is what
- * every conversation saved in an older deployment still carries. Accepting it
- * keeps that history readable instead of 400-ing as an unknown model.
+ * These are earlier names for the same thing, and they are what conversations
+ * saved under an older deployment still carry. Accepting them keeps that
+ * history readable instead of 400-ing as an unknown model.
  */
-export const DEFAULT_MODEL_ALIASES: readonly string[] = ['ChatBot AI'];
+export const DEFAULT_MODEL_ALIASES: readonly string[] = ['SpaceBunny Free MAX', 'ChatBot AI'];
 
 /** True when a picker label routes to the server's own provider. */
 export const isDefaultModelLabel = (label: string | undefined | null): boolean => {

@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
-  'You are SpaceBunny Free MAX, a helpful assistant. Answer clearly and concisely. ' +
+  'You are a helpful assistant. Answer clearly and concisely. ' +
   'Use Markdown for structure and fenced code blocks for code. ' +
   'Render mathematical notation with LaTeX delimiters: $...$ inline and $$...$$ on its own line.';
 

@@ -2,14 +2,17 @@ import { UpstreamError, upstreamErrorInfo } from './errors.ts';
 import type { ChatMessage, ChatProvider, ChatRequest } from './types.ts';
 
 const SYSTEM_PROMPT =
-  'You are SpaceBunny Free MAX, a helpful assistant. Answer clearly and concisely. ' +
+  'You are a helpful assistant. Answer clearly and concisely. ' +
   'Use Markdown for structure and fenced code blocks for code. ' +
   'Render mathematical notation with LaTeX delimiters: $...$ inline and $$...$$ on its own line.';
 
 /**
- * Reasoning-effort levels that Space Bunny Alpha accepts. Sent as
+ * Reasoning-effort levels some OpenRouter routes accept. Sent as
  * `reasoning: { effort }` only when the deployment configures one, because a
  * gateway that does not recognise the field rejects the entire request.
+ *
+ * Left unset by default: the OpenRouter free router picks whichever :free
+ * model it routes to, and those do not all accept a reasoning field.
  */
 export const REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
@@ -162,9 +165,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
   /**
    * The request body.
    *
-   * `reasoning` is included only when an effort was configured — OpenRouter
-   * and the Space Bunny route understand it, but a plain OpenAI-compatible
-   * server may reject the request outright on an unknown field.
+ * `reasoning` is included only when an effort was configured — OpenRouter
+ * understands it, but the :free endpoints it routes to do not all do, and a
+ * plain OpenAI-compatible server may reject the request on an unknown field.
    */
   #requestBody(request: ChatRequest): string {
     return JSON.stringify({

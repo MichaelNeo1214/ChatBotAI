@@ -12,6 +12,9 @@ import type { CookieJar, TestServer } from './helpers.ts';
 // the dynamic import below.
 process.env.DATABASE_PATH = path.join(tmpdir(), `chatbotai-auth-${randomUUID()}.db`);
 process.env.AI_PROVIDER = 'mock';
+// Pinned so this suite is independent of the production rate-limit default.
+process.env.CHAT_RATE_LIMIT_PER_OWNER = '1000';
+process.env.CHAT_RATE_LIMIT_PER_IP = '1000';
 const dbPath = process.env.DATABASE_PATH;
 
 const { CookieJar: Jar, createTestServer, payloadsOf, readSse } = await import('./helpers.ts');

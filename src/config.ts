@@ -59,13 +59,17 @@ const databasePath = str('DATABASE_PATH', './data/chatbot.db');
 /**
  * Where the free tier talks to by default.
  *
- * Space Bunny Alpha is served through OpenRouter, which speaks the standard
- * `/chat/completions` shape, so it reuses the openai-compatible adapter. A
- * 1M-token window means the request is rarely the limiting factor — the
- * backend sends the last 40 turns and never truncates them itself.
+ * OpenRouter is both the gateway and the free-model catalogue. `openrouter/free`
+ * is its Free Models Router: it picks among the :free endpoints at request time,
+ * so the app survives an individual free model going down and needs no change
+ * when OpenRouter's free roster rotates. Swap AI_MODEL for a fixed id
+ * (e.g. `qwen/qwen3.8-27b:free`) if you would rather pin one.
+ *
+ * The whole free tier is bounded by OpenRouter's own per-account limits — see
+ * the note on chatRateLimit below. Nothing this app does can raise them.
  */
-const SPACEBUNNY_BASE_URL = 'https://openrouter.ai/api/v1';
-const SPACEBUNNY_MODEL = 'stealth/space-bunny-alpha';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_FREE_MODEL = 'openrouter/free';
 
 /**
  * Reasoning effort levels accepted by Space Bunny Alpha. Sent only when
@@ -130,10 +134,10 @@ export const config = {
   provider: {
     name: resolveProviderName(str('AI_PROVIDER', ''), providerApiKey),
     apiKey: providerApiKey,
-    model: str('AI_MODEL', SPACEBUNNY_MODEL),
+    model: str('AI_MODEL', OPENROUTER_FREE_MODEL),
 
     /** Base URL for the openai-compatible provider, without a trailing slash. */
-    baseUrl: str('AI_BASE_URL', SPACEBUNNY_BASE_URL).replace(/\/+$/, ''),
+    baseUrl: str('AI_BASE_URL', OPENROUTER_BASE_URL).replace(/\/+$/, ''),
 
     /**
      * Maps a frontend picker label ("GPT-4o", "DeepSeek", ...) to the model id
@@ -149,15 +153,26 @@ export const config = {
   },
 
   /**
-   * Fixed-window limits on POST /api/chat. Each turn can cost real money on
-   * the server's own key, so the per-owner cap stops one browser or account
-   * from looping, and the per-IP cap is the backstop when cookies are cleared
-   * to dodge it. Per-IP is looser because an office or campus shares one.
+   * Fixed-window limits on POST /api/chat. Each turn spends the server's own
+   * key, so the per-owner cap stops one browser or account from looping, and
+   * the per-IP cap is the backstop when cookies are cleared to dodge it.
+   * Per-IP is looser because an office or campus shares one address.
+   *
+   * These are deliberately much lower than the old 20/60 defaults. OpenRouter's
+   * free tier allows roughly 50 requests per DAY for the whole account, so a
+   * 20-per-minute ceiling lets one visitor exhaust the entire daily budget in
+   * three minutes and every other visitor then gets upstream 429s until the
+   * quota resets.
+   *
+   * Important: a per-minute window cannot express a daily budget. These caps
+   * limit burst damage, not total spend — the daily ceiling is OpenRouter's,
+   * and it is shared across every visitor of the deployment. To serve real
+   * traffic, either add credits to the OpenRouter account or use BYOK.
    */
   chatRateLimit: {
     windowMs: positiveInt('CHAT_RATE_LIMIT_WINDOW_MS', 60_000),
-    perOwner: positiveInt('CHAT_RATE_LIMIT_PER_OWNER', 20),
-    perIp: positiveInt('CHAT_RATE_LIMIT_PER_IP', 60),
+    perOwner: positiveInt('CHAT_RATE_LIMIT_PER_OWNER', 5),
+    perIp: positiveInt('CHAT_RATE_LIMIT_PER_IP', 10),
   },
 
   corsOrigins: str('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
