@@ -1,0 +1,17 @@
+# https://chat.michaelap.my.id
+#
+# This is a client-side chat application. Its meaningful routes render content
+# with JavaScript, so there is nothing here worth indexing, and the paths below
+# are the ones that must not be crawled or logged.
+
+User-agent: *
+
+# Shared conversations and saved chats are private by default. A crawler that
+# followed the token in a /share/… fragment could otherwise surface the contents
+# of a conversation someone meant to send to one person.
+Disallow: /share/
+Disallow: /c/
+
+# The API and the standalone account pages.
+Disallow: /api/
+Disallow: /components/

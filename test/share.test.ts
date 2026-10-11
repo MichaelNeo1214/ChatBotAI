@@ -21,6 +21,8 @@ interface ShareApi {
   PREFIX: string;
   MAX_PAYLOAD_BYTES: number;
   MAX_MESSAGES: number;
+  toBase64Url(text: string): string;
+  fromBase64Url(value: string): string | null;
   createShareLink(options: {
     messages?: unknown;
     title?: string;
@@ -63,6 +65,99 @@ function loadShare(location: { hash?: string; origin?: string } = {}): ShareApi 
 }
 
 describe('share links', () => {
+  describe('base64url encoding', () => {
+    it('never emits characters that break a URL or a route', () => {
+      const share = loadShare();
+      // Standard Base64 can produce '/', '+' and '='. A '/' inside the token
+      // collides with the route separator, '+' can be re-encoded to a space by
+      // a form-style transport, and '=' padding can be stripped in transit.
+      const samples = [
+        'plain ascii',
+        '日本語と絵文字🎉',
+        'مرحبا بالعالم',
+        'a'.repeat(500),
+        JSON.stringify({ k: 'v'.repeat(300) }),
+      ];
+
+      for (const sample of samples) {
+        const encoded = share.toBase64Url(sample);
+        assert.doesNotMatch(encoded, /[/+=]/, `"${sample.slice(0, 12)}" produced a URL-hostile character`);
+        assert.doesNotMatch(encoded, /[ ]/, 'no whitespace may appear');
+      }
+    });
+
+    it('round-trips every sample through toBase64Url/fromBase64Url', () => {
+      const share = loadShare();
+      for (const sample of ['plain', '日本語', '🎉🎉🎉', 'Ω≈ç√∫', 'x'.repeat(1000)]) {
+        assert.equal(share.fromBase64Url(share.toBase64Url(sample)), sample);
+      }
+    });
+
+    it('decodes a payload that contains every possible byte', () => {
+      const share = loadShare();
+      // Forcing all byte values guarantees the encoded form exercises the full
+      // alphabet, which is what surfaces '/' in a standard-Base64 encoder.
+      let allBytes = '';
+      for (let i = 0; i < 256; i++) allBytes += String.fromCharCode(i);
+      assert.equal(share.fromBase64Url(share.toBase64Url(allBytes)), allBytes);
+    });
+
+    it('accepts standard Base64 with padding, for links made before the change', () => {
+      // Old links encoded with standard Base64 must keep opening.
+      const share = loadShare();
+
+      // 53 bytes of UTF-8, so the encoding genuinely carries '=' padding and
+      // this exercises the padding branch rather than passing by luck.
+      const json = '{"v":1,"t":"legacy","m":[{"role":"user","text":"h"}]}';
+      const standard = Buffer.from(json, 'utf8').toString('base64');
+      assert.equal(standard.endsWith('='), true, 'fixture must actually be padded');
+
+      const parsed = share.parseShareToken('s1.' + standard);
+      assert.ok(parsed, 'a padded standard-Base64 link must still open');
+      assert.equal(parsed!.title, 'legacy');
+      assert.deepEqual(parsed!.messages, [{ role: 'user', text: 'h' }]);
+    });
+
+    it('accepts a token whose padding was stripped in transit', () => {
+      const share = loadShare();
+      const json = JSON.stringify({ v: 1, t: 'no padding', m: [{ role: 'user', text: 'hello' }] });
+      const unpadded = Buffer.from(json, 'utf8').toString('base64').replace(/=+$/, '');
+      const parsed = share.parseShareToken('s1.' + unpadded);
+      assert.ok(parsed, 'missing padding must be tolerated');
+      assert.equal(parsed!.title, 'no padding');
+    });
+
+    it('tolerates whitespace and line breaks from a pasted link', () => {
+      const share = loadShare();
+      const json = JSON.stringify({ v: 1, t: 'wrapped', m: [{ role: 'user', text: 'hi' }] });
+      const wrapped = Buffer.from(json, 'utf8')
+        .toString('base64')
+        .replace(/(.{20})/g, '$1\n');
+
+      const parsed = share.parseShareToken('s1.' + wrapped);
+      assert.ok(parsed, 'a wrapped link must still open');
+      assert.equal(parsed!.title, 'wrapped');
+    });
+
+    it('returns null instead of throwing on every malformed encoding', () => {
+      const share = loadShare();
+      const bad = [
+        's1.',             // empty payload
+        's1.====',         // padding only
+        's1.A',            // length % 4 === 1, impossible
+        's1.@@@@',         // stripped to empty
+        's1.!!!',          // stripped to empty
+        's1.-_-_',         // valid alphabet, decodes to bytes, not JSON
+        's2.abcdef',       // wrong version prefix
+        'notascheme',
+      ];
+      for (const token of bad) {
+        assert.doesNotThrow(() => share.parseShareToken(token), `${token} must not throw`);
+        assert.equal(share.parseShareToken(token), null, `${token} must not parse`);
+      }
+    });
+  });
+
   describe('round trip', () => {
     it('recovers the messages it encoded', () => {
       const share = loadShare();

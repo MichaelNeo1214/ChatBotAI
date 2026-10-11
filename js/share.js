@@ -32,22 +32,67 @@
     var MAX_MESSAGES = 200;
 
     /**
-     * UTF-8 safe base64. btoa() throws on any code point above U+00FF, which a
-     * non-English conversation hits immediately, so the string is encoded to
-     * UTF-8 bytes first.
+     * UTF-8 safe Base64URL encoder.
+     *
+     * Base64URL rather than standard Base64: the standard alphabet contains
+     * '/', '+' and '=' padding, all of which are awkward inside a URL. The
+     * variant uses '-' and '_' and omits padding, so an encoded conversation
+     * can never collide with the '/' that separates route segments, can never
+     * be mangled by a transport that re-encodes '+', and needs no padding to
+     * reconstruct.
+     *
+     * btoa() alone throws on any code point above U+00FF, which a non-English
+     * conversation hits immediately, so the string is encoded to UTF-8 bytes
+     * first.
      */
-    function toBase64(text) {
+    function toBase64Url(text) {
         var bytes = new TextEncoder().encode(text);
         var binary = '';
         for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-        return global.btoa(binary);
+        return global.btoa(binary)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
     }
 
-    function fromBase64(base64) {
-        var binary = global.atob(base64);
-        var bytes = new Uint8Array(binary.length);
-        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    /**
+     * Tolerant Base64URL decoder.
+     *
+     * Accepts Base64URL or standard Base64, with or without padding, and
+     * tolerates whitespace and stray characters introduced by copy/paste,
+     * chat clients, or a URL round trip. Anything that cannot be decoded
+     * returns null so the caller can show "this link could not be opened"
+     * rather than throwing inside a render path.
+     */
+    function fromBase64Url(value) {
+        if (typeof value !== 'string' || value === '') return null;
+        try {
+            var normalized = value
+                .replace(/-/g, '+')
+                .replace(/_/g, '/')
+                // Strip anything that is not part of the alphabet: whitespace
+                // from a wrapped URL, and '=' left over from a padded copy.
+                .replace(/[^A-Za-z0-9+/=]/g, '')
+                .replace(/=+$/, '');
+
+            if (normalized === '') return null;
+
+            // Length % 4 === 1 cannot be valid Base64.
+            if (normalized.length % 4 === 1) return null;
+
+            while (normalized.length % 4 !== 0) normalized += '=';
+
+            var binary = global.atob(normalized);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+            var text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+            return text === '' ? null : text;
+        } catch (err) {
+            // Malformed Base64 reaches atob() as a throw. Expected for any
+            // untrusted token, so it is handled rather than propagated.
+            return null;
+        }
     }
 
     /**
@@ -106,7 +151,7 @@
 
         var encoded;
         try {
-            encoded = toBase64(JSON.stringify(payload));
+            encoded = toBase64Url(JSON.stringify(payload));
         } catch (e) {
             return { ok: false, reason: 'encode_failed', message: 'Could not encode this conversation.' };
         }
@@ -138,12 +183,16 @@
         var version = token.slice(0, separator);
         if (version !== PREFIX) return null;
 
-        var encoded = token.slice(separator + 1);
-        if (encoded === '') return null;
+        // The token is everything after "s1." verbatim. It is NOT split on '/':
+        // a Base64URL payload cannot contain one, and splitting would silently
+        // truncate a token that somehow did, producing a link that can never be
+        // opened rather than a clear error.
+        var decoded = fromBase64Url(token.slice(separator + 1));
+        if (decoded === null) return null;
 
         var parsed;
         try {
-            parsed = JSON.parse(fromBase64(encoded));
+            parsed = JSON.parse(decoded);
         } catch (e) {
             // A truncated or hand-edited link. Never surface the raw error.
             return null;
@@ -178,11 +227,19 @@
 
         var parts = path.split('/').filter(Boolean);
 
-        if (parts[0] === 'share' && parts[1]) {
-            return { name: 'share', token: parts[1], id: parts[1] };
+        // A share token is a single opaque blob. Taking everything after
+        // "share/" (rather than parts[1]) means a payload that somehow
+        // contains a '/' is still handed to the decoder intact instead of
+        // being cut short by the route parser.
+        if (parts[0] === 'share') {
+            var token = parts.slice(1).join('/');
+            if (token !== '') return { name: 'share', token: token, id: token };
+            return { name: 'home' };
         }
-        if (parts[0] === 'c' && parts[1]) {
-            return { name: 'conversation', id: parts[1] };
+        if (parts[0] === 'c') {
+            var id = parts.slice(1).join('/');
+            if (id !== '') return { name: 'conversation', id: id };
+            return { name: 'home' };
         }
         // Unknown hash: fall back to the default view rather than a dead page.
         return { name: 'home' };
@@ -217,6 +274,8 @@
         parseShareToken: parseShareToken,
         currentRoute: currentRoute,
         toSharedMessages: toSharedMessages,
-        toMarkdown: toMarkdown
+        toMarkdown: toMarkdown,
+        toBase64Url: toBase64Url,
+        fromBase64Url: fromBase64Url
     };
 })(typeof window !== 'undefined' ? window : globalThis);

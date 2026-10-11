@@ -38,7 +38,7 @@ describe('static file serving', () => {
     assert.equal(shell.status, 200);
     assert.match(shell.headers.get('content-type') ?? '', /text\/html/);
 
-    for (const asset of ['/manifest.json', '/sw.js', '/css/style.css', '/js/script.js']) {
+    for (const asset of ['/manifest.json', '/robots.txt', '/sw.js', '/css/style.css', '/js/script.js']) {
       const response = await browser.get(asset);
       assert.equal(response.status, 200, `${asset} should be served`);
     }

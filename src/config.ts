@@ -195,6 +195,11 @@ export const config = {
 export const STATIC_MOUNTS: readonly string[] = ['css', 'js', 'icons', 'components'];
 
 /** Individual files served straight from the repo root. */
-export const STATIC_FILES: readonly string[] = ['manifest.json', 'sw.js', 'favicon.ico'];
+export const STATIC_FILES: readonly string[] = [
+  'manifest.json',
+  'robots.txt',
+  'sw.js',
+  'favicon.ico',
+];
 
 export const isProduction = config.env === 'production';

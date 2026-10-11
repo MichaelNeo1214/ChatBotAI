@@ -6,10 +6,15 @@
    The previous strategy was cache-first, which meant a returning visitor kept
    running the previously cached js/script.js until CACHE_NAME changed — fixes
    silently did not reach the browser. Now a cached asset is served immediately
-   and refreshed in the background for the next load. */
+   and refreshed in the background for the next load.
+
+   The name is bumped whenever a module changes its wire format (such as the
+   share-link encoder moving to Base64URL). A stale js/share.js cannot decode a
+   token written by a new one, and the visitor sees "This link could not be
+   opened" with nothing to act on. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v4';
+const CACHE_NAME = 'chatbotai-static-v5';
 const OFFLINE_URL = '/index.html';
 const CDN_DOMPURIFY = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js';
 const CDN_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
