@@ -31,6 +31,8 @@ const PRECACHE_URLS = [
   '/js/settings.js',
   '/js/share.js',
   '/js/share-view.js',
+  '/js/lightbox.js',
+  '/js/title.js',
   '/js/ui.js',
   '/js/script.js',
   '/icons/icon-192.png',

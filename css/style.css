@@ -3457,3 +3457,85 @@
             .share-view { padding: 16px 12px 40px; }
             .share-fork, .share-back { display: block; width: 100%; margin-right: 0; }
         }
+
+        /* ===== IMAGE LIGHTBOX (js/lightbox.js) ===== */
+
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 24px;
+            background: rgba(0, 0, 0, 0.92);
+        }
+
+        .lightbox[hidden] { display: none; }
+
+        .lightbox-backdrop {
+            position: absolute;
+            inset: 0;
+            border: 0;
+            padding: 0;
+            background: transparent;
+            cursor: zoom-out;
+        }
+
+        .lightbox-image {
+            position: relative;
+            z-index: 1;
+            max-width: 92vw;
+            max-height: 76vh;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            /* Zoom is a transform so it stays smooth and never reflows the bar. */
+            transform-origin: center center;
+            transition: transform 0.15s var(--transition);
+            cursor: zoom-in;
+            user-select: none;
+        }
+
+        .lightbox-caption {
+            position: relative;
+            z-index: 1;
+            max-width: 90vw;
+            color: #d0d0d0;
+            font-size: 13px;
+            text-align: center;
+            overflow-wrap: anywhere;
+        }
+
+        .lightbox-bar {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .lightbox-btn {
+            min-width: 44px;
+            /* Comfortably above the 24px minimum target size. */
+            min-height: 44px;
+            padding: 10px 14px;
+            border: 1px solid #3a3a3a;
+            border-radius: var(--radius-md);
+            background: #1c1c1c;
+            color: #ececec;
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .lightbox-btn:hover { background: #2a2a2a; }
+        .lightbox-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+        .lightbox-reset { min-width: 68px; font-variant-numeric: tabular-nums; }
+
+        @media (max-width: 560px) {
+            .lightbox { padding: 12px; }
+            .lightbox-image { max-height: 66vh; }
+        }
