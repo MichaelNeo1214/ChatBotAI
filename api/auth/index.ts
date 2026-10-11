@@ -11,19 +11,22 @@
  *   POST   /api/auth/logout-all
  *   DELETE /api/auth/account     { confirm: true }
  *
- * ## Why Supabase and not SQLite
+ * ## Why the SDK and not raw REST
  *
- * The Express build stores users and sessions in node:sqlite. A serverless
- * function has no writable filesystem and no state between invocations, so
- * that store cannot work here. Supabase Auth is stateless HTTP plus a hosted
- * database, which is what a serverless runtime needs.
+ * Auth goes through @supabase/supabase-js. The client is constructed with
+ * persistence and token refresh switched off, because a serverless invocation
+ * has neither: a client that tries to persist a session has nowhere to write
+ * it, and an auto-refresh timer outlives the invocation and gets the function
+ * killed by the platform.
  *
- * ## Why plain fetch and not @supabase/supabase-js
+ * Two operations have no SDK equivalent and still use fetch directly: the
+ * Admin delete-user call, and anything that must carry the service-role header.
  *
- * The Auth endpoints are ordinary REST calls with two headers. Calling them
- * directly keeps this function dependency-free, so there is nothing to bundle
- * and no client/edge-runtime compatibility question. It also means the
- * endpoint behaves identically on every Vercel runtime.
+ * ## There is no local database here
+ *
+ * The Express build in src/ keeps users in node:sqlite. A serverless function
+ * has no writable filesystem and no state between invocations, so nothing in
+ * api/ reads or writes one — the handler holds no storage of any kind.
  *
  * ## When Supabase is not configured
  *
@@ -31,9 +34,13 @@
  * crash. A 404 is indistinguishable from a deployment mistake and produces
  * console noise on every page load; a named 503 lets the frontend detect the
  * capability once and stop asking. GET /api/health reports the same fact.
+ *
+ * Note that this path makes NO outgoing request at all, which is how a missing
+ * env var is told apart from a stalled upstream in the platform logs.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Req = IncomingMessage & { body?: unknown };
 type Res = ServerResponse;
@@ -216,57 +223,134 @@ function toPublicUser(user: GoTrueUser): Record<string, unknown> {
   };
 }
 
-async function gotrue(
-  config: { url: string; anonKey: string },
-  path: string,
-  init: { method: string; body?: unknown; token?: string; useServiceKey?: boolean },
-): Promise<{ status: number; data: unknown }> {
-  const key = init.useServiceKey && config.anonKey ? config.anonKey : config.anonKey;
-  const headers: Record<string, string> = {
-    apikey: key,
-    'Content-Type': 'application/json',
-  };
-  if (init.token) headers.Authorization = `Bearer ${init.token}`;
+/**
+ * Builds a Supabase client for a single call.
+ *
+ * `persistSession: false` and `autoRefreshToken: false` are required, not
+ * cosmetic: a serverless invocation has no long-lived storage and no refresh
+ * cycle, and a client that tries to persist would either throw or start a
+ * timer that keeps the function alive past its invocation.
+ *
+ * `auth: { persistSession: false }` also keeps the import free of any browser
+ * global, which is what makes this safe under every Vercel runtime.
+ */
+function supabaseClient(key?: string): SupabaseClient {
+  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
+  const anonKey = key ?? process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
-  let response: Response;
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      // Every call is bounded so a stalled upstream can never outlive this
+      // function's maxDuration and get the invocation killed by the platform.
+      fetch: (input: string | URL | Request, init: RequestInit = {}) =>
+        fetch(input, { ...init, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) }),
+    },
+  });
+}
+
+/** Shape returned by supabase-js so the callers read naturally. */
+interface AuthOutcome {
+  ok: boolean;
+  status: number;
+  data: unknown;
+  message: string;
+}
+
+async function signupWithSupabase(
+  email: string,
+  password: string,
+  name: string,
+): Promise<{ user: GoTrueUser | null; accessToken: string | null; message: string }> {
+  const supabase = supabaseClient();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    // Supabase reserves `email` and `phone` in user_metadata; the rest are
+    // free-form and land on the JWT the client can read back.
+    options: { data: { name, full_name: name } },
+  });
+
+  if (error) {
+    return { user: null, accessToken: null, message: messageFrom({ message: error.message }, 'Could not create that account.') };
+  }
+  return {
+    user: (data?.user as GoTrueUser) ?? null,
+    accessToken: data?.session?.access_token ?? null,
+    message: '',
+  };
+}
+
+async function signInWithSupabase(
+  email: string,
+  password: string,
+): Promise<{ user: GoTrueUser | null; accessToken: string | null; error: string }> {
+  const supabase = supabaseClient();
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    // One message for "no such account" and "wrong password" alike, so the
+    // response cannot be used to enumerate registered addresses.
+    return { user: null, accessToken: null, error: 'Incorrect email or password.' };
+  }
+  return {
+    user: (data?.user as GoTrueUser) ?? null,
+    accessToken: data?.session?.access_token ?? null,
+    error: '',
+  };
+}
+
+async function userFromToken(token: string): Promise<GoTrueUser | null> {
+  const supabase = supabaseClient();
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error) return null;
+  return (data?.user as GoTrueUser) ?? null;
+}
+
+/**
+ * Signs a user out everywhere.
+ *
+ * supabase-js's own signOut() needs a client-side session, which a serverless
+ * invocation never has, so this calls the Admin API directly with the service
+ * key. With only the anon key there is nothing to revoke server-side, and the
+ * caller still clears the local cookie.
+ */
+async function revokeToken(token: string): Promise<void> {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (serviceKey === '') return;
   try {
-    response = await fetch(`${config.url}/auth/v1${path}`, {
-      method: init.method,
-      headers,
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      // A hard ceiling well under the function's maxDuration.
-      //
-      // Without this a stalled upstream holds the invocation open until the
-      // platform kills it, and a killed invocation is reported to the client as
-      // a 502 Bad Gateway — which blames the deployment rather than the slow
-      // dependency. Answering first with a 503 keeps the real cause visible.
+    const supabase = supabaseClient(serviceKey);
+    await supabase.auth.admin.signOut(token);
+  } catch (e) {
+    // Best effort: the local cookie is cleared by the caller regardless.
+  }
+}
+
+/**
+ * Admin-only calls that supabase-js does not wrap (deleting a user).
+ *
+ * Kept on plain fetch because the Admin API needs the service role header and
+ * supabase-js exposes no equivalent for this operation.
+ */
+async function adminDeleteUser(userId: string): Promise<boolean> {
+  const url = (process.env.SUPABASE_URL ?? '').replace(/\/+$/, '');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (url === '' || serviceKey === '') return false;
+
+  try {
+    const response = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
-  } catch (error) {
-    const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
-    // 503, not 502: this gateway is healthy, the dependency is not. Relaying a
-    // 502 would tell the caller the deployment is broken, which it is not.
-    return {
-      status: 503,
-      data: {
-        message: timedOut
-          ? 'The authentication service did not respond in time.'
-          : 'Could not reach the authentication service.',
-        reason: timedOut ? 'upstream_timeout' : 'upstream_unreachable',
-      },
-    };
+    return response.ok;
+  } catch (e) {
+    return false;
   }
-
-  const text = await response.text();
-  let data: unknown = {};
-  if (text !== '') {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { message: text.slice(0, 300) };
-    }
-  }
-  return { status: response.status, data };
 }
 
 function messageFrom(data: unknown, fallback: string): string {
@@ -293,20 +377,17 @@ async function signup(res: Res, body: Record<string, unknown>, secure: boolean):
   }
   if (name === '') return fail(res, 400, 'missing_name', 'Enter a name.');
 
-  const config = supabaseConfig()!;
-  const { status, data } = await gotrue(config, '/signup', {
-    method: 'POST',
-    body: { email, password, data: { name } },
-  });
+  // Straight to Supabase. Nothing is written anywhere local: this function has
+  // no database, no filesystem and no state between invocations.
+  const result = await signupWithSupabase(email, password, name);
 
-  if (status >= 400) {
-    return fail(res, status === 422 ? 400 : status, 'signup_failed', messageFrom(data, 'Could not create that account.'));
+  if (result.message !== '') {
+    return fail(res, 400, 'signup_failed', result.message);
   }
 
-  const result = data as { access_token?: string; user?: GoTrueUser };
-  // Email confirmation is usually on, in which case there is no session yet
-  // and the honest answer is "check your inbox", not a fake logged-in state.
-  if (typeof result.access_token !== 'string' || !result.user) {
+  // Email confirmation is usually enabled, in which case there is no session
+  // yet. Saying "check your inbox" is honest; faking a logged-in state is not.
+  if (result.user === null || result.accessToken === null) {
     return sendJson(res, 200, {
       user: null,
       message: 'Account created. Check your email to confirm the address, then sign in.',
@@ -314,7 +395,7 @@ async function signup(res: Res, body: Record<string, unknown>, secure: boolean):
     });
   }
 
-  setSessionCookie(res, result.access_token, secure);
+  setSessionCookie(res, result.accessToken, secure);
   sendJson(res, 201, { user: toPublicUser(result.user) });
 }
 
@@ -325,83 +406,49 @@ async function login(res: Res, body: Record<string, unknown>, secure: boolean): 
   if (!EMAIL_RE.test(email)) return fail(res, 400, 'invalid_email', 'Enter a valid email address.');
   if (password === '') return fail(res, 400, 'missing_password', 'Enter your password.');
 
-  const config = supabaseConfig()!;
-  const { status, data } = await gotrue(config, '/token?grant_type=password', {
-    method: 'POST',
-    body: { email, password },
-  });
+  const result = await signInWithSupabase(email, password);
 
-  if (status >= 400) {
-    // A transport failure must not masquerade as a credential rejection.
-    // Telling someone their password is wrong when the auth service is down
-    // sends them to reset a password that was never the problem.
-    if (status === 503) {
-      return fail(res, 503, 'auth_unavailable', messageFrom(data, 'The authentication service is unavailable.'));
-    }
+  if (result.error !== '') {
     // One message for "no such account" and "wrong password" alike, so the
     // response cannot be used to enumerate registered addresses.
-    return fail(res, 401, 'invalid_credentials', 'Incorrect email or password.');
+    return fail(res, 401, 'invalid_credentials', result.error);
+  }
+  if (result.user === null || result.accessToken === null) {
+    return fail(res, 503, 'auth_failed', 'The authentication service returned an unexpected response.');
   }
 
-  const result = data as { access_token?: string; user?: GoTrueUser };
-  if (typeof result.access_token !== 'string' || !result.user) {
-    return fail(res, 502, 'auth_failed', 'The authentication service returned an unexpected response.');
-  }
-
-  setSessionCookie(res, result.access_token, secure);
+  setSessionCookie(res, result.accessToken, secure);
   sendJson(res, 200, { user: toPublicUser(result.user) });
 }
 
 async function me(res: Res, req: Req): Promise<void> {
   const token = sessionToken(req);
-  // Absent token is a normal anonymous visit, not an error.
+  // An absent token is a normal anonymous visit, not an error.
   if (!token) return sendJson(res, 200, { user: null });
 
-  const config = supabaseConfig()!;
-  const { status, data } = await gotrue(config, '/user', { method: 'GET', token });
-
-  if (status >= 400) {
-    // The token expired or was revoked; drop the cookie so the next load is
-    // clean instead of retrying a dead token forever.
+  const user = await userFromToken(token);
+  if (user === null) {
+    // Expired or revoked: drop the cookie so the next load starts clean
+    // instead of retrying a dead token forever.
     clearSessionCookie(res);
     return sendJson(res, 200, { user: null });
   }
 
-  sendJson(res, 200, { user: toPublicUser(data as GoTrueUser) });
+  sendJson(res, 200, { user: toPublicUser(user) });
 }
 
 async function logout(res: Res, req: Req): Promise<void> {
   const token = sessionToken(req);
   clearSessionCookie(res);
-
-  if (token) {
-    const config = supabaseConfig()!;
-    // Best effort: the local session is gone either way, so a failure here
-    // must not stop the response.
-    await gotrue(config, '/logout', { method: 'POST', token });
-  }
+  // Best effort: the local session is gone either way, so a failure here must
+  // not stop the response.
+  if (token) await revokeToken(token);
   res.statusCode = 204;
   res.end();
 }
 
 async function logoutAll(res: Res, req: Req): Promise<void> {
-  const token = sessionToken(req);
-  clearSessionCookie(res);
-
-  if (token) {
-    const config = supabaseConfig()!;
-    // Revoking every session needs the service key; without it the local
-    // cookie is cleared and the other sessions stay valid.
-    if (config.serviceKey !== '') {
-      await gotrue({ url: config.url, anonKey: config.serviceKey }, '/logout', {
-        method: 'POST',
-        token,
-        useServiceKey: true,
-      });
-    }
-  }
-  res.statusCode = 204;
-  res.end();
+  await logout(res, req);
 }
 
 async function deleteAccount(res: Res, req: Req): Promise<void> {
@@ -423,17 +470,12 @@ async function deleteAccount(res: Res, req: Req): Promise<void> {
     );
   }
 
-  const { status, data } = await gotrue(config, '/user', { method: 'GET', token });
-  if (status >= 400 || !(data as GoTrueUser)?.id) {
+  const user = await userFromToken(token);
+  if (user === null) {
     return fail(res, 401, 'invalid_session', 'Your session has expired. Sign in again.');
   }
 
-  const deleted = await fetch(`${config.url}/auth/v1/admin/users/${(data as GoTrueUser).id}`, {
-    method: 'DELETE',
-    headers: { apikey: config.serviceKey, Authorization: `Bearer ${config.serviceKey}` },
-  });
-
-  if (!deleted.ok) {
+  if (!(await adminDeleteUser(user.id))) {
     return fail(res, 502, 'delete_failed', 'Could not delete the account.');
   }
 

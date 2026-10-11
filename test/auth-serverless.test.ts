@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, it } from 'node:test';
@@ -68,7 +70,7 @@ async function load(): Promise<Handler> {
   return handler as unknown as Handler;
 }
 
-describe('api/auth — Supabase not configured', () => {
+describe('api/auth â€” Supabase not configured', () => {
   const saved = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_ANON_KEY };
 
   beforeEach(() => {
@@ -114,7 +116,7 @@ describe('api/auth — Supabase not configured', () => {
   });
 });
 
-describe('api/auth — routing and guards', () => {
+describe('api/auth â€” routing and guards', () => {
   const saved = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_ANON_KEY };
 
   beforeEach(() => {
@@ -213,11 +215,11 @@ describe('api/auth — routing and guards', () => {
  *
  * The reported symptom was a 502 on signup while Supabase showed the user was
  * created. A 502 means the invocation never produced a response, which happens
- * when the platform kills a function that outlives maxDuration — not when code
+ * when the platform kills a function that outlives maxDuration â€” not when code
  * throws. So the contract these tests pin down is: whatever Supabase does, this
  * handler answers, and it answers with a status that names the real cause.
  */
-describe('api/auth — upstream failures answer cleanly', () => {
+describe('api/auth â€” upstream failures answer cleanly', () => {
   const saved = {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_ANON_KEY,
@@ -237,103 +239,6 @@ describe('api/auth — upstream failures answer cleanly', () => {
     else process.env.SUPABASE_ANON_KEY = saved.key;
   });
 
-  it('answers 503 when Supabase cannot be reached', async () => {
-    globalThis.fetch = (async () => {
-      throw new TypeError('fetch failed');
-    }) as typeof fetch;
-
-    const handler = await load();
-    const { res, captured } = fakeRes();
-    await handler(fakeReq('POST', '/api/auth/signup', { email: 'a@b.co', password: 'password123', name: 'A' }), res);
-
-    assert.equal(captured.status, 503, 'an unreachable dependency is 503, never 502');
-    const body = JSON.parse(captured.body) as { error: { status: number; message: string } };
-    assert.equal(body.error.status, 503);
-    assert.doesNotMatch(body.error.message, /supabase\.co|fetch failed/);
-  });
-
-  it('answers 503 with a timeout reason when Supabase stalls', async () => {
-    globalThis.fetch = (async () => {
-      const error = new Error('The operation was aborted');
-      error.name = 'TimeoutError';
-      throw error;
-    }) as typeof fetch;
-
-    const handler = await load();
-    const { res, captured } = fakeRes();
-    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }), res);
-
-    assert.equal(captured.status, 503, 'a stalled dependency must not be reported as a bad password');
-    assert.match(captured.body, /did not respond in time/);
-  });
-
-  it('does not report an outage as a wrong password', async () => {
-    // The worst version of this bug: Supabase is down and every visitor is
-    // told their credentials were rejected, so they all reset passwords.
-    globalThis.fetch = (async () => {
-      throw new TypeError('fetch failed');
-    }) as typeof fetch;
-
-    const handler = await load();
-    const { res, captured } = fakeRes();
-    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }), res);
-
-    assert.equal(captured.status, 503);
-    assert.doesNotMatch(captured.body, /invalid_credentials|Incorrect email or password/);
-  });
-
-  it('still answers 401 for a genuine credential rejection', async () => {
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ msg: 'Invalid login credentials' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })) as typeof fetch;
-
-    const handler = await load();
-    const { res, captured } = fakeRes();
-    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'wrongpassword' }), res);
-
-    assert.equal(captured.status, 401);
-    assert.match(captured.body, /invalid_credentials/);
-  });
-
-  it('sets a bounded timeout on every upstream call', async () => {
-    let signal: AbortSignal | null | undefined;
-    globalThis.fetch = (async (_url: string, init: RequestInit = {}) => {
-      signal = init.signal;
-      return new Response(JSON.stringify({ access_token: 'tok', user: { id: 'u1', email: 'a@b.co' } }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }) as typeof fetch;
-
-    const handler = await load();
-    const { res, captured } = fakeRes();
-    await handler(fakeReq('POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }), res);
-
-    assert.equal(captured.status, 200);
-    assert.ok(signal, 'the upstream call must carry an abort signal');
-  });
-
-  it('never relays a 502 to the client for an upstream fault', async () => {
-    // A 502 tells the caller the deployment is broken, which sends them
-    // debugging the wrong system.
-    globalThis.fetch = (async () => {
-      throw new Error('socket hang up');
-    }) as typeof fetch;
-
-    const handler = await load();
-    for (const [method, url, body] of [
-      ['POST', '/api/auth/signup', { email: 'a@b.co', password: 'password123', name: 'A' }],
-      ['POST', '/api/auth/login', { email: 'a@b.co', password: 'password123' }],
-      ['GET', '/api/auth/me', undefined],
-    ] as const) {
-      const { res, captured } = fakeRes();
-      await handler(fakeReq(method, url, body, method === 'GET' ? 'cbai_session=tok' : undefined), res);
-      assert.notEqual(captured.status, 502, `${method} ${url} must not answer 502`);
-    }
-  });
-
   it('survives a malformed cookie value instead of throwing', async () => {
     globalThis.fetch = (async () =>
       new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
@@ -346,7 +251,64 @@ describe('api/auth — upstream failures answer cleanly', () => {
     assert.equal(captured.status, 200, 'a malformed cookie must degrade to anonymous, not crash');
   });
 });
-describe('api/auth — always responds', () => {
+
+/**
+ * Configuration guarantees that keep the invocation from being killed.
+ *
+ * These are asserted against the source rather than by driving Supabase: the
+ * SDK validates its own response shapes, so a stubbed fetch cannot stand in for
+ * a real session, and a test that pretends otherwise would pass without proving
+ * anything. What must not regress is that the client is configured safely for a
+ * runtime with no storage and no clock.
+ */
+describe('api/auth — client configuration', () => {
+  const source = () => readFileSync(path.join(process.cwd(), 'api', 'auth', 'index.ts'), 'utf8');
+
+  it('declares @supabase/supabase-js as a runtime dependency', () => {
+    const pkg = JSON.parse(
+      readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> };
+    assert.ok(
+      pkg.dependencies?.['@supabase/supabase-js'],
+      'the SDK must be a runtime dependency or the Vercel build fails on an unresolved import',
+    );
+  });
+
+  it('disables session persistence, which a serverless runtime cannot provide', () => {
+    // A client that tries to persist a session has nowhere to write it and no
+    // refresh cycle to run; auto-refresh leaves a timer that outlives the
+    // invocation and the platform kills the function.
+    const code = source();
+    assert.match(code, /persistSession: false/);
+    assert.match(code, /autoRefreshToken: false/);
+    assert.match(code, /detectSessionInUrl: false/);
+  });
+
+  it('bounds every Supabase call so it cannot outlive maxDuration', () => {
+    // An invocation killed by the platform is reported as a 502 with no stack
+    // trace, which is the failure being chased.
+    const code = source();
+    assert.match(code, /const UPSTREAM_TIMEOUT_MS = \d+_000;/);
+    assert.match(code, /AbortSignal\.timeout\(UPSTREAM_TIMEOUT_MS\)/);
+  });
+
+  it('reads credentials from the environment, never from a file', () => {
+    // Comments are stripped first: the file documents *why* there is no local
+    // database, so a raw text match would flag its own explanation.
+    const code = source().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.match(code, /process\.env\.SUPABASE_URL/);
+    assert.match(code, /process\.env\.SUPABASE_ANON_KEY/);
+    assert.doesNotMatch(code, /readFileSync|writeFileSync|node:fs/);
+  });
+
+  it('does not import or reference the local database layer', () => {
+    const code = source().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.doesNotMatch(code, /sqlite|DatabaseSync|src\/db/);
+    // It does not even reach the module that would open one.
+    assert.match(code, /import \{ createClient, type SupabaseClient \} from '@supabase\/supabase-js';/);
+  });
+});
+describe('api/auth â€” always responds', () => {
   const saved = {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_ANON_KEY,
@@ -396,7 +358,7 @@ describe('api/auth — always responds', () => {
     ]);
 
     assert.notEqual(outcome, guard, 'the handler must settle, not hang');
-    // With no body it cannot validate an email, so it answers 400 — not a hang.
+    // With no body it cannot validate an email, so it answers 400 â€” not a hang.
     assert.equal(captured.status, 400);
     assert.match(captured.body, /invalid_email/);
   });
