@@ -463,7 +463,7 @@
       <h2>API Key</h2>
       <div class="setting-desc" style="margin-bottom:14px;" data-i18n="apiKeyIntro">Connect your AI providers here. Keys are stored only in this browser and reused automatically, even after refresh or restart. Models without a key cannot be used.</div>
 
-      <div class="api-card" data-provider="openai">
+      <form class="api-card" data-provider="openai">
         <div class="api-card-head">
           <div>
             <div class="api-card-name">OpenAI</div>
@@ -490,12 +490,12 @@
           <input type="text" class="api-key-input" data-api-field="model" placeholder="gpt-4o" autocomplete="off" spellcheck="false">
         </div>
         <div class="api-actions">
-          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn primary" data-api-save type="submit">Save</button>
           <button class="btn danger" data-api-clear type="button">Delete</button>
         </div>
-      </div>
+      </form>
 
-      <div class="api-card" data-provider="gemini">
+      <form class="api-card" data-provider="gemini">
         <div class="api-card-head">
           <div>
             <div class="api-card-name">Gemini</div>
@@ -510,12 +510,12 @@
           </button>
         </div>
         <div class="api-actions">
-          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn primary" data-api-save type="submit">Save</button>
           <button class="btn danger" data-api-clear type="button">Delete</button>
         </div>
-      </div>
+      </form>
 
-      <div class="api-card" data-provider="claude">
+      <form class="api-card" data-provider="claude">
         <div class="api-card-head">
           <div>
             <div class="api-card-name">Claude</div>
@@ -530,12 +530,12 @@
           </button>
         </div>
         <div class="api-actions">
-          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn primary" data-api-save type="submit">Save</button>
           <button class="btn danger" data-api-clear type="button">Delete</button>
         </div>
-      </div>
+      </form>
 
-      <div class="api-card" data-provider="deepseek">
+      <form class="api-card" data-provider="deepseek">
         <div class="api-card-head">
           <div>
             <div class="api-card-name">DeepSeek</div>
@@ -550,12 +550,12 @@
           </button>
         </div>
         <div class="api-actions">
-          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn primary" data-api-save type="submit">Save</button>
           <button class="btn danger" data-api-clear type="button">Delete</button>
         </div>
-      </div>
+      </form>
 
-      <div class="api-card" data-provider="groq">
+      <form class="api-card" data-provider="groq">
         <div class="api-card-head">
           <div>
             <div class="api-card-name">Groq</div>
@@ -570,12 +570,12 @@
           </button>
         </div>
         <div class="api-actions">
-          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn primary" data-api-save type="submit">Save</button>
           <button class="btn danger" data-api-clear type="button">Delete</button>
         </div>
-      </div>
+      </form>
 
-      <div class="api-card" data-provider="default">
+      <form class="api-card" data-provider="default">
         <div class="api-card-head">
           <div>
             <div class="api-card-name">Default <span class="api-badge" data-i18n="apiLocalBadge">Local</span></div>
@@ -596,10 +596,10 @@
           <input type="text" class="api-key-input" data-api-field="model" placeholder="Empty = auto-detect from Jan" autocomplete="off" spellcheck="false">
         </div>
         <div class="api-actions">
-          <button class="btn primary" data-api-save type="button">Save</button>
+          <button class="btn primary" data-api-save type="submit">Save</button>
           <button class="btn danger" data-api-clear type="button">Reset</button>
         </div>
-      </div>
+      </form>
     </div>
 
     <!-- VOICE -->

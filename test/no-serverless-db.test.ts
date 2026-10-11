@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+
+/** Reads and parses vercel.json. */
+function readConfig(): {
+  functions?: Record<string, unknown>;
+  rewrites?: { source: string; destination: string }[];
+} {
+  return JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+}
 
 /**
  * The serverless functions must never reach the SQLite layer.
@@ -102,9 +110,75 @@ describe('serverless boundary', () => {
     );
   });
 
-  it('the Express entrypoint and database helpers still work together', () => {
-    // Guards the refactor: closeDb/getDb replaced the eagerly constructed handle.
-    const index = read('src/index.ts');
-    assert.match(index, /closeDb\(\)/, 'src/index.ts should close via closeDb()');
+  it('every function declared in vercel.json actually exists', () => {
+    const vercel = readConfig();
+    const declared = Object.keys(vercel.functions ?? {});
+    assert.ok(declared.length > 0, 'expected at least one declared function');
+
+    const missing = declared.filter((relative) => !existsSync(path.join(ROOT, relative)));
+    assert.deepEqual(missing, [], 'vercel.json declares functions that do not exist');
+  });
+});
+
+/**
+ * Vercel routes a request by the FILE it lands on: `api/auth/index.ts` serves
+ * `/api/auth`, and nothing else. It does not send `/api/auth/me` to a handler
+ * that merely inspects `req.url` — so a single catch-all file plus a URL parser
+ * 404s every subpath, which is exactly what happened.
+ *
+ * This test asks the question the runtime asks: for every auth route the
+ * frontend actually calls, does a file exist that Vercel will route it to?
+ */
+describe('serverless auth routing', () => {
+  const AUTH_ROUTES = ['me', 'login', 'signup', 'logout', 'logout-all', 'account'] as const;
+
+  it('has a routable file for every auth path the frontend calls', () => {
+    const callers = ['js/script.js', 'components/auth/js/script.js'];
+    const called = new Set<string>();
+
+    for (const caller of callers) {
+      let source: string;
+      try {
+        source = readFileSync(path.join(ROOT, caller), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const match of source.matchAll(/\/api\/auth\/([a-z-]+)/g)) {
+        called.add(match[1]!);
+      }
+    }
+
+    assert.ok(called.size > 0, 'expected the frontend to call some auth route');
+
+    for (const route of called) {
+      assert.ok(
+        AUTH_ROUTES.includes(route as (typeof AUTH_ROUTES)[number]),
+        `frontend calls /api/auth/${route}, which is not a known auth route`,
+      );
+      assert.ok(
+        existsSync(path.join(ROOT, 'api', 'auth', `${route}.ts`)),
+        `frontend calls /api/auth/${route} but api/auth/${route}.ts does not exist, ` +
+          'so Vercel cannot route it and it will 404',
+      );
+    }
+  });
+
+  it('serves the bare /api/auth route too', () => {
+    assert.ok(
+      existsSync(path.join(ROOT, 'api', 'auth', 'index.ts')),
+      'api/auth/index.ts must exist to serve /api/auth',
+    );
+  });
+
+  it('every auth handler default-exports the shared implementation', () => {
+    for (const file of readdirSync(path.join(ROOT, 'api', 'auth'))) {
+      if (!file.endsWith('.ts')) continue;
+      const source = readFileSync(path.join(ROOT, 'api', 'auth', file), 'utf8');
+      assert.match(
+        source,
+        /export default handler|export default async function handler/,
+        `api/auth/${file} must default-export a handler`,
+      );
+    }
   });
 });

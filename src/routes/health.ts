@@ -20,6 +20,16 @@ healthRouter.get('/', (_req, res) => {
     provider: provider.name,
     defaultModel: DEFAULT_MODEL_LABEL,
     demo: provider.name === 'mock',
+    /**
+     * Accounts. The Express build stores users in SQLite and always has them;
+     * the serverless build reports false here unless Supabase is configured.
+     */
+    auth: true,
+    /**
+     * Server-side conversation storage. The Express build has it, which is why
+     * the frontend is allowed to ask for the list without producing a 404.
+     */
+    conversations: true,
     uptimeSeconds: Math.round(process.uptime()),
   });
 });

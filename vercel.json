@@ -13,7 +13,7 @@
     "api/health.ts": {
       "maxDuration": 10
     },
-    "api/auth.ts": {
+    "api/auth/index.ts": {
       "maxDuration": 15
     }
   },

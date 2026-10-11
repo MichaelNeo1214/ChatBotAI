@@ -874,38 +874,54 @@
                 }
             }
 
-            // Accounts are optional. A deployment without Supabase configured has
-            // no /api/auth/* function at all, and probing it on every load only
-            // fills the console with 404s. The capability is read once from
-            // /api/health, which always exists, and cached for the session.
-            let authCapability = null;
-            let authCapabilityChecked = false;
+            // ===== SERVER CAPABILITIES =====
+            // Declared here, above every caller, because `let` is in the temporal
+            // dead zone until this statement runs. refreshAuth() is invoked
+            // during the same IIFE body further down, so a definition placed
+            // next to its only other caller would be read before it exists.
+            //
+            // Reads /api/health once and caches which optional APIs exist.
+            //
+            // Without this the app asks for /api/auth/me and /api/conversations
+            // on every load and logs a 404 each time. That is noise rather than
+            // signal: the answer cannot change without a deploy, and a deploy
+            // reloads the page anyway.
+            let serverCapabilities = null;
 
-            function authAvailable() {
-                if (!authCapabilityChecked) {
-                    // Optimistic default until health answers: asking once costs
-                    // nothing, and a wrong guess only means a single 404.
-                    authCapability = true;
-                    authCapabilityChecked = true;
-                }
-                return authCapability === true;
-            }
-
-            /** Reads /api/health once and remembers whether accounts exist. */
-            async function probeAuthCapability() {
+            async function serverCapabilitiesOnce() {
+                if (serverCapabilities) return serverCapabilities;
                 try {
                     const res = await fetch(API_BASE + '/health', { headers: { Accept: 'application/json' } });
                     if (res.ok) {
                         const info = await res.json();
-                        authCapability = !!(info && info.auth === true);
-                        authCapabilityChecked = true;
+                        serverCapabilities = {
+                            auth: !!(info && info.auth === true),
+                            conversations: !!(info && info.conversations === true)
+                        };
                     }
                 } catch (e) {
-                    // Offline or the function is cold-starting. Leave the
-                    // optimistic default so a transient failure does not
-                    // disable sign-in for the rest of the session.
+                    // Offline or cold-starting. Leave null so the next call retries.
                 }
-                return authCapability === true;
+                return serverCapabilities;
+            }
+
+            /** True when the address bar shows a shared, read-only conversation. */
+            function isShareRoute() {
+                return !!(window.ChatBotShare && window.ChatBotShare.currentRoute().name === 'share');
+            }
+            // Accounts are optional. A deployment without Supabase configured has
+            // no /api/auth/* function at all, and probing it on every load only
+            // fills the console with 404s. The capability is read once from
+            // /api/health, which always exists, and cached for the session.
+            function authAvailable() {
+                // Optimistic until health answers: asking once costs nothing,
+                // and a wrong guess only means a single 404.
+                return serverCapabilities ? serverCapabilities.auth : true;
+            }
+
+            async function probeAuthCapability() {
+                const capabilities = await serverCapabilitiesOnce();
+                return capabilities ? capabilities.auth : true;
             }
 
             async function refreshAuth() {
@@ -918,17 +934,22 @@
                         if (r.status === 404 || r.status === 503) {
                             // The capability probe raced a deployment with no auth
                             // function. Stop asking for the rest of this session.
-                            authCapability = false;
+                            if (serverCapabilities) serverCapabilities.auth = false;
                         } else if (r.ok) {
                             const d = await r.json();
                             user = d && d.user ? d.user : null;
                         }
                     } catch (e) {
+                        // Network failure or a non-JSON body: fall through to
+                        // guest mode rather than leaving a half-signed-in state.
                         user = null;
                     }
                 }
 
-                currentUser = user;
+                // Anything short of a confirmed session is guest mode. The rest
+                // of the app reads currentUser, so this single assignment is
+                // what guarantees a clean, unauthenticated state.
+                currentUser = user || null;
                 applyOwner();
                 renderFooter();
                 notifyAccountPanel();
@@ -939,7 +960,7 @@
                 // would drop their message and orphan the session it created.
                 if (!chatStarted && !activeConversationId) resetChatView();
                 await refreshConversations();
-                return user;
+                return currentUser;
             }
 
             async function doSignOut(everywhere) {
@@ -1542,12 +1563,21 @@ function mmNeedsVisionModel() {
             }
 
             // Imports conversations that exist only on a local Express backend.
-            // On the static PWA this silently no-ops (GET /api/conversations 404s).
+            // The serverless build has no such endpoint, so this is skipped
+            // entirely there rather than firing a request that always 404s.
             let serverImportBusy = false;
+
             async function importServerConversations() {
                 if (serverImportBusy) return;
+                // A shared view has no local sessions and no owner to import
+                // into; the conversation is already rendered from the link.
+                if (isShareRoute()) return;
+
                 serverImportBusy = true;
                 try {
+                    const capabilities = await serverCapabilitiesOnce();
+                    if (!capabilities || !capabilities.conversations) return;
+
                     const res = await fetch(API_BASE + '/conversations', { credentials: 'same-origin' });
                     if (!res.ok) return;
                     const data = await res.json();
@@ -4244,6 +4274,17 @@ function mmNeedsVisionModel() {
                     if (baseInput) baseInput.value = keys[provider + 'BaseUrl'] || '';
                     if (modelInput) modelInput.value = keys[provider + 'Model'] || '';
                     refreshApiStatus(card, provider === 'default' ? true : !!(keys[provider] && keys[provider].trim()));
+
+                    // Each card is a <form> so the password field is inside one
+                    // (Chrome flags a type="password" input that is not), and so
+                    // pressing Enter in a field saves instead of reloading the
+                    // page. The save button's own click handler stays the single
+                    // place the write happens.
+                    card.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const saveBtn = card.querySelector('[data-api-save]');
+                        if (saveBtn) saveBtn.click();
+                    });
 
                     const toggle = card.querySelector('[data-api-toggle]');
                     if (toggle && keyInput) {

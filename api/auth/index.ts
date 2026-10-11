@@ -377,17 +377,29 @@ async function deleteAccount(res: Res, req: Req): Promise<void> {
 // ---- Router --------------------------------------------------------------
 
 /**
- * `/api/auth` and `/api/auth/me` both land here; Vercel passes the path in
- * `req.url`. The path is matched on its segments, so a query string or a
- * trailing slash cannot change the route.
+ * Resolves which auth action a request is for.
+ *
+ * Vercel routes a request by the FILE it lands on, so `/api/auth/me` is served
+ * by `api/auth/me.ts`, not by `api/auth/index.ts`. Every subpath handler
+ * therefore delegates here with its own path.
+ *
+ * The path is matched on its segments after `auth`, so this tolerates all three
+ * shapes a runtime may present: the full `/api/auth/me`, a rewritten `/me`, or
+ * the bare `/api/auth`.
  */
 function routeOf(req: Req): { action: string; method: string } {
   const raw = req.url ?? '/api/auth';
   const withoutQuery = raw.split('?')[0]!;
   const segments = withoutQuery.split('/').filter(Boolean);
-  // ['api','auth', ...rest]
-  const rest = segments.slice(2);
-  return { action: rest[0] ?? '', method: (req.method ?? 'GET').toUpperCase() };
+
+  const authIndex = segments.indexOf('auth');
+  const rest = authIndex === -1 ? segments : segments.slice(authIndex + 1);
+
+  return {
+    // Nested action names are joined so "logout-all" survives a path split.
+    action: rest.join('/'),
+    method: (req.method ?? 'GET').toUpperCase(),
+  };
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {

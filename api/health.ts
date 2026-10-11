@@ -57,6 +57,12 @@ export default function handler(req: Req, res: Res): void {
       demo: isDemoProvider(),
       /** Accounts are optional; the app works as a guest when this is false. */
       auth: isAuthConfigured(),
+      /**
+       * Server-side conversation storage. The serverless build keeps nothing,
+       * so this is always false here and the frontend stops asking for a list
+       * endpoint that does not exist.
+       */
+      conversations: false,
       uptimeSeconds: Math.round(process.uptime()),
     }),
   );

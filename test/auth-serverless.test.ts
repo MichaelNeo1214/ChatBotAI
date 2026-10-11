@@ -64,7 +64,7 @@ function fakeReq(method: string, url: string, body?: unknown, cookie?: string): 
 }
 
 async function load(): Promise<Handler> {
-  const { default: handler } = await import('../api/auth.ts');
+  const { default: handler } = await import('../api/auth/index.ts');
   return handler as unknown as Handler;
 }
 

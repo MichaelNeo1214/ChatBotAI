@@ -229,8 +229,66 @@ describe('asset manifests', () => {
     assert.ok(Number.isFinite(version) && version > 0, 'CACHE_NAME must end in v<n>');
   });
 
-  it('every settings menu item points at a panel that exists', () => {
-    // Removing a panel without its menu item leaves a dead button that toggles
+    it('every password input sits inside a form element', () => {
+    // Chrome logs "Password field is not contained in a form" for any
+    // type="password" outside a form, which includes the API-key fields with a
+    // reveal toggle — they are still password inputs to the browser.
+    const html = read('index.html');
+
+    // Remove every form block, then assert no password input survives.
+    const withoutForms = html.replace(/<form\b[\s\S]*?<\/form>/g, '');
+    const strays = withoutForms.match(/<input[^>]*type="password"/g) ?? [];
+    assert.deepEqual(strays, [], 'password inputs must be wrapped in a <form>');
+
+    const wrapped = [...html.matchAll(/<form\b[\s\S]*?<\/form>/g)];
+    assert.ok(wrapped.length > 0, 'expected at least one form');
+    for (const block of wrapped) {
+      for (const input of block[0].match(/<input[^>]*type="password"[^>]*>/g) ?? []) {
+        // A masked API key is still a credential to a password manager, so it
+        // opts out explicitly rather than being offered as a login field.
+        assert.match(input, /autocomplete="off"/, 'masked key inputs need autocomplete="off"');
+      }
+    }
+  });
+
+  it('every API key card is a form whose submit button does not reload the page', () => {
+    const html = read('index.html');
+    const cards = [...html.matchAll(/<form class="api-card"[^>]*data-provider="([a-z]+)"[\s\S]*?<\/form>/g)];
+
+    assert.ok(cards.length > 0, 'expected API key cards');
+    for (const card of cards) {
+      assert.ok(
+        /data-api-save[^>]*type="submit"/.test(card[0]),
+        `card "${card[1]}" must submit via the form, not a type=button click`,
+      );
+    }
+
+    // The handler that stops the default and forwards to Save.
+    const script = read('js/script.js');
+    assert.match(script, /addEventListener\('submit'[\s\S]{0,400}preventDefault\(\)/);
+    assert.match(script, /addEventListener\('submit'[\s\S]{0,400}data-api-save/);
+  });
+
+  it('never fetches optional endpoints the server has not advertised', () => {
+    // Guards the console-noise class of bug: a request that is guaranteed to
+    // 404 on the serverless deployment should not be fired on every load.
+    const script = read('js/script.js');
+
+    assert.match(script, /serverCapabilities/, 'the app must cache a capability probe');
+    assert.match(
+      script,
+      /capabilities\.conversations/,
+      'importServerConversations must be gated on the conversations capability',
+    );
+    assert.match(script, /function isShareRoute\(\)/);
+    assert.match(
+      script,
+      /if \(isShareRoute\(\)\) return;/,
+      'a shared read-only view must skip the conversation sync entirely',
+    );
+  });
+
+  it('every settings menu item points at a panel that exists', () => {    // Removing a panel without its menu item leaves a dead button that toggles
     // nothing; the reverse leaves a panel nothing can reach.
     const html = read('index.html');
     const menuItems = new Set(
