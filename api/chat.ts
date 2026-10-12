@@ -104,6 +104,51 @@ function getHeader(req: Req, name: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Cross-origin guard for browser traffic.
+ *
+ * This endpoint accepts a caller-supplied provider key (BYOK), so a page on
+ * another origin must not be able to make the browser attach one. A strict
+ * `origin === 'https://chat.michaelap.my.id'` check would also reject local
+ * development and every Vercel preview deployment, which are separate hosts.
+ * The allowlist below is the same list the Express build uses.
+ *
+ * Requests with no Origin header are NOT blocked: they are not browser XHR
+ * (curl, the Vercel CLI, health probes), and a browser always sends Origin on
+ * a cross-origin POST.
+ */
+function originAllowed(req: Req): boolean {
+  const origin = getHeader(req, 'origin');
+  if (origin === undefined || origin === '') return true;
+
+  const allowed = config.corsOrigins;
+  if (allowed.includes(origin)) return true;
+
+  // Same-origin browsers report their own address. Accepting a match against
+  // the Host header keeps the deployed domain working without hard-coding it,
+  // which also covers preview and alias hostnames.
+  const host = getHeader(req, 'host');
+  if (host !== undefined) {
+    try {
+      if (new URL(origin).host === host) return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function sendCorsHeaders(res: Res, req: Req): void {
+  const origin = getHeader(req, 'origin');
+  if (origin === undefined || origin === '') return;
+  if (!originAllowed(req)) return;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Provider-Key, X-Provider-Base-Url, X-Provider-Model');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+}
+
 /** JSON body from Vercel's parser, or read it ourselves if it is not present. */
 async function readBody(req: Req): Promise<ChatBody> {
   const pre = req.body;
@@ -307,6 +352,19 @@ function toUpstreamApiError(error: unknown, model: string): ApiError {
 }
 
 export default async function handler(req: Req, res: Res): Promise<void> {
+  // CORS headers first so an error response is still readable by the browser.
+  if ((req.method ?? 'GET').toUpperCase() === 'OPTIONS') {
+    if (!originAllowed(req)) {
+      sendJson(res, 403, { code: 'forbidden_origin', message: 'Origin not allowed.' });
+      return;
+    }
+    sendCorsHeaders(res, req);
+    res.setHeader('Allow', 'POST, OPTIONS');
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   // 1. Method guard — the explicit fix for the 405.
   if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -316,6 +374,17 @@ export default async function handler(req: Req, res: Res): Promise<void> {
     });
     return;
   }
+
+  // 2. Origin guard. Runs before the body is read so a rejected caller cannot
+  // make the function buffer a payload or spend time on it.
+  if (!originAllowed(req)) {
+    sendJson(res, 403, {
+      code: 'forbidden_origin',
+      message: 'This endpoint cannot be called from that origin.',
+    });
+    return;
+  }
+  sendCorsHeaders(res, req);
 
   try {
     const body = await readBody(req);

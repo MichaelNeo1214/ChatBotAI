@@ -807,6 +807,10 @@
                 return currentUser ? ('user:' + (currentUser.id || currentUser.email)) : 'guest';
             }
 
+            // Last owner this browser applied. Null until auth resolves, so the
+            // very first resolution is not mistaken for an owner change.
+            let appliedOwner = null;
+
             function applyOwner() {
                 // Only the display profile is per-owner in this browser; the
                 // conversation list comes from the API for whoever the server
@@ -853,7 +857,10 @@
             }
 
             function resetChatView() {
-                activeConversationId = null;
+                // Via the setter, not a bare null: this also clears the
+                // persisted pointer. Leaving it behind makes the next boot try
+                // to restore a thread that the current owner cannot see.
+                setActiveConversationId(null);
                 chatStarted = false;
                 welcomeScreen.style.display = '';
                 messagesWrapper.classList.remove('visible');
@@ -955,6 +962,17 @@
                 // what guarantees a clean, unauthenticated state.
                 currentUser = user || null;
                 applyOwner();
+                // The active thread belongs to whoever owned it. When the owner
+                // changes (guest -> account, or account -> account) the open
+                // conversation may no longer be visible in the scoped list, so
+                // the pointer is dropped rather than left pointing at a record
+                // that is now filtered out of this owner's view.
+                const previousOwner = appliedOwner;
+                if (appliedOwner !== null && appliedOwner !== ownerKey()) {
+                    setActiveConversationId(null);
+                    resetChatView();
+                }
+                appliedOwner = ownerKey();
                 renderFooter();
                 notifyAccountPanel();
                 // The view is rebuilt after auth resolves so the history shown
@@ -980,6 +998,7 @@
                 } catch (e) {}
                 currentUser = null;
                 applyOwner();
+                appliedOwner = ownerKey();
                 renderFooter();
                 notifyAccountPanel();
                 // Signing out does switch owner, so the view is reset even if a
@@ -2003,7 +2022,29 @@ function mmNeedsVisionModel() {
             // updatedAt, messages }. Many chats coexist instead of one thread
             // being overwritten every turn.
             function loadSessions() {
-                return idbReadAll(IDB_SESSIONS);
+                return idbReadAll(IDB_SESSIONS).then(function (all) {
+                    return filterSessionsByOwner(all);
+                });
+            }
+
+            // ===== OWNER SCOPING =====
+            // One IndexedDB holds both guest chats and account chats. Without
+            // an owner on the record they are indistinguishable, so signing in
+            // simply unions the guest's history into the account sidebar and
+            // signing out shows the account's history back as a guest.
+            // Scoping by owner isolates the two views while keeping both sets
+            // on disk, so switching accounts never destroys anyone's chats.
+            function activeOwner() {
+                return typeof ownerKey === 'function' ? ownerKey() : 'guest';
+            }
+
+            function filterSessionsByOwner(all) {
+                const owner = activeOwner();
+                return (all || []).filter(function (s) {
+                    // A record with no owner predates this scoping. Treat it as
+                    // guest data rather than silently discarding it.
+                    return (s && s.owner ? s.owner : 'guest') === owner;
+                });
             }
 
             // Every session write is chained here. persistHistory() fires saves
@@ -2014,10 +2055,14 @@ function mmNeedsVisionModel() {
 
             function saveSession(session) {
                 if (!session || !session.id) return Promise.resolve(false);
+                // Stamped on write so loadSessions() can scope by owner.
+                // The in-memory copy is left untouched: session.id is the id
+                // used everywhere else and must not gain a prefix.
+                const record = Object.assign({}, session, { owner: activeOwner() });
                 sessionWriteChain = sessionWriteChain.then(function() {
-                    return idbWrite(IDB_SESSIONS, function(store) { store.put(session); });
+                    return idbWrite(IDB_SESSIONS, function(store) { store.put(record); });
                 }, function() {
-                    return idbWrite(IDB_SESSIONS, function(store) { store.put(session); });
+                    return idbWrite(IDB_SESSIONS, function(store) { store.put(record); });
                 });
                 return sessionWriteChain;
             }

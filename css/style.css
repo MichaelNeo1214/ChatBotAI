@@ -2547,6 +2547,29 @@
 .setting-row:last-child{ border-bottom:none; }
 .setting-label{ font-size:14px; color:#e4e4e7; }
 .setting-desc{ font-size:12.5px; color:#8a8a92; margin-top:3px; }
+
+/* A long account email is the only .setting-desc that can exceed the space
+   next to its label. Left unconstrained it pushes the row past the panel
+   border, so it truncates on one line instead. */
+#accountEmail{
+  max-width:60%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
+}
+/* Narrow panels get a full-width, wrapping email rather than a clipped one. */
+@media (max-width:520px){
+  #accountEmail{ max-width:100%; white-space:normal; word-break:break-all; }
+}
+
+/* Rows whose control is a button cluster rather than a switch must be allowed
+   to wrap, or the cluster is pushed outside the modal. */
+.setting-row:has( .cloud-sync-actions ){
+  flex-wrap:wrap;
+  gap:0.75rem;
+}
+.cloud-sync-actions{ min-width:0; max-width:100%; }
 .api-optional{ font-size:12px; color:#8a8a92; }
 
 /* Toggle switch */
@@ -3343,7 +3366,7 @@
         }
 
         /* ===== READ-ONLY SHARED VIEW =====
-           Rendered by js/share-view.js. Hidden unless a /share/… link is open;
+           Rendered by js/share-view.js. Hidden unless a /share/ï¿½ link is open;
            js/share-view.js also sets .read-only-share on <body> to take the
            sidebar, composer and modals out of the page entirely. */
 

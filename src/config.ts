@@ -175,7 +175,7 @@ export const config = {
     perIp: positiveInt('CHAT_RATE_LIMIT_PER_IP', 10),
   },
 
-  corsOrigins: str('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')
+  corsOrigins: str('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000,https://chat.michaelap.my.id')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
