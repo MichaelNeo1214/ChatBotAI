@@ -8,6 +8,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
             const [password, setPassword] = React.useState("");
             const [error, setError] = React.useState(null);
             const [busy, setBusy] = React.useState(false);
+            const [showPassword, setShowPassword] = React.useState(false);
 
             // Already signed in? Nothing to do on this page.
             React.useEffect(() => {
@@ -29,8 +30,14 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
                 setBusy(true);
                 setError(null);
 
+                // Normalise here as well as server-side: a stray trailing space
+                // typed on a phone keyboard otherwise becomes a "wrong
+                // password" on an address that is perfectly correct.
+                const cleanEmail = email.trim().toLowerCase();
                 const endpoint = isLogin ? "/api/auth/login" : "/api/auth/signup";
-                const payload = isLogin ? { email, password } : { name, email, password };
+                const payload = isLogin
+                    ? { email: cleanEmail, password }
+                    : { name: name.trim(), email: cleanEmail, password };
 
                 try {
                     const res = await fetch(endpoint, {
@@ -42,7 +49,15 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
                     const data = await res.json().catch(() => null);
 
                     if (!res.ok) {
-                        setError((data && data.error && data.error.message) || "Something went wrong. Please try again.");
+                        const apiError = data && data.error;
+                        // The server distinguishes throttling from bad
+                        // credentials on purpose; repeating the raw upstream
+                        // wording ("Email rate limit exceeded") only confuses.
+                        setError(
+                            res.status === 429 || (apiError && apiError.code === "rate_limited")
+                                ? "Too many sign-in attempts. Please wait 60 seconds, or sign in with an existing account."
+                                : (apiError && apiError.message) || "Something went wrong. Please try again."
+                        );
                         setBusy(false);
                         return;
                     }
@@ -226,7 +241,38 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
                 fontSize: "0.875rem", outline: "none",
             };
 
-            const GoogleIcon = (
+            // Password input with a show/hide control. Typing an eight-character password
+// blind, then failing to sign in, is a common way to end up creating a second
+// account instead of noticing a typo.
+const PasswordField = ({ value, onChange, placeholder, autoComplete, minLength }) => (
+    <div style={{ position: "relative", width: "100%" }}>
+        <input
+            style={{ ...input, paddingRight: "2.75rem" }}
+            type={showPassword ? "text" : "password"}
+            placeholder={placeholder}
+            autoComplete={autoComplete}
+            required
+            minLength={minLength}
+            value={value}
+            onChange={onChange}
+        />
+        <button
+            type="button"
+            onClick={() => setShowPassword(v => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            aria-pressed={showPassword}
+            style={{
+                position: "absolute", right: "0.55rem", top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", padding: "0.2rem", cursor: "pointer",
+                color: "#888", fontSize: "0.7rem", fontFamily: "inherit", lineHeight: 1
+            }}
+        >
+            {showPassword ? "Hide" : "Show"}
+        </button>
+    </div>
+);
+
+const GoogleIcon = (
                 <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, flexShrink: 0 }}>
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -274,7 +320,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
                                 <form onSubmit={submit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
                                     <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
                                         value={email} onChange={e => setEmail(e.target.value)} />
-                                    <input style={input} type="password" placeholder="Password" autoComplete="current-password" required
+                                    <PasswordField placeholder="Password" autoComplete="current-password"
                                         value={password} onChange={e => setPassword(e.target.value)} />
                                     <button type="submit" disabled={busy} style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: busy ? "#8a8a8a" : "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: busy ? "default" : "pointer" }}>{busy ? "Signing in…" : "Continue with Email"}</button>
                                 </form>
@@ -303,7 +349,7 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
                                         value={name} onChange={e => setName(e.target.value)} />
                                     <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
                                         value={email} onChange={e => setEmail(e.target.value)} />
-                                    <input style={input} type="password" placeholder="Password (at least 8 characters)" autoComplete="new-password" minLength={8} required
+                                    <PasswordField placeholder="Password (at least 8 characters)" autoComplete="new-password" minLength={8}
                                         value={password} onChange={e => setPassword(e.target.value)} />
                                     <button type="submit" disabled={busy} style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: busy ? "#8a8a8a" : "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: busy ? "default" : "pointer" }}>{busy ? "Creating account…" : "Sign Up with Email"}</button>
                                 </form>

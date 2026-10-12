@@ -290,11 +290,32 @@ interface AuthOutcome {
   message: string;
 }
 
+/**
+ * Recognises Supabase's "too many attempts" responses.
+ *
+ * GoTrue reports email-rate-limit exhaustion as a 429 with a message such as
+ * "Email rate limit exceeded", and repeats on sign-in once an address has
+ * burned its hourly quota. Without this check it is indistinguishable from a
+ * wrong password, so the user is told to retype a password that is perfectly
+ * fine and is then locked out for retrying.
+ */
+function isRateLimited(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { status?: unknown; code?: unknown; message?: unknown };
+  if (err.status === 429) return true;
+  if (typeof err.code === 'string' && err.code.toLowerCase().includes('over_email_send_rate_limit')) return true;
+  return typeof err.message === 'string' && /rate limit|too many (attempts|requests)/i.test(err.message);
+}
+
+/** Shown for a throttled attempt. Kept separate from the credential message. */
+const RATE_LIMIT_MESSAGE =
+  'Too many sign-in attempts from this device. Wait about a minute, or sign in with an existing account.';
+
 async function signupWithSupabase(
   email: string,
   password: string,
   name: string,
-): Promise<{ user: GoTrueUser | null; accessToken: string | null; message: string }> {
+): Promise<{ user: GoTrueUser | null; accessToken: string | null; message: string; rateLimited: boolean }> {
   const supabase = supabaseClient();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -305,31 +326,47 @@ async function signupWithSupabase(
   });
 
   if (error) {
-    return { user: null, accessToken: null, message: messageFrom({ message: error.message }, 'Could not create that account.') };
+    if (isRateLimited(error)) {
+      return { user: null, accessToken: null, message: RATE_LIMIT_MESSAGE, rateLimited: true };
+    }
+    return {
+      user: null,
+      accessToken: null,
+      message: messageFrom({ message: error.message }, 'Could not create that account.'),
+      rateLimited: false,
+    };
   }
   return {
     user: (data?.user as GoTrueUser) ?? null,
     accessToken: data?.session?.access_token ?? null,
     message: '',
+    rateLimited: false,
   };
 }
 
 async function signInWithSupabase(
   email: string,
   password: string,
-): Promise<{ user: GoTrueUser | null; accessToken: string | null; error: string }> {
+): Promise<{ user: GoTrueUser | null; accessToken: string | null; error: string; rateLimited: boolean }> {
   const supabase = supabaseClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
+    // Rate limiting must not masquerade as a bad password: telling someone to
+    // retype a correct password while they are actually locked out is the
+    // single most confusing failure this form can produce.
+    if (isRateLimited(error)) {
+      return { user: null, accessToken: null, error: RATE_LIMIT_MESSAGE, rateLimited: true };
+    }
     // One message for "no such account" and "wrong password" alike, so the
     // response cannot be used to enumerate registered addresses.
-    return { user: null, accessToken: null, error: 'Incorrect email or password.' };
+    return { user: null, accessToken: null, error: 'Incorrect email or password.', rateLimited: false };
   }
   return {
     user: (data?.user as GoTrueUser) ?? null,
     accessToken: data?.session?.access_token ?? null,
     error: '',
+    rateLimited: false,
   };
 }
 
@@ -413,7 +450,10 @@ async function signup(res: Res, body: Record<string, unknown>, secure: boolean):
   const result = await signupWithSupabase(email, password, name);
 
   if (result.message !== '') {
-    return fail(res, 400, 'signup_failed', result.message);
+    // 429, not 400: the request was well-formed, the caller is simply throttled.
+    return result.rateLimited
+      ? fail(res, 429, 'rate_limited', result.message)
+      : fail(res, 400, 'signup_failed', result.message);
   }
 
   // Email confirmation is usually enabled, in which case there is no session
@@ -440,6 +480,11 @@ async function login(res: Res, body: Record<string, unknown>, secure: boolean): 
   const result = await signInWithSupabase(email, password);
 
   if (result.error !== '') {
+    // Throttling must not be reported as bad credentials: 429 plus a distinct
+    // code is what lets the form say "wait" instead of "retype your password".
+    if (result.rateLimited) {
+      return fail(res, 429, 'rate_limited', result.error);
+    }
     // One message for "no such account" and "wrong password" alike, so the
     // response cannot be used to enumerate registered addresses.
     return fail(res, 401, 'invalid_credentials', result.error);

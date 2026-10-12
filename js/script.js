@@ -346,7 +346,7 @@
                 remove.className = 'file-chip-remove';
                 remove.setAttribute('aria-label', 'Remove attachment');
                 remove.setAttribute('data-mm-name', escapeHtmlAttr(entry.name));
-                remove.textContent = 'Ã—';
+                remove.textContent = '\u00d7';
                 remove.addEventListener('click', function() { removeMmAttachment(entry.name); });
                 chip.appendChild(remove);
 
@@ -556,7 +556,7 @@
                 const message = describeError(error, 'The request failed.');
 
                 if (error && error.partial) {
-                    bubble.setText(error.partial + '\n\nâ€” the reply stopped early.');
+                    bubble.setText(error.partial + '\n\n— the reply stopped early.');
                 } else {
                     bubble.setText('');
                 }
@@ -597,7 +597,7 @@
             // ===== PROVIDER REQUEST ERRORS =====
             function requestFailed(url, e) {
                 if (e && e.name === 'AbortError') {
-                    return 'Request to ' + url + ' timed out. The model may still be loading â€” please try again.';
+                    return 'Request to ' + url + ' timed out. The model may still be loading — please try again.';
                 }
                 return 'Cannot reach ' + url + ' (' + ((e && e.message) ? e.message : 'network error') + ').';
             }
@@ -1017,12 +1017,12 @@
 
             // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
-                + '**Start chatting** â€” type below and press Enter. Use New chat to start over.\n\n'
-                + '**History** â€” every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
-                + '**Models** â€” pick a model from the dropdown in the input box. "OpenRouter Free" runs on the server\'s own OpenRouter key, so it costs you nothing and needs no setup (the free tier is rate limited, so it can be busy); GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings â†’ API Key.\n\n'
-                + '**Images** â€” pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
-                + '**Attachments** â€” the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
-                + '**Account** â€” sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
+                + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
+                + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
+                + '**Models** — pick a model from the dropdown in the input box. "OpenRouter Free" runs on the server\'s own OpenRouter key, so it costs you nothing and needs no setup (the free tier is rate limited, so it can be busy); GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings - API Key.\n\n'
+                + '**Images** — pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
+                + '**Attachments** — the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
+                + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
             function showHelpChat() {
                 activeConversationId = null;
@@ -1462,7 +1462,7 @@ function mmNeedsVisionModel() {
                 if (mmPaperclip) {
                     mmPaperclip.classList.toggle('needs-vision', mmNeedsVisionModel());
                     mmPaperclip.title = mmNeedsVisionModel()
-                        ? 'This model cannot read images â€” pick GPT-4o, Gemini or Claude'
+                        ? 'This model cannot read images — pick GPT-4o, Gemini or Claude'
                         : 'Attach image, .txt, .md or .csv';
                 }
             }
@@ -2179,7 +2179,7 @@ function mmNeedsVisionModel() {
                 updateScrollFab();
             }
 
-            // ===== CLOUD SYNC (Supabase) â€” additive, optional =====
+            // ===== CLOUD SYNC (Supabase) — additive, optional =====
             // IndexedDB stays the single source of truth for the UI. When the user
             // is signed in, the local thread is mirrored to Supabase in the
             // background and can be pulled back onto a fresh device. Every call is
@@ -2263,7 +2263,7 @@ function mmNeedsVisionModel() {
                 for (let i = 0; i < messages.length; i++) {
                     if (messages[i].role === 'user' && messages[i].text) {
                         const t = String(messages[i].text).replace(/\s+/g, ' ').trim();
-                        return t.length > 60 ? t.slice(0, 60) + 'â€¦' : t;
+                        return t.length > 60 ? t.slice(0, 60) + '\\u2b26' : t;
                     }
                 }
                 return 'Untitled';
@@ -2321,10 +2321,10 @@ function mmNeedsVisionModel() {
                     const msgRes = await client.from('chat_messages').upsert(rows, { onConflict: 'id' });
                     if (msgRes && msgRes.error) throw msgRes.error;
 
-                    setCloudStatus('Synced Â· ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    setCloudStatus('Synced \\u00b7 ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
                     return true;
                 } catch (e) {
-                    setCloudStatus('Sync failed â€” will retry');
+                    setCloudStatus('Sync failed — will retry');
                     return false;
                 }
             }
@@ -2408,7 +2408,7 @@ function mmNeedsVisionModel() {
                     await saveHistory(chatHistory);
                     try { localStorage.setItem(CLOUD_SESSION_LS_KEY, session.id); } catch (e) {}
                     renderCloudHistory(messages);
-                    setCloudStatus('Restored Â· ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    setCloudStatus('Restored \\u00b7 ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
                     return true;
                 } catch (e) {
                     setCloudStatus('Restore failed');
@@ -2432,7 +2432,7 @@ function mmNeedsVisionModel() {
                 if (signedIn) {
                     setCloudStatus('Signed in as ' + (supaUser.email || supaUser.id));
                 } else {
-                    setCloudStatus('Not connected â€” chats stay on this device.');
+                    setCloudStatus('Not connected — chats stay on this device.');
                 }
             }
 
@@ -2473,7 +2473,7 @@ function mmNeedsVisionModel() {
                 if (now) now.addEventListener('click', async function() {
                     const local = await loadHistory();
                     if (local.length) {
-                        setCloudStatus('Syncingâ€¦');
+                        setCloudStatus('Syncing\\u2b26');
                         await syncToCloud(buildSessionData(local));
                     } else {
                         await fetchFromCloud();
@@ -2607,7 +2607,7 @@ function mmNeedsVisionModel() {
             function showKeyAlert(model) {
                 const label = modelLabelFor(model);
                 if (keyAlertDesc) {
-                    keyAlertDesc.textContent = label + ' needs an API key before it can be used. Add it in Settings â†’ API Key, then try again.';
+                    keyAlertDesc.textContent = label + ' needs an API key before it can be used. Add it in Settings - API Key, then try again.';
                 }
                 if (keyAlertOverlay) keyAlertOverlay.hidden = false;
             }
@@ -2674,7 +2674,7 @@ function mmNeedsVisionModel() {
                     typer.finish();
                     if (error && error.name === 'AbortError') {
                         // Keep whatever streamed before the user hit Stop.
-                        if (bubble) bubble.setText(bubble.getText() + '\n\nâ€” stopped by you.');
+                        if (bubble) bubble.setText(bubble.getText() + '\n\n— stopped by you.');
                     } else if (error && error.code === 'missing_api_key') {
                         // The server refused before writing anything, so point
                         // at the setting that fixes it and keep the alert as the
@@ -2700,7 +2700,7 @@ function mmNeedsVisionModel() {
                     // Persist the finished turn locally (survives refresh/offline).
                     persistHistory();
                     // Auto-focus: cursor is ready for the next prompt the moment
-                    // the reply finishes (or is stopped) â€” no manual click needed.
+                    // the reply finishes (or is stopped) — no manual click needed.
                     chatInput.focus();
                 }
 
@@ -2841,7 +2841,7 @@ function mmNeedsVisionModel() {
                 isPinnedToBottom = true;
                 scrollToBottom(true);
 
-                const bubble = addMessage('assistant', 'Generating imageâ€¦');
+                const bubble = addMessage('assistant', 'Generating image\\u2b26');
 
                 try {
                     const res = await fetch(API_BASE + '/image', {
@@ -2861,13 +2861,13 @@ function mmNeedsVisionModel() {
                     bubble.setImage(url, prompt);
                 } catch (error) {
                     if (error && error.name === 'AbortError') {
-                        bubble.setText('â€” stopped by you.');
+                        bubble.setText('— stopped by you.');
                     } else if (error && error.code === 'missing_api_key') {
                         bubble.element.remove();
                         showKeyAlert(error.model || 'image');
                     } else {
                         const message = (error && error.message) ? error.message : 'request failed.';
-                        bubble.setText('Sorry â€” ' + message);
+                        bubble.setText('Sorry — ' + message);
                     }
                 } finally {
                     typingIndicator.classList.remove('visible');
@@ -3934,7 +3934,7 @@ function mmNeedsVisionModel() {
                 remove.type = 'button';
                 remove.className = 'file-chip-remove';
                 remove.setAttribute('aria-label', 'Remove attachment');
-                remove.textContent = 'Ã—';
+                remove.textContent = '\u00d7';
                 remove.addEventListener('click', function() {
                     const idx = attachedFiles.findIndex(function(f) { return f.name === file.name; });
                     if (idx !== -1) attachedFiles.splice(idx, 1);
@@ -3951,7 +3951,7 @@ function mmNeedsVisionModel() {
             // ===== RAG: CLIENT-SIDE DOCUMENT EXTRACTION (PDF / TXT) =====
             // A lightweight, in-browser "retrieval" step: the chosen file's text is
             // extracted locally and folded into the next prompt as hidden context.
-            // Nothing is uploaded, and only the capped *text* is retained â€” the
+            // Nothing is uploaded, and only the capped *text* is retained — the
             // source File/ArrayBuffer is released as soon as extraction ends, so a
             // large PDF cannot pin memory.
             const RAG_MAX_CHARS = 120000;                 // ~30k tokens of context, hard cap
@@ -4056,24 +4056,24 @@ function mmNeedsVisionModel() {
             async function handleDocFile(file) {
                 if (!file || docReading) return;
                 if (file.size > RAG_MAX_BYTES) {
-                    flashDocError(file.name + ' â€” too large');
+                    flashDocError(file.name + ' — too large');
                     if (docInput) docInput.value = '';
                     return;
                 }
                 docReading = true;
-                renderDocIndicator(file.name, 'readingâ€¦', 'loading');
+                renderDocIndicator(file.name, 'reading\\u2b26', 'loading');
                 if (docInput) docInput.disabled = true;
                 try {
                     const text = await extractDocText(file);
                     if (!text) {
-                        flashDocError(file.name + ' â€” no text found');
+                        flashDocError(file.name + ' — no text found');
                         return;
                     }
                     ragDoc = { name: file.name, text: text };
                     renderDocIndicator(file.name, 'attached', 'ready');
                     updateSendState();
                 } catch (e) {
-                    flashDocError(file.name + ' â€” could not read');
+                    flashDocError(file.name + ' — could not read');
                 } finally {
                     docReading = false;
                     if (docInput) {
@@ -4245,7 +4245,7 @@ function mmNeedsVisionModel() {
                 if (key === 'account') refreshAccountPanel();
             };
 
-            // Sidebar footer gear button â€” quick access to the Safety panel.
+            // Sidebar footer gear button — quick access to the Safety panel.
             const btnSidebarSettings = document.getElementById('btnSidebarSettings');
             if (btnSidebarSettings) {
                 btnSidebarSettings.addEventListener('click', function() {
@@ -4301,7 +4301,7 @@ function mmNeedsVisionModel() {
 
             // MFA Banner Close
             // Both elements are optional (the banner is not always rendered),
-            // and the click handler touches mfaBanner, so it is guarded too â€”
+            // and the click handler touches mfaBanner, so it is guarded too —
             // a close button without a banner would otherwise throw on click.
             if (btnCloseBanner && mfaBanner) {
                 btnCloseBanner.addEventListener('click', () => {
@@ -4450,7 +4450,7 @@ function mmNeedsVisionModel() {
                         const ok = window.ChatBotStore.saveKeys(all);
                         refreshApiStatus(card, provider === 'default' ? true : !!(keyInput && keyInput.value.trim()));
                         if (saveBtn) {
-                            saveBtn.textContent = ok ? 'Saved âœ“' : 'Save failed';
+                            saveBtn.textContent = ok ? 'Saved \u2713' : 'Save failed';
                             setTimeout(function() { saveBtn.textContent = 'Save'; }, 1500);
                         }
                     }
@@ -4880,18 +4880,23 @@ function mmNeedsVisionModel() {
 
             // Computed lazily: walking every stored message on boot would slow
             // first paint for a panel most visitors never open.
-            const settingsPanelsHost = document.getElementById('settingsPanels');
-            if (settingsPanelsHost) {
-                settingsPanelsHost.addEventListener('click', function (event) {
+            //
+            // The listener must sit on the MENU. The menu items live in
+            // #settingsMenuList, which is a sibling of #settingsPanels, so a
+            // listener on the panels never sees a menu click and both panels
+            // stay stuck on their "Calculating." placeholders forever.
+            const statsTrigger = document.getElementById('settingsMenuList')
+                || document.getElementById('settingsPanels');
+            if (statsTrigger) {
+                statsTrigger.addEventListener('click', function (event) {
                     const item = event.target && event.target.closest
                         ? event.target.closest('.settings-menu-item')
                         : null;
-                    const panel = item && item.getAttribute('data-panel');
+                    if (!item) return;
+                    const panel = item.getAttribute('data-panel');
                     if (panel === 'usage' || panel === 'analytics') refreshUsageStats();
                 }, true);
             }
-            initBehaviourPanel();
-            initDataPrivacyPanel();
         })();
 
 
@@ -4907,10 +4912,10 @@ const LANG_CODE_MAP = {
   "auto": "auto", "Auto-detect": "auto",
   "en": "en", "English (US)": "en",
   "id": "id", "Bahasa Indonesia": "id",
-  "es": "es", "EspaÃ±ol": "es",
-  "fr": "fr", "FranÃ§ais": "fr",
+  "es": "es", "Espa\\u00f1ol": "es",
+  "fr": "fr", "Fran\\u00e7ais": "fr",
   "de": "de", "Deutsch": "de",
-  "ja": "ja", "æ—¥æœ¬èªž": "ja"
+  "ja": "ja", "\u65e5\u672c\u8a9e": "ja"
 };
 
 // Ciri respons error MyMemory (dulu sempat ditulis ke seluruh UI + cache).
@@ -5047,7 +5052,7 @@ initLanguage();
 
 // ====== Custom dropdown enhancer ======
 // Mengubah <select class="custom-select"> jadi dropdown custom bergaya gambar,
-// tanpa mengubah value/behavior JS lama (i18n, dsb) â€” select asli tetap disinkronkan.
+// tanpa mengubah value/behavior JS lama (i18n, dsb) — select asli tetap disinkronkan.
 
 function enhanceSelect(select) {
   const wrapper = select.closest('.select-wrapper');
@@ -5170,7 +5175,7 @@ function enhanceAllSelects() {
 }
 
 document.addEventListener('DOMContentLoaded', enhanceAllSelects);
-            initDataPrivacyPanel();
+
 function initSettingsMenu() {
   const items = document.querySelectorAll('#settingsMenuList .settings-menu-item');
   const panels = document.querySelectorAll('#settingsPanels .settings-panel');
