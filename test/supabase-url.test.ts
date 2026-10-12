@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cleanSupabaseKey, cleanSupabaseUrl, supabaseIsConfigured } from '../src/supabase-url.ts';
+import { cleanSupabaseKey, cleanSupabaseUrl, getSanitizedSupabaseKey, getValidSupabaseUrl, supabaseIsConfigured } from '../src/supabase-url.ts';
 
 /**
  * SUPABASE_URL normalisation.
@@ -110,6 +110,103 @@ describe('cleanSupabaseKey', () => {
     assert.equal(cleanSupabaseKey(undefined), '');
     assert.equal(cleanSupabaseKey(null), '');
     assert.equal(cleanSupabaseKey('  '), '');
+  });
+});
+
+describe('malformed URL handling', () => {
+  // The reported crash was:
+  //   Error: Invalid supabaseUrl: Provided URL is malformed.
+  // createClient() throws that on anything new URL() rejects. Detection has to
+  // happen before it is called, or the visitor sees an opaque 500.
+  const MALFORMED = [
+    'https://',
+    'http://',
+    'https:///rest/v1',
+    'not a url',
+    'my supabase project',
+    'https://exa mple.supabase.co',
+    '://missing-scheme',
+  ];
+
+  for (const input of MALFORMED) {
+    it(`rejects ${JSON.stringify(input)}`, () => {
+      assert.equal(cleanSupabaseUrl(input), '');
+      assert.equal(getValidSupabaseUrl({ SUPABASE_URL: input } as NodeJS.ProcessEnv), null);
+      assert.equal(
+        supabaseIsConfigured({ SUPABASE_URL: input, SUPABASE_ANON_KEY: 'anon' } as NodeJS.ProcessEnv),
+        false,
+      );
+    });
+  }
+
+  it('still accepts every well-formed project URL', () => {
+    for (const input of [
+      'https://abcdefgh.supabase.co',
+      'http://localhost:54321',
+      'https://abcdefgh.supabase.co/rest/v1',
+    ]) {
+      assert.notEqual(getValidSupabaseUrl({ SUPABASE_URL: input } as NodeJS.ProcessEnv), null, input);
+    }
+  });
+
+  it('strips newlines and tabs that a paste can introduce', () => {
+    assert.equal(
+      cleanSupabaseUrl('https://abcdefgh.supabase.co\r\n/rest/v1'),
+      'https://abcdefgh.supabase.co',
+    );
+    assert.equal(cleanSupabaseKey('anon-key\r\n'), 'anon-key');
+  });
+});
+
+describe('getValidSupabaseUrl', () => {
+  it('falls back through the accepted variable names', () => {
+    const cases: Array<[Record<string, string>, string]> = [
+      [{ SUPABASE_URL: 'https://a.supabase.co' }, 'https://a.supabase.co'],
+      [{ NEXT_PUBLIC_SUPABASE_URL: 'https://b.supabase.co' }, 'https://b.supabase.co'],
+      [{ VITE_SUPABASE_URL: 'https://c.supabase.co' }, 'https://c.supabase.co'],
+    ];
+    for (const [env, expected] of cases) {
+      assert.equal(getValidSupabaseUrl(env as NodeJS.ProcessEnv), expected, JSON.stringify(env));
+    }
+  });
+
+  it('returns null when nothing is set', () => {
+    assert.equal(getValidSupabaseUrl({} as NodeJS.ProcessEnv), null);
+  });
+
+  it('prefers SUPABASE_URL over the fallbacks', () => {
+    assert.equal(
+      getValidSupabaseUrl({
+        SUPABASE_URL: 'https://primary.supabase.co',
+        NEXT_PUBLIC_SUPABASE_URL: 'https://secondary.supabase.co',
+      } as NodeJS.ProcessEnv),
+      'https://primary.supabase.co',
+    );
+  });
+});
+
+describe('getSanitizedSupabaseKey', () => {
+  it('reads the anon key and strips paste damage', () => {
+    assert.equal(
+      getSanitizedSupabaseKey({ SUPABASE_ANON_KEY: '"anon-key"\r\n' } as NodeJS.ProcessEnv),
+      'anon-key',
+    );
+  });
+
+  it('never falls back to the service role key', () => {
+    // The service role bypasses Row Level Security. Reading it here would risk
+    // it being used as the shared client credential.
+    assert.equal(
+      getSanitizedSupabaseKey({ SUPABASE_SERVICE_ROLE_KEY: 'service' } as NodeJS.ProcessEnv),
+      '',
+    );
+  });
+
+  it('falls back to the NEXT_PUBLIC name', () => {
+    assert.equal(
+      getSanitizedSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon' } as NodeJS.ProcessEnv),
+      'anon',
+    );
   });
 });
 

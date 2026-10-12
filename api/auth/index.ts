@@ -1,5 +1,5 @@
 /**
- * Authentication â€” Vercel Serverless Function.
+ * Authentication Ã¢â‚¬â€ Vercel Serverless Function.
  *
  * Handles the same contract the Express build serves from src/routes/auth.ts,
  * because the frontend calls these unconditionally:
@@ -26,7 +26,7 @@
  *
  * The Express build in src/ keeps users in node:sqlite. A serverless function
  * has no writable filesystem and no state between invocations, so nothing in
- * api/ reads or writes one â€” the handler holds no storage of any kind.
+ * api/ reads or writes one Ã¢â‚¬â€ the handler holds no storage of any kind.
  *
  * ## When Supabase is not configured
  *
@@ -41,7 +41,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { cleanSupabaseKey, cleanSupabaseUrl } from '../../src/supabase-url.ts';
+import {
+  cleanSupabaseKey,
+  getSanitizedSupabaseKey,
+  getValidSupabaseUrl,
+} from '../../src/supabase-url.ts';
 
 type Req = IncomingMessage & { body?: unknown };
 type Res = ServerResponse;
@@ -70,19 +74,35 @@ const BODY_READ_TIMEOUT_MS = 3_000;
  */
 const UPSTREAM_TIMEOUT_MS = 8_000;
 
-/** Strips stray quotes/whitespace from a pasted key. */
-
-/** Supabase's GoTrue requires a project URL and an API key. */
+/**
+ * Supabase's GoTrue requires a project URL and an API key.
+ *
+ * Returns null unless both are present AND the URL survives parsing, so an
+ * unusable variable is reported as "accounts not enabled" rather than reaching
+ * createClient(), which throws "Invalid supabaseUrl: Provided URL is
+ * malformed." and surfaces as an opaque 500.
+ */
 function supabaseConfig(): { url: string; anonKey: string; serviceKey: string } | null {
-  const url = cleanSupabaseUrl(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
-  const anonKey = cleanSupabaseKey(
-    process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY,
-  );
-  if (url === '' || anonKey === '') return null;
+  const url = getValidSupabaseUrl();
+  if (url === null) return null;
+
+  const anonKey = getSanitizedSupabaseKey() || cleanSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  if (anonKey === '') return null;
+
   return { url, anonKey, serviceKey: cleanSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY) };
 }
 
 const isConfigured = (): boolean => supabaseConfig() !== null;
+
+/**
+ * Single wording for "no usable Supabase credentials", so the 503 a visitor sees
+ * is identical whether the variables are absent, empty, or malformed. It also
+ * names the one config mistake that produces a confusing SDK error: pasting the
+ * Data API URL, which ends in /rest/v1.
+ */
+const AUTH_UNAVAILABLE_MESSAGE =
+  'Accounts are not enabled on this deployment. Set SUPABASE_URL to your project URL ' +
+  '(https://<ref>.supabase.co, not the /rest/v1 Data API URL) and SUPABASE_ANON_KEY to turn them on.';
 
 // ---- HTTP plumbing --------------------------------------------------------
 
@@ -346,7 +366,8 @@ async function revokeToken(token: string): Promise<void> {
  * supabase-js exposes no equivalent for this operation.
  */
 async function adminDeleteUser(userId: string): Promise<boolean> {
-  const config = supabaseConfig()!;
+  const config = supabaseConfig();
+  if (config === null) return false;
   const url = config.url;
   const serviceKey = config.serviceKey;
   if (url === '' || serviceKey === '') return false;
@@ -470,7 +491,10 @@ async function deleteAccount(res: Res, req: Req): Promise<void> {
   const token = sessionToken(req);
   if (!token) return fail(res, 401, 'sign_in_required', 'Sign in to delete your account.');
 
-  const config = supabaseConfig()!;
+  const config = supabaseConfig();
+  if (config === null) {
+    return fail(res, 503, 'auth_unavailable', AUTH_UNAVAILABLE_MESSAGE);
+  }
   if (config.serviceKey === '') {
     return fail(
       res,
@@ -539,12 +563,7 @@ export default async function handler(req: Req, res: Res): Promise<void> {
     typeof forwarded === 'string' ? forwarded.split(',')[0]!.trim() === 'https' : process.env.NODE_ENV === 'production';
 
   if (!isConfigured()) {
-    return fail(
-      res,
-      503,
-      'auth_unavailable',
-      'Accounts are not enabled on this deployment. Set SUPABASE_URL and SUPABASE_ANON_KEY to turn them on.',
-    );
+    return fail(res, 503, 'auth_unavailable', AUTH_UNAVAILABLE_MESSAGE);
   }
 
   try {

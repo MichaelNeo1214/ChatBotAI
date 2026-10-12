@@ -296,8 +296,14 @@ describe('api/auth — client configuration', () => {
     // Comments are stripped first: the file documents *why* there is no local
     // database, so a raw text match would flag its own explanation.
     const code = source().replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    assert.match(code, /process\.env\.SUPABASE_URL/);
-    assert.match(code, /process\.env\.SUPABASE_ANON_KEY/);
+    // Every env read is delegated to the validating helper. The handler must not
+    // read process.env.SUPABASE_URL itself: createClient() throws "Invalid
+    // supabaseUrl" on an unparsed value, so the URL has to pass through
+    // getValidSupabaseUrl() first.
+    assert.match(code, /from '\.\.\/\.\.\/src\/supabase-url\.ts'/);
+    assert.match(code, /getValidSupabaseUrl\(\)/);
+    assert.match(code, /getSanitizedSupabaseKey\(\)/);
+    assert.doesNotMatch(code, /process\.env\.SUPABASE_URL/);
     assert.doesNotMatch(code, /readFileSync|writeFileSync|node:fs/);
   });
 
