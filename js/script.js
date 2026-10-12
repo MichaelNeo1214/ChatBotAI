@@ -3213,7 +3213,21 @@ function mmNeedsVisionModel() {
                         USE_PROFILES: { html: true, mathMl: true, svg: true }
                     });
                 }
-                return html;
+
+                // FAIL CLOSED. Returning `html` here would be an XSS hole: the
+                // sanitizer is loaded from a CDN, and an ad blocker, corporate
+                // proxy, regional block or CDN outage is enough to leave it
+                // undefined. Every reply would then be injected as raw HTML,
+                // and a reply can be steered by content the model reads
+                // (prompt injection via an attachment or a shared link).
+                //
+                // Degrading to escaped plain text costs the reader formatting for
+                // the duration of the outage and closes the hole entirely.
+                const asText = String(html)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                return '<div class="message-plain">' + asText + '</div>';
             }
 
             // Lightweight syntax tint for fenced code. Operates on already

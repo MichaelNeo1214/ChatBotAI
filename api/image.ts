@@ -1,10 +1,10 @@
 /**
- * POST /api/image — generate one image from a text prompt (stateless).
+ * POST /api/image â€” generate one image from a text prompt (stateless).
  *
  * Sibling of /api/chat: same deploy target, same BYOK trust model (the key is
  * read from a request header, used once, and never stored). Unlike chat this is
- * a plain JSON request/response — image APIs return a base64 payload, not an
- * SSE token stream — so the client gets `{ image: { dataUrl, mimeType } }`.
+ * a plain JSON request/response â€” image APIs return a base64 payload, not an
+ * SSE token stream â€” so the client gets `{ image: { dataUrl, mimeType } }`.
  *
  * Body:
  *   {
@@ -20,6 +20,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { UpstreamError } from '../src/providers/errors.ts';
+import { rejectPrivateProviderUrl } from '../src/security/outbound-guard.ts';
 import { generateImage, type ImageBackend } from '../src/providers/image.ts';
 
 const MAX_PROMPT_LENGTH = 32_000;
@@ -178,6 +179,14 @@ export default async function handler(req: Req, res: Res): Promise<void> {
       }
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new ApiError(400, 'The base URL header must use http or https.', {
+          code: 'invalid_provider_config',
+        });
+      }
+      // SSRF guard: same reason as /api/chat - the caller controls both the URL
+      // and the key, so an unguarded override can reach internal-only hosts.
+      const ssrfReason = rejectPrivateProviderUrl(trimmed);
+      if (ssrfReason !== null) {
+        throw new ApiError(400, ssrfReason, {
           code: 'invalid_provider_config',
         });
       }

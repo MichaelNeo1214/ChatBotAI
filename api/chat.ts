@@ -43,6 +43,7 @@ import { UpstreamError } from '../src/providers/errors.ts';
 import { MockProvider } from '../src/providers/mock.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
 import { parseChatParameters } from '../src/providers/parameters.ts';
+import { rejectPrivateProviderUrl } from '../src/security/outbound-guard.ts';
 import { PROVIDER_PRESETS, isDefaultModelLabel } from '../src/providers/presets.ts';
 import type { ChatMessage, ChatProvider } from '../src/providers/types.ts';
 
@@ -290,6 +291,16 @@ function selectProvider(modelLabel: unknown, req: Req): { provider: ChatProvider
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new ApiError(400, 'The base URL header must use http or https.', {
+        code: 'invalid_provider_config',
+        model: label,
+      });
+    }
+    // SSRF guard: the caller supplies both the URL and the key, so without this
+    // the endpoint could be pointed at loopback, RFC1918 or the cloud metadata
+    // address and the response body leaks back through the error text.
+    const ssrfReason = rejectPrivateProviderUrl(trimmed);
+    if (ssrfReason !== null) {
+      throw new ApiError(400, ssrfReason, {
         code: 'invalid_provider_config',
         model: label,
       });
