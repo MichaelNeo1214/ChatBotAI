@@ -242,13 +242,32 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
             };
 
             // Password input with a show/hide control. Typing an eight-character password
+// Password input with a show/hide control. Typing an eight-character password
 // blind, then failing to sign in, is a common way to end up creating a second
 // account instead of noticing a typo.
-const PasswordField = ({ value, onChange, placeholder, autoComplete, minLength }) => (
+//
+// MODULE SCOPE, not inside LoginSignupComponent. A component defined inside a
+// render is a new component type on every keystroke, so React tears down and
+// rebuilds the subtree instead of updating it, and the input loses focus while
+// the user is still typing in it. Visibility is a prop rather than state read
+// from a closure so this stays a pure function of its props.
+const AUTH_INPUT_STYLE = {
+    width: "100%", padding: "0.65rem 0.85rem", borderRadius: 6,
+    border: "1px solid #333", background: "#000", color: "#fff",
+    fontSize: "0.875rem", outline: "none"
+};
+
+const PASSWORD_TOGGLE_STYLE = {
+    position: "absolute", right: "0.55rem", top: "50%", transform: "translateY(-50%)",
+    background: "none", border: "none", padding: "0.2rem", cursor: "pointer",
+    color: "#888", fontSize: "0.7rem", fontFamily: "inherit", lineHeight: 1
+};
+
+const PasswordField = ({ value, onChange, placeholder, autoComplete, minLength, show, onToggle }) => (
     <div style={{ position: "relative", width: "100%" }}>
         <input
-            style={{ ...input, paddingRight: "2.75rem" }}
-            type={showPassword ? "text" : "password"}
+            style={{ ...AUTH_INPUT_STYLE, paddingRight: "2.75rem" }}
+            type={show ? "text" : "password"}
             placeholder={placeholder}
             autoComplete={autoComplete}
             required
@@ -258,16 +277,12 @@ const PasswordField = ({ value, onChange, placeholder, autoComplete, minLength }
         />
         <button
             type="button"
-            onClick={() => setShowPassword(v => !v)}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            aria-pressed={showPassword}
-            style={{
-                position: "absolute", right: "0.55rem", top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", padding: "0.2rem", cursor: "pointer",
-                color: "#888", fontSize: "0.7rem", fontFamily: "inherit", lineHeight: 1
-            }}
+            onClick={onToggle}
+            aria-label={show ? "Hide password" : "Show password"}
+            aria-pressed={show}
+            style={PASSWORD_TOGGLE_STYLE}
         >
-            {showPassword ? "Hide" : "Show"}
+            {show ? "Hide" : "Show"}
         </button>
     </div>
 );
@@ -321,7 +336,8 @@ const GoogleIcon = (
                                     <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
                                         value={email} onChange={e => setEmail(e.target.value)} />
                                     <PasswordField placeholder="Password" autoComplete="current-password"
-                                        value={password} onChange={e => setPassword(e.target.value)} />
+                                        value={password} onChange={e => setPassword(e.target.value)}
+                                        show={showPassword} onToggle={() => setShowPassword(v => !v)} />
                                     <button type="submit" disabled={busy} style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: busy ? "#8a8a8a" : "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: busy ? "default" : "pointer" }}>{busy ? "Signing in…" : "Continue with Email"}</button>
                                 </form>
 
@@ -350,7 +366,8 @@ const GoogleIcon = (
                                     <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
                                         value={email} onChange={e => setEmail(e.target.value)} />
                                     <PasswordField placeholder="Password (at least 8 characters)" autoComplete="new-password" minLength={8}
-                                        value={password} onChange={e => setPassword(e.target.value)} />
+                                        value={password} onChange={e => setPassword(e.target.value)}
+                                        show={showPassword} onToggle={() => setShowPassword(v => !v)} />
                                     <button type="submit" disabled={busy} style={{ width: "100%", padding: "0.65rem", borderRadius: 6, border: "none", background: busy ? "#8a8a8a" : "#ededed", color: "#000", fontWeight: 500, fontSize: "0.875rem", cursor: busy ? "default" : "pointer" }}>{busy ? "Creating account…" : "Sign Up with Email"}</button>
                                 </form>
 

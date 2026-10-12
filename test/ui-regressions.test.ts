@@ -156,15 +156,33 @@ describe('auth form', () => {
     has(authForm, /email\.trim\(\)\.toLowerCase\(\)/, 'auth form');
   });
 
-  it('offers a password visibility toggle', () => {
-    has(authForm, /const PasswordField =/, 'auth form');
-    has(authForm, /type=\{showPassword \? "text" : "password"\}/, 'PasswordField');
-    has(authForm, /aria-label=\{showPassword \? "Hide password" : "Show password"\}/, 'PasswordField');
-    has(authForm, /aria-pressed=\{showPassword\}/, 'PasswordField');
+  it('defines PasswordField at module scope with props, not a closure', () => {
+    // Regression: defined inside LoginSignupComponent, the component type changed
+    // on every keystroke, so React remounted the input and stole focus while the
+    // user was still typing.
+    const moduleScope = /^const PasswordField = \(\{/m;
+    assert.ok(moduleScope.test(authForm), 'PasswordField must be defined at module level');
+    // Horizontal whitespace only: \s also matches newlines, which would let a
+    // column-0 definition match this and pass for a nested one.
+    assert.doesNotMatch(authForm, /^[ \t]+const PasswordField =/m, 'PasswordField is still nested inside a component');
+
+    // Visibility arrives as a prop, so the component is a pure function of props.
+    has(authForm, /const PasswordField = \(\{ value, onChange, placeholder, autoComplete, minLength, show, onToggle \}\) => \(/, 'PasswordField signature');
+    has(authForm, /type=\{show \? "text" : "password"\}/, 'PasswordField');
+    has(authForm, /aria-label=\{show \? "Hide password" : "Show password"\}/, 'PasswordField');
+    has(authForm, /aria-pressed=\{show\}/, 'PasswordField');
+    // No closure over the parent's state.
+    has(authForm, /onClick=\{onToggle\}/, 'PasswordField');
+    lacks(authForm, /onClick=\{\(\) => setShowPassword/, 'PasswordField');
   });
 
-  it('uses the toggle on both forms and keeps the length rule', () => {
+  it('passes visibility props at both call sites', () => {
     assert.equal((authForm.match(/<PasswordField/g) ?? []).length, 2);
+    assert.equal(
+      (authForm.match(/show=\{showPassword\} onToggle=\{\(\) => setShowPassword\(v => !v\)\}/g) ?? []).length,
+      2,
+      'both call sites must pass show and onToggle',
+    );
     has(authForm, /autoComplete="new-password" minLength=\{8\}/, 'signup password field');
     has(authForm, /type="email"[\s\S]{0,120}\brequired\b/, 'email field');
   });
