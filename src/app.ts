@@ -97,6 +97,33 @@ export function createApp() {
 
   app.disable('x-powered-by');
 
+  // Security headers. Vercel sets these via vercel.json, but this server is
+  // also run directly, and without them it is trivially framable, sniffable
+  // and script-injectable. The CSP mirrors the Vercel one: every script on the
+  // page is an external file, so no inline source is needed, and connect-src
+  // stays broad enough for BYOK providers on any https host.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; " +
+        "script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+        "font-src 'self' data: https://cdnjs.cloudflare.com; " +
+        "img-src 'self' data: blob: https:; " +
+        "connect-src 'self' https:; " +
+        "worker-src 'self' blob:; " +
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(), microphone=(self), interest-cohort=()');
+    if (req.secure || String(req.headers['x-forwarded-proto'] ?? '').includes('https')) {
+      res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+    }
+    next();
+  });
+
   // Off unless TRUST_PROXY says otherwise — see config.parseTrustProxy for why
   // enabling it blindly would let anyone spoof X-Forwarded-For.
   app.set('trust proxy', config.trustProxy);

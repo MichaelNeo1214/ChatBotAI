@@ -267,12 +267,6 @@
             /** @type {{name:string, mimeType:string, bytes:number, dataUrl:string|null, text:string}[]} */
             let mmAttachments = [];
 
-            function mmTotalBytes() {
-                let total = 0;
-                for (let i = 0; i < mmAttachments.length; i++) total += mmAttachments[i].bytes || 0;
-                return total;
-            }
-
             function mmImageCount() {
                 let n = 0;
                 for (let i = 0; i < mmAttachments.length; i++) if (mmAttachments[i].dataUrl) n += 1;
@@ -556,7 +550,7 @@
                 const message = describeError(error, 'The request failed.');
 
                 if (error && error.partial) {
-                    bubble.setText(error.partial + '\n\n— the reply stopped early.');
+                    bubble.setText(error.partial + '\n\n- the reply stopped early.');
                 } else {
                     bubble.setText('');
                 }
@@ -597,7 +591,7 @@
             // ===== PROVIDER REQUEST ERRORS =====
             function requestFailed(url, e) {
                 if (e && e.name === 'AbortError') {
-                    return 'Request to ' + url + ' timed out. The model may still be loading — please try again.';
+                    return 'Request to ' + url + ' timed out. The model may still be loading - please try again.';
                 }
                 return 'Cannot reach ' + url + ' (' + ((e && e.message) ? e.message : 'network error') + ').';
             }
@@ -927,12 +921,6 @@
             // no /api/auth/* function at all, and probing it on every load only
             // fills the console with 404s. The capability is read once from
             // /api/health, which always exists, and cached for the session.
-            function authAvailable() {
-                // Optimistic until health answers: asking once costs nothing,
-                // and a wrong guess only means a single 404.
-                return serverCapabilities ? serverCapabilities.auth : true;
-            }
-
             async function probeAuthCapability() {
                 const capabilities = await serverCapabilitiesOnce();
                 return capabilities ? capabilities.auth : true;
@@ -1039,12 +1027,12 @@
 
             // ===== SIDEBAR FOOTER USER MENU (opens upward) =====
             const HELP_TEXT = 'Here is how to use ChatBot AI:\n\n'
-                + '**Start chatting** — type below and press Enter. Use New chat to start over.\n\n'
-                + '**History** — every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
-                + '**Models** — pick a model from the dropdown in the input box. "OpenRouter Free" runs on the server\'s own OpenRouter key, so it costs you nothing and needs no setup (the free tier is rate limited, so it can be busy); GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings - API Key.\n\n'
-                + '**Images** — pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
-                + '**Attachments** — the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
-                + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
+                + '**Start chatting** - type below and press Enter. Use New chat to start over.\n\n'
+                + '**History** - every chat is saved on this device (and to your account when signed in). Rename with the pencil icon, delete with the trash icon, click any item to continue it.\n\n'
+                + '**Models** - pick a model from the dropdown in the input box. "OpenRouter Free" runs on the server\'s own OpenRouter key, so it costs you nothing and needs no setup (the free tier is rate limited, so it can be busy); GPT-4o, Gemini, Claude, DeepSeek and Groq are sent through the server with the API key you save in Settings - API Key.\n\n'
+                + '**Images** - pick "Image" (or type /image followed by a description) to generate a picture. It uses your OpenAI or Gemini key, whichever is saved.\n\n'
+                + '**Attachments** - the paperclip attaches an image or a .txt/.md/.csv file. Images are read by vision models (GPT-4o, Gemini, Claude); text files are read by every model. Files attached from the + menu are name-only.\n\n'
+                + '**Account** - sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
             function showHelpChat() {
                 // Same reason as resetChatView: the persisted pointer must go too,
@@ -1487,7 +1475,7 @@ function mmNeedsVisionModel() {
                 if (mmPaperclip) {
                     mmPaperclip.classList.toggle('needs-vision', mmNeedsVisionModel());
                     mmPaperclip.title = mmNeedsVisionModel()
-                        ? 'This model cannot read images — pick GPT-4o, Gemini or Claude'
+                        ? 'This model cannot read images - pick GPT-4o, Gemini or Claude'
                         : 'Attach image, .txt, .md or .csv';
                 }
             }
@@ -1560,13 +1548,6 @@ function mmNeedsVisionModel() {
             // The sidebar and the open thread render from the local session store,
             // so they work offline and with no account backend. Web storage is only
             // used to remember which conversation was open.
-            function getActiveConversation() {
-                for (let i = 0; i < conversations.length; i++) {
-                    if (conversations[i].id === activeConversationId) return conversations[i];
-                }
-                return null;
-            }
-
             function findSessionIndex(id) {
                 for (let i = 0; i < sessions.length; i++) {
                     if (sessions[i] && sessions[i].id === id) return i;
@@ -2230,7 +2211,7 @@ function mmNeedsVisionModel() {
                 updateScrollFab();
             }
 
-            // ===== CLOUD SYNC (Supabase) — additive, optional =====
+            // ===== CLOUD SYNC (Supabase) - additive, optional =====
             // IndexedDB stays the single source of truth for the UI. When the user
             // is signed in, the local thread is mirrored to Supabase in the
             // background and can be pulled back onto a fresh device. Every call is
@@ -2314,7 +2295,7 @@ function mmNeedsVisionModel() {
                 for (let i = 0; i < messages.length; i++) {
                     if (messages[i].role === 'user' && messages[i].text) {
                         const t = String(messages[i].text).replace(/\s+/g, ' ').trim();
-                        return t.length > 60 ? t.slice(0, 60) + '\\u2b26' : t;
+                        return t.length > 60 ? t.slice(0, 60) + '...' : t;
                     }
                 }
                 return 'Untitled';
@@ -2360,24 +2341,60 @@ function mmNeedsVisionModel() {
                     if (sessionRes && sessionRes.error) throw sessionRes.error;
 
                     const rows = messages.map(function(m) {
+                        // Message records carry `text`; the cloud column is
+                        // `content`. Reading `m.content` silently wrote
+                        // undefined and shipped every message as empty.
+                        const body = typeof m.text === 'string' ? m.text
+                            : (typeof m.content === 'string' ? m.content : '');
                         return {
                             id: m.id,
                             session_id: sessionData.id,
                             role: m.role,
-                            content: m.content,
-                            raw_content: m.rawContent,
-                            created_at: m.createdAt
+                            content: body,
+                            raw_content: typeof m.raw === 'string' ? m.raw : m.rawContent,
+                            created_at: m.createdAt || new Date().toISOString()
                         };
                     });
                     const msgRes = await client.from('chat_messages').upsert(rows, { onConflict: 'id' });
                     if (msgRes && msgRes.error) throw msgRes.error;
 
-                    setCloudStatus('Synced \\u00b7 ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    setCloudStatus('Synced · ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
                     return true;
                 } catch (e) {
-                    setCloudStatus('Sync failed — will retry');
+                    setCloudStatus('Sync failed - will retry');
                     return false;
                 }
+            }
+
+            // Pushes every locally stored conversation, not just the open one.
+            // The previous version synced `chatHistory`, which is only the
+            // active thread, so any conversation the user had switched away
+            // from was never uploaded. Clearing the browser cache then lost
+            // them permanently even though the account was signed in.
+            async function syncAllSessionsToCloud() {
+                if (!supaUser) return false;
+
+                const list = (typeof sessions !== 'undefined' && Array.isArray(sessions) && sessions.length)
+                    ? sessions.slice()
+                    : [{ id: null, messages: (typeof chatHistory !== 'undefined' ? chatHistory.slice() : []) }];
+
+                let ok = false;
+                let pushed = 0;
+                for (let i = 0; i < list.length; i++) {
+                    const s = list[i];
+                    // Owner scoping: never upload the guest's conversations into
+                    // the account, and never upload another account's.
+                    if (s && s.owner && s.owner !== activeOwner()) continue;
+                    const data = s && s.id ? s : buildSessionData((s && s.messages) || []);
+                    if (!(data && data.messages && data.messages.length)) continue;
+                    if (await syncToCloud(data)) { ok = true; pushed++; }
+                }
+
+                if (ok) {
+                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, String(Date.now())); } catch (e) {}
+                    setCloudStatus('Synced ' + pushed + ' chat' + (pushed === 1 ? '' : 's'));
+                }
+                return ok;
             }
 
             function scheduleSync() {
@@ -2385,84 +2402,92 @@ function mmNeedsVisionModel() {
                 if (syncTimer) clearTimeout(syncTimer);
                 syncTimer = setTimeout(function() {
                     syncTimer = null;
-                    syncToCloud(buildSessionData(chatHistory.slice()));
+                    syncAllSessionsToCloud();
                 }, 1200);
             }
 
-            function renderCloudHistory(list) {
-                messagesWrapper.innerHTML = '';
-                messagesWrapper.classList.add('visible');
-                welcomeScreen.style.display = 'none';
-                chatStarted = true;
-                list.forEach(function(m) {
-                    // The cloud row uses `content`; locally built records use
-                    // `text`. Reading only one of them rendered synced
-                    // conversations as a column of empty bubbles.
-                    const text = (typeof m.text === 'string' && m.text !== '')
-                        ? m.text
-                        : (typeof m.content === 'string' ? m.content : '');
-
-                    const bubble = addMessage(m.role === 'user' ? 'user' : 'assistant', text, m.image
-                        ? { image: m.image }
-                        : undefined);
-                    if (bubble && bubble.element) {
-                        if (m.id) bubble.element.__clientId = m.id;
-                        if (m.createdAt) bubble.element.__createdAt = m.createdAt;
-                    }
-                });
-                for (let k = list.length - 1; k >= 0; k--) {
-                    if (list[k].role === 'user') {
-                        const text = (typeof list[k].text === 'string' && list[k].text !== '')
-                            ? list[k].text
-                            : (typeof list[k].content === 'string' ? list[k].content : '');
-                        lastTurn = { raw: text, files: [] };
-                        break;
-                    }
-                }
-                renderHistory();
-                isPinnedToBottom = true;
-                scrollToBottom(true);
-                updateScrollFab();
-            }
 
             // Pulls the most recent session for the signed-in user and mirrors it
             // into IndexedDB (same key/shape the UI already reads).
-            async function fetchFromCloud() {
+async function fetchFromCloud() {
                 const client = initSupabase();
                 if (!client || !supaUser) return false;
                 try {
+                    // Every conversation, not just the newest: the previous
+                    // limit(1) meant a signed-in user on a new device could
+                    // only ever restore a single thread and the rest looked
+                    // permanently lost.
                     const sRes = await client.from('chat_sessions')
                         .select('*')
-                        .order('updated_at', { ascending: false })
-                        .limit(1);
+                        .order('updated_at', { ascending: false });
                     if (sRes && sRes.error) throw sRes.error;
-                    const session = sRes && sRes.data && sRes.data[0];
-                    if (!session) { setCloudStatus('No cloud chats yet'); return false; }
 
-                    const mRes = await client.from('chat_messages')
-                        .select('*')
-                        .eq('session_id', session.id)
-                        .order('created_at', { ascending: true });
-                    if (mRes && mRes.error) throw mRes.error;
-                    const rows = (mRes && mRes.data) || [];
-                    const messages = rows.map(function(r) {
-                        return {
-                            id: r.id,
-                            role: r.role === 'user' ? 'user' : 'assistant',
-                            text: r.content || '',
-                            raw: r.raw_content || undefined,
-                            createdAt: r.created_at
+                    const all = (sRes && sRes.data) || [];
+                    if (!all.length) { setCloudStatus('No cloud chats yet'); return false; }
+
+                    let restored = 0;
+                    let added = 0;
+
+                    for (let i = 0; i < all.length; i++) {
+                        const s = all[i];
+                        if (!s || !s.id) continue;
+
+                        const mRes = await client.from('chat_messages')
+                            .select('*')
+                            .eq('session_id', s.id)
+                            .order('created_at', { ascending: true });
+                        if (mRes && mRes.error) throw mRes.error;
+
+                        const rows = (mRes && mRes.data) || [];
+                        if (!rows.length) continue;
+
+                        const messages = rows.map(function(r) {
+                            return {
+                                id: r.id,
+                                role: r.role === 'user' ? 'user' : 'assistant',
+                                text: r.content || '',
+                                raw: r.raw_content || undefined,
+                                createdAt: r.created_at
+                            };
+                        });
+
+                        restored += messages.length;
+
+                        // Written through the real session store so the sidebar,
+                        // owner scoping and persistence all behave normally.
+                        const existing = typeof findSessionIndex === 'function'
+                            ? findSessionIndex(s.id)
+                            : -1;
+                        const session = {
+                            id: s.id,
+                            title: s.title || 'Untitled',
+                            model: s.model || null,
+                            owner: activeOwner(),
+                            createdAt: s.created_at || s.updated_at || new Date().toISOString(),
+                            updatedAt: s.updated_at || s.created_at || new Date().toISOString(),
+                            messages: messages
                         };
-                    });
 
-                    chatHistory = messages.slice();
-                    await saveHistory(chatHistory);
-                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, session.id); } catch (e) {}
-                    renderCloudHistory(messages);
-                    setCloudStatus('Restored \\u00b7 ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
-                    return true;
+                        if (existing >= 0) {
+                            if (typeof sessions !== 'undefined' && sessions[existing]) {
+                                sessions[existing] = session;
+                            }
+                            await saveSession(session);
+                        } else {
+                            if (typeof sessions !== 'undefined' && Array.isArray(sessions)) sessions.push(session);
+                            await saveSession(session);
+                            added++;
+                        }
+                    }
+
+                    if (typeof refreshConversations === 'function') await refreshConversations();
+
+                    try { localStorage.setItem(CLOUD_SESSION_LS_KEY, all[0].id); } catch (e) {}
+                    setCloudStatus('Restored ' + added + ' chat' + (added === 1 ? '' : 's')
+                        + ' from the cloud');
+return restored > 0;
                 } catch (e) {
-                    setCloudStatus('Restore failed');
+                    setCloudStatus('Cloud restore failed');
                     return false;
                 }
             }
@@ -2483,7 +2508,7 @@ function mmNeedsVisionModel() {
                 if (signedIn) {
                     setCloudStatus('Signed in as ' + (supaUser.email || supaUser.id));
                 } else {
-                    setCloudStatus('Not connected — chats stay on this device.');
+                    setCloudStatus('Not connected - chats stay on this device.');
                 }
             }
 
@@ -2503,13 +2528,17 @@ function mmNeedsVisionModel() {
             }
 
             async function handleSignedIn() {
-                // New device / first login: adopt the cloud thread if local is empty.
-                const local = await loadHistory();
-                if (!local.length) {
-                    await fetchFromCloud();
-                } else if (!peekCloudSessionId()) {
-                    scheduleSync();
-                }
+                // Always pull. The previous guard only fetched when the local
+                // store was empty, so signing in on a device that already held
+                // one guest chat never merged the account's history in - the
+                // sidebar kept showing only local threads and the cloud chats
+                // stayed invisible until every local chat was deleted.
+                await fetchFromCloud();
+
+                // Push whatever exists locally but was never uploaded, so a
+                // first sign-in on a new account does not lose this device's
+                // history. Idempotent, and safe to run on every sign-in.
+                if (!peekCloudSessionId()) scheduleSync();
             }
 
             function initCloudSync() {
@@ -2522,13 +2551,10 @@ function mmNeedsVisionModel() {
                 if (login) login.addEventListener('click', loginWithGoogle);
                 if (logout) logout.addEventListener('click', logoutCloud);
                 if (now) now.addEventListener('click', async function() {
-                    const local = await loadHistory();
-                    if (local.length) {
-                        setCloudStatus('Syncing\\u2b26');
-                        await syncToCloud(buildSessionData(local));
-                    } else {
-                        await fetchFromCloud();
-                    }
+                    // "Sync now" must cover every stored conversation, not the
+                    // one currently open.
+                    const ok = await syncAllSessionsToCloud();
+                    if (!ok) await fetchFromCloud();
                 });
 
                 const client = initSupabase();
@@ -2725,7 +2751,7 @@ function mmNeedsVisionModel() {
                     typer.finish();
                     if (error && error.name === 'AbortError') {
                         // Keep whatever streamed before the user hit Stop.
-                        if (bubble) bubble.setText(bubble.getText() + '\n\n— stopped by you.');
+                        if (bubble) bubble.setText(bubble.getText() + '\n\n- stopped by you.');
                     } else if (error && error.code === 'missing_api_key') {
                         // The server refused before writing anything, so point
                         // at the setting that fixes it and keep the alert as the
@@ -2751,7 +2777,7 @@ function mmNeedsVisionModel() {
                     // Persist the finished turn locally (survives refresh/offline).
                     persistHistory();
                     // Auto-focus: cursor is ready for the next prompt the moment
-                    // the reply finishes (or is stopped) — no manual click needed.
+                    // the reply finishes (or is stopped) - no manual click needed.
                     chatInput.focus();
                 }
 
@@ -2892,7 +2918,7 @@ function mmNeedsVisionModel() {
                 isPinnedToBottom = true;
                 scrollToBottom(true);
 
-                const bubble = addMessage('assistant', 'Generating image\\u2b26');
+                const bubble = addMessage('assistant', 'Generating image...');
 
                 try {
                     const res = await fetch(API_BASE + '/image', {
@@ -2912,13 +2938,13 @@ function mmNeedsVisionModel() {
                     bubble.setImage(url, prompt);
                 } catch (error) {
                     if (error && error.name === 'AbortError') {
-                        bubble.setText('— stopped by you.');
+                        bubble.setText('- stopped by you.');
                     } else if (error && error.code === 'missing_api_key') {
                         bubble.element.remove();
                         showKeyAlert(error.model || 'image');
                     } else {
                         const message = (error && error.message) ? error.message : 'request failed.';
-                        bubble.setText('Sorry — ' + message);
+                        bubble.setText('Sorry - ' + message);
                     }
                 } finally {
                     typingIndicator.classList.remove('visible');
@@ -4077,7 +4103,7 @@ function applyTheme() {
             // ===== RAG: CLIENT-SIDE DOCUMENT EXTRACTION (PDF / TXT) =====
             // A lightweight, in-browser "retrieval" step: the chosen file's text is
             // extracted locally and folded into the next prompt as hidden context.
-            // Nothing is uploaded, and only the capped *text* is retained — the
+            // Nothing is uploaded, and only the capped *text* is retained - the
             // source File/ArrayBuffer is released as soon as extraction ends, so a
             // large PDF cannot pin memory.
             const RAG_MAX_CHARS = 120000;                 // ~30k tokens of context, hard cap
@@ -4182,24 +4208,24 @@ function applyTheme() {
             async function handleDocFile(file) {
                 if (!file || docReading) return;
                 if (file.size > RAG_MAX_BYTES) {
-                    flashDocError(file.name + ' — too large');
+                    flashDocError(file.name + ' - too large');
                     if (docInput) docInput.value = '';
                     return;
                 }
                 docReading = true;
-                renderDocIndicator(file.name, 'reading\\u2b26', 'loading');
+                renderDocIndicator(file.name, 'readingâ€¦', 'loading');
                 if (docInput) docInput.disabled = true;
                 try {
                     const text = await extractDocText(file);
                     if (!text) {
-                        flashDocError(file.name + ' — no text found');
+                        flashDocError(file.name + ' - no text found');
                         return;
                     }
                     ragDoc = { name: file.name, text: text };
                     renderDocIndicator(file.name, 'attached', 'ready');
                     updateSendState();
                 } catch (e) {
-                    flashDocError(file.name + ' — could not read');
+                    flashDocError(file.name + ' - could not read');
                 } finally {
                     docReading = false;
                     if (docInput) {
@@ -4371,7 +4397,7 @@ function applyTheme() {
                 if (key === 'account') refreshAccountPanel();
             };
 
-            // Sidebar footer gear button — quick access to the Safety panel.
+            // Sidebar footer gear button - quick access to the Safety panel.
             const btnSidebarSettings = document.getElementById('btnSidebarSettings');
             if (btnSidebarSettings) {
                 btnSidebarSettings.addEventListener('click', function() {
@@ -4427,7 +4453,7 @@ function applyTheme() {
 
             // MFA Banner Close
             // Both elements are optional (the banner is not always rendered),
-            // and the click handler touches mfaBanner, so it is guarded too —
+            // and the click handler touches mfaBanner, so it is guarded too -
             // a close button without a banner would otherwise throw on click.
             if (btnCloseBanner && mfaBanner) {
                 btnCloseBanner.addEventListener('click', () => {
@@ -4967,7 +4993,7 @@ function applyTheme() {
                 if (days.length > 0) {
                     let best = days[0];
                     days.forEach(function (d) { if (byDay[d] > byDay[best]) best = d; });
-                    setStat('statBusiest', best + ' — ' + byDay[best] + ' message(s)');
+                    setStat('statBusiest', best + ' - ' + byDay[best] + ' message(s)');
                 } else {
                     setStat('statBusiest', 'No activity yet.');
                 }
@@ -4987,7 +5013,7 @@ function applyTheme() {
                 }
                 setStat('statByRole', (userMessages + assistantMessages) === 0
                     ? 'No messages yet.'
-                    : userMessages + ' sent · ' + assistantMessages + ' received');
+                    : userMessages + ' sent Â· ' + assistantMessages + ' received');
 
                 const modelKeys = Object.keys(byModel).filter(function (k) { return k !== 'unknown'; });
                 setStat('statByModel', modelKeys.length === 0
@@ -4995,7 +5021,7 @@ function applyTheme() {
                     : modelKeys.sort(function (a, b) { return byModel[b] - byModel[a]; })
                         .slice(0, 4)
                         .map(function (k) { return modelLabelFor(k) + ' (' + byModel[k] + ')'; })
-                        .join(' · '));
+                        .join(' Â· '));
 
                 setStat('statFirstUsed', earliest === null ? 'No activity yet.' : new Date(earliest).toLocaleDateString());
                 setStat('statLastUsed', latest === null ? 'No activity yet.' : new Date(latest).toLocaleDateString());
@@ -5038,8 +5064,8 @@ const LANG_CODE_MAP = {
   "auto": "auto", "Auto-detect": "auto",
   "en": "en", "English (US)": "en",
   "id": "id", "Bahasa Indonesia": "id",
-  "es": "es", "Espa\\u00f1ol": "es",
-  "fr": "fr", "Fran\\u00e7ais": "fr",
+  "es": "es", "EspaÃ±ol": "es",
+  "fr": "fr", "FranÃ§ais": "fr",
   "de": "de", "Deutsch": "de",
   "ja": "ja", "\u65e5\u672c\u8a9e": "ja"
 };
@@ -5178,7 +5204,7 @@ initLanguage();
 
 // ====== Custom dropdown enhancer ======
 // Mengubah <select class="custom-select"> jadi dropdown custom bergaya gambar,
-// tanpa mengubah value/behavior JS lama (i18n, dsb) — select asli tetap disinkronkan.
+// tanpa mengubah value/behavior JS lama (i18n, dsb) - select asli tetap disinkronkan.
 
 function enhanceSelect(select) {
   const wrapper = select.closest('.select-wrapper');

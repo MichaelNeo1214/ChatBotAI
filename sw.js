@@ -14,7 +14,7 @@
    opened" with nothing to act on. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v6';
+const CACHE_NAME = 'chatbotai-static-v7';
 const OFFLINE_URL = '/index.html';
 const CDN_DOMPURIFY = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js';
 const CDN_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
@@ -86,6 +86,12 @@ self.addEventListener('fetch', function (event) {
 
   // API traffic must always reach the network.
   if (isSameOrigin && url.pathname.indexOf('/api/') === 0) return;
+
+  // The auth page is compiled in the browser by Babel Standalone
+  // (type="text/babel"), so a stale cached copy means the user runs old JS and
+  // silently gets bugs that were already fixed. It is small and rarely
+  // visited, so it is fetched network-first.
+  if (isSameOrigin && url.pathname.indexOf('/components/auth/') === 0) return;
 
   const isCdnAsset = url.href === CDN_DOMPURIFY
     || url.hostname === 'cdnjs.cloudflare.com'

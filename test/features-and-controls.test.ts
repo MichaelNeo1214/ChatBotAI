@@ -136,12 +136,22 @@ describe('voice panel is a real feature', () => {
 
 describe('offline and caching', () => {
   it('bumps the cache so new assets are actually fetched', () => {
-    has(sw, /const CACHE_NAME = 'chatbotai-static-v6'/, 'sw.js');
+    has(sw, /const CACHE_NAME = 'chatbotai-static-v7'/, 'sw.js');
     // Assert the behaviour, not the prose: a cache hit is returned from the
     // cache and the network refresh is issued in the background.
     has(sw, /addEventListener\('fetch'/, 'fetch handler');
     has(sw, /event\.waitUntil\(/, 'background revalidation');
     has(sw, /caches\.match\(/, 'cache lookup');
+  });
+
+  it('never caches the auth page, which is compiled by Babel in the browser', () => {
+    // type="text/babel" means a cached copy is executed as-is, so a stale
+    // entry silently runs old JS and hides fixes that already shipped.
+    has(sw, /url\.pathname\.indexOf\('\/components\/auth\/'\) === 0\) return;/, 'sw.js');
+    assert.ok(
+      !/\/components\/auth\//.test(sw.split('PRECACHE_URLS')[1]?.split(']')[0] ?? ''),
+      'the auth script must not be precached',
+    );
   });
 
   it('never caches API traffic', () => {

@@ -68,14 +68,14 @@ describe('encoding', () => {
 
   it('shows the reported cloud-status message with readable punctuation', () => {
     // Regression: this line previously rendered with mojibake (U+00E2 lead byte).
-    has(scriptJs, /Not connected \u2014 chats stay on this device\./, 'cloud status message');
+    has(scriptJs, /Not connected - chats stay on this device\./, 'cloud status message');
     lacks(scriptJs, /Not connected \u00e2/, 'cloud status message');
   });
 
   it('escapes the sidebar remove control instead of a mangled sign', () => {
-    // Regression: the multiplication sign was stored as "ÃƒÆ’Ã†â€™-", so the button
+    // Regression: the multiplication sign was stored as "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢-", so the button
     // rendered as three garbage characters.
-    lacks(scriptJs, /ÃƒÆ’Ã†â€™/, 'js/script.js');
+    lacks(scriptJs, /ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢/, 'js/script.js');
     has(scriptJs, /remove\.textContent = '\\u00d7'/, 'remove control');
   });
 });
@@ -156,35 +156,36 @@ describe('auth form', () => {
     has(authForm, /email\.trim\(\)\.toLowerCase\(\)/, 'auth form');
   });
 
-  it('defines PasswordField at module scope with props, not a closure', () => {
-    // Regression: defined inside LoginSignupComponent, the component type changed
-    // on every keystroke, so React remounted the input and stole focus while the
-    // user was still typing.
-    const moduleScope = /^const PasswordField = \(\{/m;
-    assert.ok(moduleScope.test(authForm), 'PasswordField must be defined at module level');
-    // Horizontal whitespace only: \s also matches newlines, which would let a
-    // column-0 definition match this and pass for a nested one.
-    assert.doesNotMatch(authForm, /^[ \t]+const PasswordField =/m, 'PasswordField is still nested inside a component');
+  it('inlines the password input so no component boundary can remount it', () => {
+    // Regression: the field was first a component defined inside the parent
+    // (new component type per keystroke -> React remounted it -> focus lost),
+    // then a child component that still sat on the render path. Inlining the
+    // element removes the boundary entirely, so nothing can tear it down.
+    lacks(authForm, /PasswordField/, 'auth form must not define or use a password component');
 
-    // Visibility arrives as a prop, so the component is a pure function of props.
-    has(authForm, /const PasswordField = \(\{ value, onChange, placeholder, autoComplete, minLength, show, onToggle \}\) => \(/, 'PasswordField signature');
-    has(authForm, /type=\{show \? "text" : "password"\}/, 'PasswordField');
-    has(authForm, /aria-label=\{show \? "Hide password" : "Show password"\}/, 'PasswordField');
-    has(authForm, /aria-pressed=\{show\}/, 'PasswordField');
-    // No closure over the parent's state.
-    has(authForm, /onClick=\{onToggle\}/, 'PasswordField');
-    lacks(authForm, /onClick=\{\(\) => setShowPassword/, 'PasswordField');
+    // Two real password inputs, one per form, each wired to the shared state.
+    const inputs = authForm.match(/type="password"/g) ?? [];
+    assert.equal(inputs.length, 2, 'expected a password input on both forms');
+
+    has(authForm, /value=\{password\}/, 'password input');
+    has(authForm, /onChange=\{e => setPassword\(e\.target\.value\)\}/, 'password input');
+    has(authForm, /autoComplete="current-password"/, 'login password');
+    has(authForm, /autoComplete="new-password" minLength=\{8\}/, 'signup password');
   });
 
-  it('passes visibility props at both call sites', () => {
-    assert.equal((authForm.match(/<PasswordField/g) ?? []).length, 2);
-    assert.equal(
-      (authForm.match(/show=\{showPassword\} onToggle=\{\(\) => setShowPassword\(v => !v\)\}/g) ?? []).length,
-      2,
-      'both call sites must pass show and onToggle',
-    );
-    has(authForm, /autoComplete="new-password" minLength=\{8\}/, 'signup password field');
-    has(authForm, /type="email"[\s\S]{0,120}\brequired\b/, 'email field');
+  it('keeps the show/hide toggle reachable', () => {
+    const toggles = authForm.match(/aria-pressed=\{showPassword\}/g) ?? [];
+    assert.equal(toggles.length, 2, 'both forms need a visibility toggle');
+    has(authForm, /onClick=\{\(\) => setShowPassword\(v => !v\)\}/, 'toggle');
+    has(authForm, /aria-label=\{showPassword \? "Hide password" : "Show password"\}/, 'toggle');
+  });
+
+  it('positions the toggle inside a relative wrapper', () => {
+    // Without a positioned ancestor the absolutely-placed button escapes the
+    // card and the caret sits under it.
+    const wrappers = authForm.match(/position: "relative", width: "100%"/g) ?? [];
+    assert.ok(wrappers.length >= 2, 'each password field needs a relative wrapper');
+    has(authForm, /paddingRight: "3\.25rem"/, 'input reserves room for the button');
   });
 });
 
