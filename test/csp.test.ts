@@ -44,10 +44,17 @@ describe('CSP does not break the auth page', () => {
     assert.match(main, /'self'/, 'main app script-src');
   });
 
-  it('the auth rule is listed before the catch-all so it wins', () => {
-    // Vercel applies the first matching rule; a later /(.*) rule would
-    // override the auth exception.
-    assert.equal(vercel.headers[0]?.source, '/components/auth/(.*)');
+  it('the auth rule is listed AFTER the catch-all so it actually applies', () => {
+    // Regression: Vercel applies every matching rule and the LAST one wins for
+    // a repeated header key. Listing the auth exception first meant the
+    // /(.*) catch-all overrode it, the strict policy was served on the auth
+    // page, and Babel's injected inline script was blocked: a blank page with
+    // "Either 'unsafe-inline' ... is required to enable inline execution".
+    const catchAll = vercel.headers.findIndex((h) => h.source === '/(.*)');
+    const auth = vercel.headers.findIndex((h) => h.source === '/components/auth/(.*)');
+    assert.ok(catchAll >= 0, 'catch-all rule missing');
+    assert.ok(auth >= 0, 'auth rule missing');
+    assert.ok(auth > catchAll, 'the auth rule must come after the catch-all to override it');
   });
 
   it('still allows the CDNs and Babel the auth page needs', () => {
