@@ -1,10 +1,10 @@
 /**
- * POST /api/image â€” generate one image from a text prompt (stateless).
+ * POST /api/image - generate one image from a text prompt (stateless).
  *
  * Sibling of /api/chat: same deploy target, same BYOK trust model (the key is
  * read from a request header, used once, and never stored). Unlike chat this is
- * a plain JSON request/response â€” image APIs return a base64 payload, not an
- * SSE token stream â€” so the client gets `{ image: { dataUrl, mimeType } }`.
+ * a plain JSON request/response - image APIs return a base64 payload, not an
+ * SSE token stream - so the client gets `{ image: { dataUrl, mimeType } }`.
  *
  * Body:
  *   {

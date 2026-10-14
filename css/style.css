@@ -2546,6 +2546,17 @@
 }
 .setting-row:last-child{ border-bottom:none; }
 .setting-label{ font-size:14px; color:#e4e4e7; }
+/* Read-aloud: the button doubles as the stop control while speaking. */
+.btn-msg-action.is-speaking{
+  color:var(--accent-color);
+  border-color:var(--accent-color);
+}
+.btn-msg-action.is-speaking svg{ animation:tts-pulse 1.1s ease-in-out infinite; }
+@keyframes tts-pulse{ 0%,100%{ opacity:1 } 50%{ opacity:.45 } }
+@media (prefers-reduced-motion:reduce){
+  .btn-msg-action.is-speaking svg{ animation:none; }
+}
+
 .setting-desc{ font-size:12.5px; color:#8a8a92; margin-top:3px; }
 
 /* A long account email is the only .setting-desc that can exceed the space

@@ -83,11 +83,14 @@ describe('session owner isolation', () => {
   it('clears the persisted active-conversation pointer on reset', () => {
     // A bare `activeConversationId = null` leaves the localStorage pointer
     // behind, and the next boot tries to restore an invisible thread.
-    has(
-      scriptJs,
-      /function resetChatView\(\)[\s\S]{0,320}setActiveConversationId\(null\)/,
-      'resetChatView',
+    const reset = scriptJs.slice(
+      scriptJs.indexOf('function resetChatView()'),
+      scriptJs.indexOf('function renderHistory('),
     );
+    assert.ok(reset.length > 0, 'resetChatView not found');
+    has(reset, /setActiveConversationId\(null\)/, 'resetChatView');
+    // It must not go back to a bare null assignment.
+    lacks(reset, /^\s*activeConversationId = null;/m, 'resetChatView');
   });
 
   it('keeps both owners data instead of deleting on sign-out', () => {

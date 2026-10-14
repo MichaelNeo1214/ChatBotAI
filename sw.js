@@ -14,7 +14,7 @@
    opened" with nothing to act on. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v5';
+const CACHE_NAME = 'chatbotai-static-v6';
 const OFFLINE_URL = '/index.html';
 const CDN_DOMPURIFY = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js';
 const CDN_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
@@ -29,6 +29,7 @@ const PRECACHE_URLS = [
   '/css/style.css',
   '/js/markdown-math.js',
   '/js/settings.js',
+  '/js/voice.js',
   '/js/share.js',
   '/js/share-view.js',
   '/js/lightbox.js',

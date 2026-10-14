@@ -39,7 +39,10 @@
         temperature: { min: 0, max: 2, step: 0.05, default: null },
         topP: { min: 0.01, max: 1, step: 0.01, default: null },
         maxTokens: { min: 1, max: 64000, step: 256, default: null },
-        systemPrompt: { max: 8000, default: '' }
+        systemPrompt: { max: 8000, default: '' },
+        // Web Speech synthesis accepts roughly 0.1-10, but anything past ~3 is
+        // unintelligible; the UI only offers 0.75-1.5.
+        ttsRate: { min: 0.5, max: 2, step: 0.05, default: 1 }
     };
 
     var DEFAULTS = {
@@ -50,7 +53,13 @@
         topP: null,
         maxTokens: null,
         sendOnEnter: true,
-        autoScroll: true
+        autoScroll: true,
+        // Browser text-to-speech. Empty voice means "let the engine choose",
+        // which is the only portable option: the available voice list is
+        // platform-specific and changes as voices finish downloading.
+        ttsEnabled: false,
+        ttsVoice: '',
+        ttsRate: 1
     };
 
     function clampNumber(value, spec) {
@@ -68,6 +77,16 @@
         var out = {};
 
         out.theme = THEMES.indexOf(input.theme) !== -1 ? input.theme : DEFAULTS.theme;
+
+        // Text-to-speech preferences. A stored voice name that no longer exists
+        // (platform change, different device) is kept as-is but simply fails to
+        // match at play time, which falls back to the engine default.
+        out.ttsEnabled = input.ttsEnabled === true;
+        out.ttsVoice = typeof input.ttsVoice === 'string' ? input.ttsVoice.slice(0, 120) : DEFAULTS.ttsVoice;
+        out.ttsRate = clampNumber(input.ttsRate, LIMITS.ttsRate) ?? DEFAULTS.ttsRate;
+        if (input.ttsRate === undefined || input.ttsRate === null || input.ttsRate === '') {
+            out.ttsRate = DEFAULTS.ttsRate;
+        }
         out.model = typeof input.model === 'string' && input.model.trim() !== ''
             ? input.model.trim()
             : DEFAULTS.model;

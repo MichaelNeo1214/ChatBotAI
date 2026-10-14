@@ -1,5 +1,5 @@
 /**
- * Authentication Ã¢â‚¬â€ Vercel Serverless Function.
+ * Authentication - Vercel Serverless Function.
  *
  * Handles the same contract the Express build serves from src/routes/auth.ts,
  * because the frontend calls these unconditionally:
@@ -26,7 +26,7 @@
  *
  * The Express build in src/ keeps users in node:sqlite. A serverless function
  * has no writable filesystem and no state between invocations, so nothing in
- * api/ reads or writes one Ã¢â‚¬â€ the handler holds no storage of any kind.
+ * api/ reads or writes one - the handler holds no storage of any kind.
  *
  * ## When Supabase is not configured
  *

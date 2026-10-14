@@ -13,7 +13,7 @@ const authApi = read('api/auth/index.ts');
 
 /**
  * Windows-1252 mojibake: UTF-8 bytes were decoded once as cp1252 and written
- * back, which is how "—" (E2 80 94) becomes "â€”".
+ * back, which is how "-" (E2 80 94) becomes "-".
  */
 const CP1252_HIGH = { 0x80: 0x20ac, 0x82: 0x201a, 0x83: 0x192, 0x84: 0x201e, 0x85: 0x2026, 0x86: 0x2020, 0x87: 0x2021, 0x88: 0x2c6, 0x89: 0x2030, 0x8a: 0x160, 0x8b: 0x2039, 0x8c: 0x152, 0x8e: 0x17d, 0x91: 0x2018, 0x92: 0x2019, 0x93: 0x201c, 0x94: 0x201d, 0x95: 0x2022, 0x96: 0x2013, 0x97: 0x2014, 0x98: 0x2dc, 0x99: 0x2122, 0x9a: 0x161, 0x9b: 0x203a, 0x9c: 0x153, 0x9e: 0x17e, 0x9f: 0x178 };
 const CP1252_REVERSE: Record<number, number> = {};
@@ -67,15 +67,15 @@ describe('encoding', () => {
   });
 
   it('shows the reported cloud-status message with readable punctuation', () => {
-    // Regression: "Not connected â€” chats stay on this device."
-    has(scriptJs, /Not connected [—\-] chats stay on this device\./, 'cloud status message');
-    lacks(scriptJs, /Not connected â/, 'cloud status message');
+    // Regression: this line previously rendered with mojibake (U+00E2 lead byte).
+    has(scriptJs, /Not connected \u2014 chats stay on this device\./, 'cloud status message');
+    lacks(scriptJs, /Not connected \u00e2/, 'cloud status message');
   });
 
   it('escapes the sidebar remove control instead of a mangled sign', () => {
-    // Regression: the multiplication sign was stored as "Ã—", so the button
+    // Regression: the multiplication sign was stored as "ÃƒÆ’Ã†â€™-", so the button
     // rendered as three garbage characters.
-    lacks(scriptJs, /Ã/, 'js/script.js');
+    lacks(scriptJs, /ÃƒÆ’Ã†â€™/, 'js/script.js');
     has(scriptJs, /remove\.textContent = '\\u00d7'/, 'remove control');
   });
 });

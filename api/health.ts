@@ -1,5 +1,5 @@
 /**
- * GET /api/health â€” Vercel Serverless Function.
+ * GET /api/health - Vercel Serverless Function.
  *
  * Mirrors the Express route of the same name so the frontend behaves
  * identically in both deployments. The UI reads `demo` to decide whether to

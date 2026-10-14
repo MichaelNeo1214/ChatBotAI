@@ -857,6 +857,9 @@
             }
 
             function resetChatView() {
+                // A reply still being read aloud must not keep talking after the
+                // user clears the thread or switches conversation.
+                if (typeof window !== 'undefined' && window.ChatBotVoice) window.ChatBotVoice.stop();
                 // Via the setter, not a bare null: this also clears the
                 // persisted pointer. Leaving it behind makes the next boot try
                 // to restore a thread that the current owner cannot see.
@@ -1044,7 +1047,10 @@
                 + '**Account** — sign in to keep your chat history on your account. Signing out clears the view; signing back in reloads your saved chats.';
 
             function showHelpChat() {
-                activeConversationId = null;
+                // Same reason as resetChatView: the persisted pointer must go too,
+                // or the help chat's "no active conversation" state is undone by
+                // the next page load.
+                setActiveConversationId(null);
                 chatStarted = true;
                 welcomeScreen.style.display = 'none';
                 messagesWrapper.classList.add('visible');
@@ -3019,9 +3025,17 @@ function mmNeedsVisionModel() {
                 const editAction = '<button class="btn-msg-action" type="button" data-action="edit" aria-label="Edit message">'
                     + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit</button>';
 
+                // Read aloud. The raw text travels in data-tts-text (escaped for attribute
+                // context) because the rendered body is sanitised HTML that no
+                // speech engine can read sensibly. Offered on assistant replies
+                // only: hearing your own question back is never what anyone wants.
+                const speakAction = '<button class="btn-msg-action" type="button" data-tts-toggle'
+                    + ' data-tts-text="' + escapeHtmlAttr(text) + '" aria-pressed="false" aria-label="Read aloud">'
+                    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg> Read aloud</button>';
+
                 const actions = role === 'user'
                     ? copyAction + editAction
-                    : copyAction + regenerateAction + likeAction + dislikeAction;
+                    : copyAction + speakAction + regenerateAction + likeAction + dislikeAction;
 
                 msg.innerHTML = '<div class="message-content">'
                     + '<div class="message-avatar">' + avatarIcon + '</div>'
@@ -3066,6 +3080,13 @@ function mmNeedsVisionModel() {
                         }, 2000);
                     });
                 });
+
+                // Read-aloud is opt-in per session and delegated to the voice module, which
+                // owns the speech synthesiser. Attached after the markup exists.
+                if (typeof window !== 'undefined' && window.ChatBotVoice) {
+                    var speakBtn = msg.querySelector('[data-tts-toggle]');
+                    if (speakBtn) window.ChatBotVoice.attach(speakBtn);
+                }
 
                 // Thumbs up / down are mutually exclusive toggles.
                 const likeBtn = msg.querySelector('[data-action="like"]');
@@ -3203,7 +3224,8 @@ function mmNeedsVisionModel() {
             function sanitizeHtml(html) {
                 if (typeof window !== 'undefined' && window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
                     return window.DOMPurify.sanitize(html, {
-                        ADD_ATTR: ['target', 'rel', 'data-code-copy', 'data-action', 'aria-hidden'],
+                        ADD_ATTR: ['target', 'rel', 'data-code-copy', 'data-action', 'aria-hidden',
+                            'data-tts-toggle', 'data-tts-text'],
                         // KaTeX emits an <annotation encoding="application/x-tex">
                         // copy of the source inside its MathML. Nothing renders
                         // it, so it is dropped along with any other injected node.
@@ -3765,7 +3787,12 @@ function mmNeedsVisionModel() {
             }
 
             /** Applies the current preference; returns whether dark is in effect. */
-            function applyTheme() {
+            // Declared explicitly rather than relying on legacy window[id] named access,
+// which happens to expose this element today and is not guaranteed. Without
+// the declaration every use below is an undeclared identifier.
+const appearanceSelect = document.getElementById('appearanceSelect');
+
+function applyTheme() {
                 if (!settings) return false;
                 const dark = settings.applyTheme();
                 syncAppearanceSelect(settings.get().theme);
@@ -3908,8 +3935,48 @@ function mmNeedsVisionModel() {
                 }
             }
 
+// Instruction presets. Each one writes the same system-prompt field the
+            // Model & Behaviour panel edits, so the two controls can never
+            // disagree about what the model is being told.
+            var SKILL_PROMPTS = {
+                'concise': 'Answer as briefly as possible. Skip preamble, filler and summaries. Give only the substance.',
+                'code-review': 'You are a meticulous code reviewer. Point out correctness bugs, security issues, race conditions and unhandled error paths first. Quote the specific line, then give the fix.',
+                'explain': 'Explain like the reader is smart but new to this topic. Define jargon on first use and give one concrete example.',
+                'translate': 'Translate the user\'s text into the language they ask for. Preserve formatting and tone. Reply with the translation only.'
+            };
+
+            function applySkill(key) {
+                var settings = window.ChatBotSettings;
+                if (!settings) return;
+
+                var prompt = Object.prototype.hasOwnProperty.call(SKILL_PROMPTS, key)
+                    ? SKILL_PROMPTS[key]
+                    : '';
+                settings.set({ systemPrompt: prompt });
+
+                var field = document.getElementById('systemPromptInput');
+                if (field) field.value = prompt;
+
+                var count = document.getElementById('systemPromptCount');
+                if (count) count.textContent = prompt.length + ' / 8000';
+
+                if (typeof notify === 'function') {
+                    notify(prompt === ''
+                        ? 'Skill cleared'
+                        : 'Skill applied: ' + key.replace(/-/g, ' '));
+                }
+            }
+
             function handlePlusChoice(item) {
-                const label = (item.textContent || '').trim();
+                // A skill rewrites the system prompt; it is never injected into
+                // the user's message as literal text.
+                var skill = item.getAttribute('data-skill');
+                if (skill !== null && skill !== '') {
+                    applySkill(skill);
+                    return;
+                }
+
+                var label = (item.textContent || '').trim();
                 if (!label) return;
                 chatInput.value = (chatInput.value ? chatInput.value.replace(/\s+$/, '') + ' ' : '') + '[' + label + '] ';
                 updateSendState();

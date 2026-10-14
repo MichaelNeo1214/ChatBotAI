@@ -70,7 +70,7 @@ async function load(): Promise<Handler> {
   return handler as unknown as Handler;
 }
 
-describe('api/auth â€” Supabase not configured', () => {
+describe('api/auth - Supabase not configured', () => {
   const saved = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_ANON_KEY };
 
   beforeEach(() => {
@@ -116,7 +116,7 @@ describe('api/auth â€” Supabase not configured', () => {
   });
 });
 
-describe('api/auth â€” routing and guards', () => {
+describe('api/auth - routing and guards', () => {
   const saved = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_ANON_KEY };
 
   beforeEach(() => {
@@ -215,11 +215,11 @@ describe('api/auth â€” routing and guards', () => {
  *
  * The reported symptom was a 502 on signup while Supabase showed the user was
  * created. A 502 means the invocation never produced a response, which happens
- * when the platform kills a function that outlives maxDuration â€” not when code
+ * when the platform kills a function that outlives maxDuration - not when code
  * throws. So the contract these tests pin down is: whatever Supabase does, this
  * handler answers, and it answers with a status that names the real cause.
  */
-describe('api/auth â€” upstream failures answer cleanly', () => {
+describe('api/auth - upstream failures answer cleanly', () => {
   const saved = {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_ANON_KEY,
@@ -261,7 +261,7 @@ describe('api/auth â€” upstream failures answer cleanly', () => {
  * anything. What must not regress is that the client is configured safely for a
  * runtime with no storage and no clock.
  */
-describe('api/auth — client configuration', () => {
+describe('api/auth - client configuration', () => {
   const source = () => readFileSync(path.join(process.cwd(), 'api', 'auth', 'index.ts'), 'utf8');
 
   it('declares @supabase/supabase-js as a runtime dependency', () => {
@@ -314,7 +314,7 @@ describe('api/auth — client configuration', () => {
     assert.match(code, /import \{ createClient, type SupabaseClient \} from '@supabase\/supabase-js';/);
   });
 });
-describe('api/auth â€” always responds', () => {
+describe('api/auth - always responds', () => {
   const saved = {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_ANON_KEY,
@@ -364,7 +364,7 @@ describe('api/auth â€” always responds', () => {
     ]);
 
     assert.notEqual(outcome, guard, 'the handler must settle, not hang');
-    // With no body it cannot validate an email, so it answers 400 â€” not a hang.
+    // With no body it cannot validate an email, so it answers 400 - not a hang.
     assert.equal(captured.status, 400);
     assert.match(captured.body, /invalid_email/);
   });

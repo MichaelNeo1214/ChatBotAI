@@ -214,26 +214,17 @@
                         </button>
 
                         <div class="plus-option-wrapper">
-                            <button class="plus-option" aria-label="Plugin" data-submenu="pluginSubmenu">
-                                <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></span>
-                                <span class="plus-name" data-i18n="plugin">Plugin</span>
-                                <svg class="plus-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                            </button>
-                            <div class="plus-submenu" id="pluginSubmenu">
-                                <button class="dropdown-item" data-value="plugin-1">Plugin A</button>
-                                <button class="dropdown-item" data-value="plugin-2">Plugin B</button>
-                            </div>
-                        </div>
-
-                        <div class="plus-option-wrapper">
-                            <button class="plus-option" aria-label="Skill" data-submenu="skillSubmenu">
+                            <button class="plus-option" aria-label="Skills" data-submenu="skillSubmenu">
                                 <span class="plus-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
-                                <span class="plus-name" data-i18n="skill">Skill</span>
+                                <span class="plus-name" data-i18n="skill">Skills</span>
                                 <svg class="plus-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                             </button>
                             <div class="plus-submenu" id="skillSubmenu">
-                                <button class="dropdown-item" data-value="skill-1">Skill A</button>
-                                <button class="dropdown-item" data-value="skill-2">Skill B</button>
+                                <button class="dropdown-item" data-skill="concise">Concise answers</button>
+                                <button class="dropdown-item" data-skill="code-review">Code reviewer</button>
+                                <button class="dropdown-item" data-skill="explain">Explain simply</button>
+                                <button class="dropdown-item" data-skill="translate">Translator</button>
+                                <button class="dropdown-item" data-skill="clear">No skill</button>
                             </div>
                         </div>
                     </div>
@@ -710,10 +701,7 @@
         <span class="setting-label">Voice</span>
         <div class="select-wrapper">
           <select class="custom-select" id="voiceSelect">
-            <option value="Ember">Ember</option>
-            <option value="Sky">Sky</option>
-            <option value="Sol">Sol</option>
-            <option value="Nova">Nova</option>
+            <option value="">Automatic</option>
           </select>
         </div>
       </div>
@@ -904,6 +892,7 @@
     <script src="js/markdown-math.js"></script>
     <!-- Single source of truth for every user preference. -->
     <script src="js/settings.js"></script>
+<script src="js/voice.js"></script>
     <!-- Share-link encoding, parsing and client-side routing. -->
     <script src="js/share.js"></script>
     <!-- Read-only shared-conversation view; renders on load and on hashchange. -->
