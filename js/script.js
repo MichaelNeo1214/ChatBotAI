@@ -4980,6 +4980,11 @@ function applyTheme() {
                 bind('btnClearLocalData', confirmAndClearLocalData);
                 bind('btnSettingsSignOut', function () { doSignOut(false); });
                 bind('btnDeleteAccount', function () { deleteAccount(); });
+                // The Data & privacy panel carries a second, separately
+                // labelled control. It used to reuse the Account panel's id, so
+                // getElementById only ever returned one of the two and this
+                // button did nothing when clicked.
+                bind('btnDeleteAccountPrivacy', function () { deleteAccount(); });
             }
 
 // ===== USAGE / ANALYTICS =====

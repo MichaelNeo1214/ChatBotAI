@@ -103,10 +103,19 @@ export function createApp() {
   // page is an external file, so no inline source is needed, and connect-src
   // stays broad enough for BYOK providers on any https host.
   app.use((req: Request, res: Response, next: NextFunction) => {
+    // The auth page compiles JSX in the browser with Babel Standalone, which
+    // injects the transformed source as a new inline <script>. That is an
+    // inline source, so this path needs 'unsafe-inline'; the main app, whose
+    // scripts are all external files, keeps the stricter policy below.
+    const isAuthPage = req.path.indexOf('/components/auth/') === 0;
+    const scriptSrc = isAuthPage
+      ? "'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com"
+      : "'self' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com";
+
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; " +
-        "script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; " +
+        `script-src ${scriptSrc}; ` +
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
         "font-src 'self' data: https://cdnjs.cloudflare.com; " +
         "img-src 'self' data: blob: https:; " +
