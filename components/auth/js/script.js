@@ -291,7 +291,8 @@ const GoogleIcon = (
                                     <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
                                         value={email} onChange={e => setEmail(e.target.value)} />
                                     <div style={{ position: "relative", width: "100%" }}>
-                                    <input style={{ ...input, paddingRight: "3.25rem" }} type="password"
+                                    <input style={{ ...input, paddingRight: "3.25rem" }}
+                                        type={showPassword ? "text" : "password"}
                                         placeholder="Password" autoComplete="current-password" required
                                         value={password}
                                         onChange={e => setPassword(e.target.value)} />
@@ -332,7 +333,8 @@ const GoogleIcon = (
                                     <input style={input} type="email" placeholder="name@work-email.com" autoComplete="email" required
                                         value={email} onChange={e => setEmail(e.target.value)} />
                                     <div style={{ position: "relative", width: "100%" }}>
-                                    <input style={{ ...input, paddingRight: "3.25rem" }} type="password"
+                                    <input style={{ ...input, paddingRight: "3.25rem" }}
+                                        type={showPassword ? "text" : "password"}
                                         placeholder="Password (at least 8 characters)" autoComplete="new-password" minLength={8} required
                                         value={password}
                                         onChange={e => setPassword(e.target.value)} />

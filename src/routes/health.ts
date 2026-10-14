@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.ts';
 import { DEFAULT_MODEL_LABEL } from '../providers/presets.ts';
 import { provider } from '../providers/index.ts';
+import { cleanSupabaseKey, cleanSupabaseUrl, supabaseIsConfigured } from '../supabase-url.ts';
 
 export const healthRouter = Router();
 
@@ -30,6 +31,22 @@ healthRouter.get('/', (_req, res) => {
      * the frontend is allowed to ask for the list without producing a 404.
      */
     conversations: true,
+    /**
+     * Browser cloud config. The frontend used to carry a hardcoded
+     * placeholder, which made sync silently dead everywhere. The anon key is
+     * publishable by design and RLS protects the rows; the service-role key is
+     * never included, because it would bypass RLS entirely.
+     */
+    supabase: supabaseIsConfigured()
+      ? {
+          url: cleanSupabaseUrl(
+            process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+          ),
+          anonKey: cleanSupabaseKey(
+            process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+          ),
+        }
+      : null,
     uptimeSeconds: Math.round(process.uptime()),
   });
 });

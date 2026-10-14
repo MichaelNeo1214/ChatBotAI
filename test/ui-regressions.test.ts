@@ -163,8 +163,8 @@ describe('auth form', () => {
     // element removes the boundary entirely, so nothing can tear it down.
     lacks(authForm, /PasswordField/, 'auth form must not define or use a password component');
 
-    // Two real password inputs, one per form, each wired to the shared state.
-    const inputs = authForm.match(/type="password"/g) ?? [];
+    // Two real password fields, one per form, each wired to the shared state.
+    const inputs = authForm.match(/type=\{showPassword \? "text" : "password"\}/g) ?? [];
     assert.equal(inputs.length, 2, 'expected a password input on both forms');
 
     has(authForm, /value=\{password\}/, 'password input');

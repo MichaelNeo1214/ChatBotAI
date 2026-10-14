@@ -13,7 +13,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { config } from '../src/config.ts';
 import { DEFAULT_MODEL_LABEL } from '../src/providers/presets.ts';
 import { isDemoProvider } from '../src/providers/index.ts';
-import { supabaseIsConfigured } from '../src/supabase-url.ts';
+import { cleanSupabaseKey, cleanSupabaseUrl, supabaseIsConfigured } from '../src/supabase-url.ts';
 
 type Req = IncomingMessage;
 type Res = ServerResponse;
@@ -65,6 +65,24 @@ export default function handler(req: Req, res: Res): void {
        * so this is always false here and the frontend stops asking for a list
        * endpoint that does not exist.
        */
+      // The browser needs the project URL and the publishable anon key to talk to
+            // Supabase directly. The anon key is public by design and Row Level
+            // Security is what protects the rows.
+            //
+            // The service-role key is NEVER returned here. It bypasses RLS, so
+            // handing it to a browser would expose every row in the project to
+            // anyone who opened devtools. If only the service role is set, the
+            // browser simply gets no cloud config and sync stays off.
+            supabase: supabaseIsConfigured()
+                ? {
+                    url: cleanSupabaseUrl(
+                        process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+                    ),
+                    anonKey: cleanSupabaseKey(
+                        process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+                    ),
+                }
+                : null,
       conversations: false,
       uptimeSeconds: Math.round(process.uptime()),
     }),

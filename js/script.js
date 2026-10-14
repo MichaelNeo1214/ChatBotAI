@@ -906,6 +906,12 @@
                             auth: !!(info && info.auth === true),
                             conversations: !!(info && info.conversations === true)
                         };
+                        // The anon key is publishable by design; RLS is what
+                        // protects the rows.
+                        if (info && info.supabase && typeof info.supabase.url === 'string') {
+                            SUPA_URL = info.supabase.url;
+                            SUPA_KEY = typeof info.supabase.anonKey === 'string' ? info.supabase.anonKey : '';
+                        }
                     }
                 } catch (e) {
                     // Offline or cold-starting. Leave null so the next call retries.
@@ -2220,11 +2226,41 @@ function mmNeedsVisionModel() {
             // Setup: paste your project URL + anon key below (or inject
             // window.CHATBOT_SUPABASE_URL / window.CHATBOT_SUPABASE_ANON_KEY),
             // then run supabase/schema.sql in the Supabase SQL editor.
-            const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
-            const SUPABASE_ANON_KEY = 'YOUR-PUBLIC-ANON-KEY';
-            const SUPA_URL = window.CHATBOT_SUPABASE_URL || SUPABASE_URL;
-            const SUPA_KEY = window.CHATBOT_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
-            const CLOUD_SESSION_LS_KEY = 'chatbotai_cloud_session_id';
+            // Supabase connection details. These used to be hardcoded placeholders
+// ("YOUR-PROJECT-REF"), which meant cloud sync silently never started on any
+// deployment: cloudConfigured() rejected the placeholder and every sync call
+// returned early. They are now read from /api/health, which already reports
+// whether Supabase is configured, so there is no second place to keep in sync
+// and no secret to bake into the HTML.
+let SUPA_URL = '';
+let SUPA_KEY = '';
+let SUPA_SDK_LOADED = false;
+const CLOUD_SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+
+            // Loads a script once and resolves when it is ready. Needed for the
+            // Supabase browser SDK, which is fetched on demand rather than
+            // blocking first paint for a feature most visitors never use.
+            function loadScript(src) {
+                return new Promise(function (resolve, reject) {
+                    const existing = document.querySelector('script[data-src="' + src + '"]');
+                    if (existing) {
+                        if (existing.dataset.loaded === 'true') { resolve(); return; }
+                        existing.addEventListener('load', function () { resolve(); });
+                        existing.addEventListener('error', function () { reject(new Error('load failed')); });
+                        return;
+                    }
+                    const el = document.createElement('script');
+                    el.src = src;
+                    el.async = true;
+                    el.crossOrigin = 'anonymous';
+                    el.dataset.src = src;
+                    el.addEventListener('load', function () { el.dataset.loaded = 'true'; resolve(); });
+                    el.addEventListener('error', function () { reject(new Error('load failed')); });
+                    document.head.appendChild(el);
+                });
+            }
+
+const CLOUD_SESSION_LS_KEY = 'chatbotai_cloud_session_id';
 
             let supaClient = null;
             let supaUser = null;
@@ -2256,6 +2292,17 @@ function mmNeedsVisionModel() {
             function initSupabase() {
                 if (supaClient) return supaClient;
                 if (!cloudConfigured()) return null;
+                // The SDK is loaded from a CDN on demand. Without this the
+                // client was always null, so signing in did nothing.
+                if (!window.supabase && !SUPA_SDK_LOADED) {
+                    SUPA_SDK_LOADED = true;
+                    loadScript(CLOUD_SUPABASE_SDK).then(function () {
+                        initCloudSync();
+                    }).catch(function () {
+                        setCloudStatus('Cloud unavailable');
+                    });
+                    return null;
+                }
                 const lib = window.supabase;
                 if (!lib || typeof lib.createClient !== 'function') return null;
                 try {
@@ -2358,7 +2405,7 @@ function mmNeedsVisionModel() {
                     const msgRes = await client.from('chat_messages').upsert(rows, { onConflict: 'id' });
                     if (msgRes && msgRes.error) throw msgRes.error;
 
-                    setCloudStatus('Synced · ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
+                    setCloudStatus('Synced Â· ' + messages.length + ' message' + (messages.length === 1 ? '' : 's'));
                     return true;
                 } catch (e) {
                     setCloudStatus('Sync failed - will retry');
@@ -2574,6 +2621,18 @@ return restored > 0;
                     // Deferred: awaiting inside this callback can deadlock the auth lock.
                     setTimeout(function() {
                         if (event === 'SIGNED_IN') handleSignedIn();
+                        // Signing out must empty the view: the sidebar is a
+                        // projection of the session store, and those records
+                        // belong to the account that just left. Nothing is
+                        // deleted here, so signing back in restores them.
+                        else if (event === 'SIGNED_OUT') {
+                            supaClient = null;
+                            supaReady = false;
+                            resetChatView();
+                            sessions = [];
+                            if (typeof conversations !== 'undefined') conversations = [];
+                            refreshConversations();
+                        }
                     }, 0);
                 });
             }
@@ -4213,7 +4272,7 @@ function applyTheme() {
                     return;
                 }
                 docReading = true;
-                renderDocIndicator(file.name, 'readingâ€¦', 'loading');
+                renderDocIndicator(file.name, 'readingÃ¢â‚¬Â¦', 'loading');
                 if (docInput) docInput.disabled = true;
                 try {
                     const text = await extractDocText(file);
@@ -5013,7 +5072,7 @@ function applyTheme() {
                 }
                 setStat('statByRole', (userMessages + assistantMessages) === 0
                     ? 'No messages yet.'
-                    : userMessages + ' sent Â· ' + assistantMessages + ' received');
+                    : userMessages + ' sent Ã‚Â· ' + assistantMessages + ' received');
 
                 const modelKeys = Object.keys(byModel).filter(function (k) { return k !== 'unknown'; });
                 setStat('statByModel', modelKeys.length === 0
@@ -5021,7 +5080,7 @@ function applyTheme() {
                     : modelKeys.sort(function (a, b) { return byModel[b] - byModel[a]; })
                         .slice(0, 4)
                         .map(function (k) { return modelLabelFor(k) + ' (' + byModel[k] + ')'; })
-                        .join(' Â· '));
+                        .join(' Ã‚Â· '));
 
                 setStat('statFirstUsed', earliest === null ? 'No activity yet.' : new Date(earliest).toLocaleDateString());
                 setStat('statLastUsed', latest === null ? 'No activity yet.' : new Date(latest).toLocaleDateString());
@@ -5064,8 +5123,8 @@ const LANG_CODE_MAP = {
   "auto": "auto", "Auto-detect": "auto",
   "en": "en", "English (US)": "en",
   "id": "id", "Bahasa Indonesia": "id",
-  "es": "es", "EspaÃ±ol": "es",
-  "fr": "fr", "FranÃ§ais": "fr",
+  "es": "es", "EspaÃƒÂ±ol": "es",
+  "fr": "fr", "FranÃƒÂ§ais": "fr",
   "de": "de", "Deutsch": "de",
   "ja": "ja", "\u65e5\u672c\u8a9e": "ja"
 };
