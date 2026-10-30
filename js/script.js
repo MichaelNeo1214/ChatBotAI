@@ -3122,10 +3122,18 @@ return restored > 0;
                     ? copyAction + editAction
                     : copyAction + speakAction + regenerateAction + likeAction + dislikeAction;
 
+                // Format waktu pesan (HH:mm) untuk ditampilkan di setiap bubble
+                var msgTime = '';
+                try {
+                    var _d = new Date(msg.__createdAt || new Date().toISOString());
+                    msgTime = _d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } catch (e) {}
+
                 msg.innerHTML = '<div class="message-content">'
                     + '<div class="message-avatar">' + avatarIcon + '</div>'
                     + '<div class="message-body">'
-                    + '<div class="message-sender">' + senderName + '</div>'
+                    + '<div class="message-sender">' + senderName
+                    + '<span class="message-time">' + msgTime + '</span></div>'
                     + '<div class="message-text">' + formattedText + '</div>'
                     + '<div class="message-actions">' + actions + '</div>'
                     + '</div></div>';
