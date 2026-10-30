@@ -20,10 +20,9 @@ function cspFor(source: string): string {
   return header.value;
 }
 
-function scriptSrc(csp: string): string {
-  const match = /script-src ([^;]*)/.exec(csp);
-  assert.ok(match, 'CSP has no script-src');
-  return match[1] ?? '';
+function directive(csp: string, name: string): string {
+  const match = new RegExp(`(?:^|;\\s*)${name} ([^;]*)`).exec(csp);
+  return match?.[1] ?? '';
 }
 
 describe('CSP does not break the auth page', () => {
@@ -33,15 +32,54 @@ describe('CSP does not break the auth page', () => {
   // console showed a CSP violation, React never mounted, and #root stayed
   // empty: a blank white page at /components/auth/signup.html.
   it('the auth page is allowed to inject a compiled script', () => {
-    assert.match(scriptSrc(cspFor('/components/auth/(.*)')), /'unsafe-inline'/);
+    const scriptSrc = directive(cspFor('/components/auth/(.*)'), 'script-src');
+    assert.match(scriptSrc, /'unsafe-inline'/);
+    // Babel compiles JSX with eval.
+    assert.match(scriptSrc, /'unsafe-eval'/);
+  });
+
+  it('the auth page does not need a third-party origin', () => {
+    const csp = cspFor('/components/auth/(.*)');
+    assert.doesNotMatch(csp, /unpkg\.com|cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net/);
+    assert.equal(directive(csp, 'script-src'), "'self' 'unsafe-eval' 'unsafe-inline'");
   });
 
   it('the main app keeps the strict policy', () => {
-    // Every script in index.html is an external file, so it needs no inline
-    // source. Weakening this would undo the protection.
-    const main = scriptSrc(cspFor('/(.*)'));
-    assert.doesNotMatch(main, /'unsafe-inline'/, 'main app script-src');
-    assert.match(main, /'self'/, 'main app script-src');
+    // Every script in index.html is a same-origin file, so it needs no inline
+    // or eval source and no CDN host. Weakening this would undo the protection.
+    const main = directive(cspFor('/(.*)'), 'script-src');
+    assert.equal(main, "'self'", 'main app script-src');
+  });
+
+  it('the main policy has no wildcard or scheme-wide source', () => {
+    const csp = cspFor('/(.*)');
+    assert.doesNotMatch(csp, /(?:^|[\s;])\*(?:[\s;]|$)/, 'bare wildcard');
+    assert.doesNotMatch(csp, /(?:^|[\s;])https:(?:[\s;]|$)/, 'https: scheme source');
+    assert.doesNotMatch(csp, /'unsafe-eval'/, 'eval');
+    // style-src-attr is the only directive allowed to carry 'unsafe-inline',
+    // because KaTeX emits style attributes. A style-src or script-src
+    // relaxation would be a real hole.
+    assert.doesNotMatch(directive(csp, 'script-src'), /'unsafe-inline'/, 'inline script');
+    assert.doesNotMatch(directive(csp, 'style-src'), /'unsafe-inline'/, 'inline style');
+  });
+
+  it('limits network access to the exact hosts the app uses', () => {
+    const connect = directive(cspFor('/(.*)'), 'connect-src');
+    assert.match(connect, /'self'/);
+    assert.match(connect, /https:\/\/ydumwqgwoqwfhnyaskfe\.supabase\.co/);
+    assert.match(connect, /wss:\/\/ydumwqgwoqwfhnyaskfe\.supabase\.co/);
+    assert.match(connect, /https:\/\/api\.mymemory\.translated\.net/);
+    assert.doesNotMatch(connect, /https:(?:\s|$)/, 'no scheme-wide connect-src');
+  });
+
+  it('keeps images local or data URLs', () => {
+    assert.equal(directive(cspFor('/(.*)'), 'img-src'), "'self' data: blob:");
+  });
+
+  it('allows only inline style attributes, which KaTeX needs', () => {
+    const csp = cspFor('/(.*)');
+    assert.doesNotMatch(directive(csp, 'style-src'), /'unsafe-inline'/);
+    assert.match(directive(csp, 'style-src-attr'), /'unsafe-inline'/);
   });
 
   it('the auth rule is listed AFTER the catch-all so it actually applies', () => {
@@ -57,18 +95,11 @@ describe('CSP does not break the auth page', () => {
     assert.ok(auth > catchAll, 'the auth rule must come after the catch-all to override it');
   });
 
-  it('still allows the CDNs and Babel the auth page needs', () => {
-    const src = scriptSrc(cspFor('/components/auth/(.*)'));
-    for (const host of ['https://unpkg.com', 'https://cdnjs.cloudflare.com']) {
-      assert.ok(src.includes(host), `auth script-src must allow ${host}`);
-    }
-    // Babel compiles JSX with eval.
-    assert.match(src, /'unsafe-eval'/, 'Babel Standalone evaluates generated code');
-  });
-
   it('Express applies the same split', () => {
     assert.match(app, /const isAuthPage = req\.path\.indexOf\('\/components\/auth\/'\) === 0;/, 'src/app.ts');
     assert.match(app, /'unsafe-inline'/, 'src/app.ts');
+    assert.match(app, /\? "'self' 'unsafe-eval' 'unsafe-inline'"/, 'auth script-src');
+    assert.match(app, /: "'self'";/, 'main script-src');
   });
 
   it('the auth page itself only loads external scripts', () => {

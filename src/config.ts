@@ -192,7 +192,7 @@ export const config = {
  * backups — must never be served. Keep this list in sync when adding an asset
  * directory to the frontend.
  */
-export const STATIC_MOUNTS: readonly string[] = ['css', 'js', 'icons', 'components'];
+export const STATIC_MOUNTS: readonly string[] = ['css', 'js', 'icons', 'components', 'vendor'];
 
 /** Individual files served straight from the repo root. */
 export const STATIC_FILES: readonly string[] = [

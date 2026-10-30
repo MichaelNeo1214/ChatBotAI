@@ -99,27 +99,33 @@ export function createApp() {
 
   // Security headers. Vercel sets these via vercel.json, but this server is
   // also run directly, and without them it is trivially framable, sniffable
-  // and script-injectable. The CSP mirrors the Vercel one: every script on the
-  // page is an external file, so no inline source is needed, and connect-src
-  // stays broad enough for BYOK providers on any https host.
+  // and script-injectable. The CSP mirrors the Vercel one: every script,
+  // stylesheet and font is served from this origin (see vendor/), so no CDN
+  // host is needed. Browser-side network access is limited to the Supabase
+  // project used by cloud sync and the translation endpoint.
   app.use((req: Request, res: Response, next: NextFunction) => {
     // The auth page compiles JSX in the browser with Babel Standalone, which
     // injects the transformed source as a new inline <script>. That is an
-    // inline source, so this path needs 'unsafe-inline'; the main app, whose
-    // scripts are all external files, keeps the stricter policy below.
+    // inline source, so this path needs 'unsafe-inline' and 'unsafe-eval'; the
+    // main app, whose scripts are all external files, keeps the stricter
+    // policy below. Everything else is the same on both paths.
     const isAuthPage = req.path.indexOf('/components/auth/') === 0;
     const scriptSrc = isAuthPage
-      ? "'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com"
-      : "'self' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com";
+      ? "'self' 'unsafe-eval' 'unsafe-inline'"
+      : "'self'";
 
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; " +
         `script-src ${scriptSrc}; ` +
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
-        "font-src 'self' data: https://cdnjs.cloudflare.com; " +
-        "img-src 'self' data: blob: https:; " +
-        "connect-src 'self' https:; " +
+        "style-src 'self'; " +
+        // KaTeX writes inline style attributes when it renders a formula.
+        // style-src-attr covers only those attributes, not <style> or <link>.
+        "style-src-attr 'unsafe-inline'; " +
+        "font-src 'self' data:; " +
+        "img-src 'self' data: blob:; " +
+        "connect-src 'self' https://ydumwqgwoqwfhnyaskfe.supabase.co " +
+        "wss://ydumwqgwoqwfhnyaskfe.supabase.co https://api.mymemory.translated.net; " +
         "worker-src 'self' blob:; " +
         "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
     );

@@ -41,25 +41,23 @@ describe('cloud sync can actually start', () => {
   it('reads the project URL and anon key from /api/health', () => {
     has(scriptJs, /info\.supabase\.url/, 'serverCapabilitiesOnce');
     has(scriptJs, /info\.supabase\.anonKey/, 'serverCapabilitiesOnce');
-    has(healthApi, /supabase: supabaseIsConfigured\(\)/, 'api/health');
+    has(healthApi, /supabase: getPublicSupabaseConfig\(\)/, 'api/health');
   });
 
   it('exposes only the publishable key, never the service role', () => {
-    const blockText = block(healthApi, 'supabase: supabaseIsConfigured()', 'conversations:');
-    lacks(blockText, /SERVICE_ROLE[\s\S]{0,200}\}\s*$/, 'health payload');
-    // The service role may only be used as a last-resort client credential and
-    // must never be the value handed to a browser.
-    assert.ok(
-      !/anonKey:[\s\S]{0,400}SERVICE_ROLE/.test(healthApi),
-      'anonKey must not fall back to the service role key',
-    );
+    // getPublicSupabaseConfig() reads only the public variable names and
+    // rejects a service-role JWT/sb_secret_ key even when it was pasted into
+    // SUPABASE_ANON_KEY by mistake.
+    lacks(healthApi, /anonKey:\s*cleanSupabaseKey/, 'health payload');
+    lacks(healthApi, /SERVICE_ROLE_KEY/, 'health payload');
+    has(healthApi, /getPublicSupabaseConfig/, 'api/health');
   });
 
-  it('loads the Supabase browser SDK, with a fallback if the CDN tag fails', () => {
+  it('loads the vendored Supabase browser SDK, with a fallback if the tag fails', () => {
     // Regression: initSupabase() returned null whenever window.supabase was
     // undefined and nothing loaded it, so signing in silently failed.
-    has(html, /cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, 'index.html preloads the SDK');
-    has(scriptJs, /CLOUD_SUPABASE_SDK = 'https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/, 'js/script.js');
+    has(html, /src="\/?vendor\/supabase\/2\.117\.3\/supabase\.min\.js"/, 'index.html preloads the SDK');
+    has(scriptJs, /CLOUD_SUPABASE_SDK = '\/vendor\/supabase\/2\.117\.3\/supabase\.min\.js'/, 'js/script.js');
     has(scriptJs, /loadScript\(CLOUD_SUPABASE_SDK\)/, 'initSupabase');
     has(scriptJs, /function loadScript\(src\)/, 'js/script.js');
   });

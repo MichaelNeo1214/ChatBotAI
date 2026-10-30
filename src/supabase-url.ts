@@ -80,6 +80,69 @@ export function getSanitizedSupabaseKey(env: NodeJS.ProcessEnv = process.env): s
   return cleanSupabaseKey(env.SUPABASE_ANON_KEY ?? env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '');
 }
 
+/** Decodes the payload of a Supabase JWT without verifying it. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.');
+  if (parts.length !== 3 || parts[1] === undefined) return null;
+  try {
+    const payload: unknown = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return typeof payload === 'object' && payload !== null
+      ? (payload as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when a key carries service-role privileges.
+ *
+ * Two formats exist: a legacy JWT whose payload says `"role":"service_role"`,
+ * and the newer opaque `sb_secret_...` key. A service-role key bypasses Row
+ * Level Security, so it must never be returned to a browser — not even if it
+ * was pasted into the SUPABASE_ANON_KEY variable by mistake.
+ */
+export function isServiceRoleKey(rawKey?: string | null): boolean {
+  const key = cleanSupabaseKey(rawKey);
+  if (key === '') return false;
+  if (key.startsWith('sb_secret_')) return true;
+  return decodeJwtPayload(key)?.role === 'service_role';
+}
+
+/**
+ * The key that is safe to hand to a browser, or an empty string.
+ *
+ * Reads only the public/anon variable names and refuses service-role keys in
+ * any of them. The health endpoint uses this instead of echoing whatever the
+ * environment happens to contain.
+ */
+export function getPublicSupabaseKey(env: NodeJS.ProcessEnv = process.env): string {
+  const key = getSanitizedSupabaseKey(env);
+  if (key === '' || isServiceRoleKey(key)) return '';
+
+  // Also catch the case where the same secret was duplicated into the public
+  // variable: an exact match is unambiguous.
+  const serviceKey = cleanSupabaseKey(env.SUPABASE_SERVICE_ROLE_KEY);
+  if (serviceKey !== '' && key === serviceKey) return '';
+  return key;
+}
+
+/**
+ * Browser-side Supabase configuration, or null when only a secret is set.
+ *
+ * Kept separate from supabaseIsConfigured(): server-side auth can still work
+ * with the service role, while cloud sync in the browser must stay off until a
+ * real publishable key is configured.
+ */
+export function getPublicSupabaseConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): { url: string; anonKey: string } | null {
+  const url = getValidSupabaseUrl(env);
+  const anonKey = getPublicSupabaseKey(env);
+  if (url === null || anonKey === '') return null;
+  return { url, anonKey };
+}
+
 /**
  * True when a Supabase project URL and key are both present and usable.
  *

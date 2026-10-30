@@ -136,7 +136,7 @@ describe('voice panel is a real feature', () => {
 
 describe('offline and caching', () => {
   it('bumps the cache so new assets are actually fetched', () => {
-    has(sw, /const CACHE_NAME = 'chatbotai-static-v7'/, 'sw.js');
+    has(sw, /const CACHE_NAME = 'chatbotai-static-v8'/, 'sw.js');
     // Assert the behaviour, not the prose: a cache hit is returned from the
     // cache and the network refresh is issued in the background.
     has(sw, /addEventListener\('fetch'/, 'fetch handler');

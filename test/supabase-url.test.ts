@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cleanSupabaseKey, cleanSupabaseUrl, getSanitizedSupabaseKey, getValidSupabaseUrl, supabaseIsConfigured } from '../src/supabase-url.ts';
+import {
+  cleanSupabaseKey,
+  cleanSupabaseUrl,
+  getPublicSupabaseConfig,
+  getPublicSupabaseKey,
+  getSanitizedSupabaseKey,
+  getValidSupabaseUrl,
+  isServiceRoleKey,
+  supabaseIsConfigured,
+} from '../src/supabase-url.ts';
+
+/** Builds an unsigned JWT with the given payload, as Supabase issues them. */
+function fakeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${header}.${body}.signature`;
+}
+
+const SERVICE_JWT = fakeJwt({ role: 'service_role', iss: 'supabase' });
+const ANON_JWT = fakeJwt({ role: 'anon', iss: 'supabase' });
 
 /**
  * SUPABASE_URL normalisation.
@@ -206,6 +225,134 @@ describe('getSanitizedSupabaseKey', () => {
     assert.equal(
       getSanitizedSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon' } as NodeJS.ProcessEnv),
       'anon',
+    );
+  });
+});
+
+describe('isServiceRoleKey', () => {
+  it('detects the legacy service-role JWT', () => {
+    assert.equal(isServiceRoleKey(SERVICE_JWT), true);
+  });
+
+  it('detects the opaque secret key format', () => {
+    assert.equal(isServiceRoleKey('sb_secret_abcdefghijklmnop'), true);
+  });
+
+  it('accepts anon and publishable keys', () => {
+    assert.equal(isServiceRoleKey(ANON_JWT), false);
+    assert.equal(isServiceRoleKey('sb_publishable_abcdefghijklmnop'), false);
+    assert.equal(isServiceRoleKey('anon-key'), false);
+  });
+
+  it('treats missing or malformed values as not secret', () => {
+    for (const value of [undefined, null, '', '   ', 'not-a-jwt', 'a.b', 'a.b.c', 'a.!!!.c']) {
+      assert.equal(isServiceRoleKey(value), false, JSON.stringify(value));
+    }
+  });
+
+  it('ignores surrounding quotes and whitespace from a pasted key', () => {
+    assert.equal(isServiceRoleKey(`"${SERVICE_JWT}"`), true);
+    assert.equal(isServiceRoleKey(`  sb_secret_abc  `), true);
+  });
+});
+
+describe('getPublicSupabaseKey', () => {
+  it('returns the configured anon key', () => {
+    assert.equal(
+      getPublicSupabaseKey({ SUPABASE_ANON_KEY: 'anon-key' } as NodeJS.ProcessEnv),
+      'anon-key',
+    );
+  });
+
+  it('refuses a service-role JWT pasted into an anon variable', () => {
+    // This is the reported leak: SUPABASE_ANON_KEY held the service role key,
+    // so /api/health published a credential that bypasses RLS.
+    assert.equal(
+      getPublicSupabaseKey({ SUPABASE_ANON_KEY: SERVICE_JWT } as NodeJS.ProcessEnv),
+      '',
+    );
+    assert.equal(
+      getPublicSupabaseKey({ NEXT_PUBLIC_SUPABASE_ANON_KEY: SERVICE_JWT } as NodeJS.ProcessEnv),
+      '',
+    );
+  });
+
+  it('refuses an opaque secret pasted into an anon variable', () => {
+    assert.equal(
+      getPublicSupabaseKey({ SUPABASE_ANON_KEY: 'sb_secret_abcdefghijklmnop' } as NodeJS.ProcessEnv),
+      '',
+    );
+  });
+
+  it('refuses the service role key duplicated into the public variable', () => {
+    assert.equal(
+      getPublicSupabaseKey({
+        SUPABASE_ANON_KEY: 'same-secret-value',
+        SUPABASE_SERVICE_ROLE_KEY: 'same-secret-value',
+      } as NodeJS.ProcessEnv),
+      '',
+    );
+  });
+
+  it('never falls back to the service role variable', () => {
+    assert.equal(
+      getPublicSupabaseKey({ SUPABASE_SERVICE_ROLE_KEY: SERVICE_JWT } as NodeJS.ProcessEnv),
+      '',
+    );
+    assert.equal(
+      getPublicSupabaseKey({ SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_abc' } as NodeJS.ProcessEnv),
+      '',
+    );
+  });
+});
+
+describe('getPublicSupabaseConfig', () => {
+  it('returns the normalised URL and anon key', () => {
+    assert.deepEqual(
+      getPublicSupabaseConfig({
+        SUPABASE_URL: 'https://abcdefgh.supabase.co/rest/v1',
+        SUPABASE_ANON_KEY: '"anon-key"\r\n',
+      } as NodeJS.ProcessEnv),
+      { url: 'https://abcdefgh.supabase.co', anonKey: 'anon-key' },
+    );
+  });
+
+  it('returns null when the only key is a service-role key', () => {
+    assert.equal(
+      getPublicSupabaseConfig({
+        SUPABASE_URL: 'https://abcdefgh.supabase.co',
+        SUPABASE_ANON_KEY: SERVICE_JWT,
+      } as NodeJS.ProcessEnv),
+      null,
+    );
+    assert.equal(
+      getPublicSupabaseConfig({
+        SUPABASE_URL: 'https://abcdefgh.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: SERVICE_JWT,
+      } as NodeJS.ProcessEnv),
+      null,
+    );
+  });
+
+  it('returns null when the URL or the key is missing', () => {
+    assert.equal(
+      getPublicSupabaseConfig({ SUPABASE_ANON_KEY: 'anon-key' } as NodeJS.ProcessEnv),
+      null,
+    );
+    assert.equal(
+      getPublicSupabaseConfig({ SUPABASE_URL: 'https://abcdefgh.supabase.co' } as NodeJS.ProcessEnv),
+      null,
+    );
+    assert.equal(getPublicSupabaseConfig({} as NodeJS.ProcessEnv), null);
+  });
+
+  it('returns null rather than publishing a malformed URL', () => {
+    assert.equal(
+      getPublicSupabaseConfig({
+        SUPABASE_URL: 'not a url',
+        SUPABASE_ANON_KEY: 'anon-key',
+      } as NodeJS.ProcessEnv),
+      null,
     );
   });
 });

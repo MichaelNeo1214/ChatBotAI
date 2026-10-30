@@ -2235,7 +2235,7 @@ function mmNeedsVisionModel() {
 let SUPA_URL = '';
 let SUPA_KEY = '';
 let SUPA_SDK_LOADED = false;
-const CLOUD_SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+const CLOUD_SUPABASE_SDK = '/vendor/supabase/2.117.3/supabase.min.js';
 
             // Loads a script once and resolves when it is ready. Needed for the
             // Supabase browser SDK, which is fetched on demand rather than
@@ -4171,7 +4171,7 @@ function applyTheme() {
 
             if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
                 pdfjsLib.GlobalWorkerOptions.workerSrc =
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    '/vendor/pdfjs/3.11.174/pdf.worker.min.js';
             }
 
             const btnAttachDoc = document.getElementById('btnAttachDoc');
@@ -4703,6 +4703,7 @@ function applyTheme() {
             // store is the single source of truth: this only mirrors it, so a
             // change made here and one made anywhere else behave identically.
             function initBehaviourPanel() {
+                const settings = window.ChatBotSettings || null;
                 if (!settings) return;
 
                 const toggle = document.getElementById('behaviourOverridesEnabled');

@@ -14,18 +14,17 @@
    opened" with nothing to act on. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v7';
+const CACHE_NAME = 'chatbotai-static-v8';
 const OFFLINE_URL = '/index.html';
-const CDN_DOMPURIFY = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js';
-const CDN_PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const CDN_PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-const CDN_KATEX_JS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js';
-const CDN_KATEX_CSS = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
 
+// Everything is served from this origin (see vendor/). Nothing here needs a
+// cross-origin request, so the service worker never has to cache opaque
+// responses and the CSP can stay at script-src 'self'.
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/css/fonts.css',
   '/css/style.css',
   '/js/markdown-math.js',
   '/js/settings.js',
@@ -38,14 +37,28 @@ const PRECACHE_URLS = [
   '/js/script.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  CDN_DOMPURIFY,
-  CDN_PDFJS,
-  CDN_PDFJS_WORKER,
-  // KaTeX's ~60 font files are deliberately NOT precached. The stylesheet and
+  '/vendor/dompurify/3.4.17/purify.min.js',
+  '/vendor/pdfjs/3.11.174/pdf.min.js',
+  '/vendor/pdfjs/3.11.174/pdf.worker.min.js',
+  '/vendor/supabase/2.117.3/supabase.min.js',
+  '/vendor/font-awesome/6.5.1/css/all.min.css',
+  '/vendor/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',
+  '/vendor/font-awesome/6.5.1/webfonts/fa-regular-400.woff2',
+  '/vendor/font-awesome/6.5.1/webfonts/fa-brands-400.woff2',
+  '/vendor/font-awesome/6.5.1/webfonts/fa-v4compatibility.woff2',
+  '/vendor/inter/inter-400-latin.woff2',
+  '/vendor/inter/inter-400-latin-ext.woff2',
+  '/vendor/inter/inter-500-latin.woff2',
+  '/vendor/inter/inter-500-latin-ext.woff2',
+  '/vendor/inter/inter-600-latin.woff2',
+  '/vendor/inter/inter-600-latin-ext.woff2',
+  '/vendor/inter/inter-700-latin.woff2',
+  '/vendor/inter/inter-700-latin-ext.woff2',
+  // KaTeX's font files are deliberately NOT precached. The stylesheet and
   // script are enough for formulas to render offline; only the typeface falls
   // back until the next online load.
-  CDN_KATEX_CSS,
-  CDN_KATEX_JS
+  '/vendor/katex/0.16.11/katex.min.css',
+  '/vendor/katex/0.16.11/katex.min.js'
 ];
 
 self.addEventListener('install', function (event) {
@@ -55,10 +68,7 @@ self.addEventListener('install', function (event) {
     await Promise.all(PRECACHE_URLS.map(async function (url) {
       try {
         const target = new URL(url, self.location.origin);
-        const request = new Request(target.href, {
-          mode: target.origin === self.location.origin ? 'same-origin' : 'no-cors',
-          cache: 'reload'
-        });
+        const request = new Request(target.href, { cache: 'reload' });
         const response = await fetch(request);
         if (response) await cache.put(url, response);
       } catch (e) { /* ignore individual asset failures */ }
@@ -93,10 +103,9 @@ self.addEventListener('fetch', function (event) {
   // visited, so it is fetched network-first.
   if (isSameOrigin && url.pathname.indexOf('/components/auth/') === 0) return;
 
-  const isCdnAsset = url.href === CDN_DOMPURIFY
-    || url.hostname === 'cdnjs.cloudflare.com'
-    || url.hostname === 'cdn.jsdelivr.net';
-  if (!isSameOrigin && !isCdnAsset) return;
+  // Third-party API traffic (Supabase, translation) is never cached. Every
+  // static asset is same-origin, so there is no CDN allowlist to maintain.
+  if (!isSameOrigin) return;
 
   event.respondWith((async function () {
     const cache = await caches.open(CACHE_NAME);

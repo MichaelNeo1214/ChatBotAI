@@ -4,14 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In / Sign Up</title>
+    <link rel="icon" href="/icons/icon-192.png" type="image/png">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div id="root"></div>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Vendored, pinned copies: the auth page needs no third-party origin and
+         the CSP can keep script-src at 'self'. Babel Standalone still compiles
+         the JSX in the browser, so this page alone allows unsafe-eval and the
+         inline script Babel injects after compiling. -->
+    <script src="/vendor/react/18.3.1/react.production.min.js"></script>
+    <script src="/vendor/react-dom/18.3.1/react-dom.production.min.js"></script>
+    <script src="/vendor/babel/7.29.12/babel.min.js"></script>
+    <script src="/vendor/three/r128/three.min.js"></script>
     <script src="js/script.js" type="text/babel"></script>
 </body>
 </html>

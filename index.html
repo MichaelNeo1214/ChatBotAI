@@ -10,18 +10,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ChatBot AI">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
     <title>ChatBot AI</title>
     <meta name="description" content="ChatBot AI - Your intelligent assistant">
     <meta name="keywords" content="ChatBot, AI, Assistant, Chat, OpenAI, GPT-4, Gemini, Claude">
     <meta name="author" content="Marvel-Michael-Yere">
     <meta name="embedder" content="ChatBot AI">
     <meta property="og:image" content="https://4kwallpapers.com/images/walls/thumbs_2t/25439.jpg">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- KaTeX: LaTeX rendering for replies. Fonts come from the same CDN; if they
-         fail to load the maths still renders, just in a fallback typeface. -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <!-- Self-hosted Inter. Google Fonts cannot be integrity-pinned (its CSS is
+         generated per user agent), so the files live under vendor/inter/. -->
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="vendor/font-awesome/6.5.1/css/all.min.css">
+    <!-- KaTeX: LaTeX rendering for replies. Fonts come from the same vendored
+         directory; if they fail to load the maths still renders, just in a
+         fallback typeface. -->
+    <link rel="stylesheet" href="vendor/katex/0.16.11/katex.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -150,7 +153,7 @@
                 <!-- Typing Indicator -->
                 <div class="typing-indicator" id="typingIndicator">
                     <div class="message-content">
-                        <div class="message-avatar" style="background: var(--accent-color);">
+                        <div class="message-avatar">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                         </div>
                         <div class="message-body">
@@ -454,7 +457,7 @@
     <!-- API KEY -->
     <div class="settings-panel" data-panel="api-key">
       <h2>API Key</h2>
-      <div class="setting-desc" style="margin-bottom:14px;" data-i18n="apiKeyIntro">Connect your AI providers here. Keys are stored only in this browser and reused automatically, even after refresh or restart. Models without a key cannot be used.</div>
+      <div class="setting-desc api-key-intro" data-i18n="apiKeyIntro">Connect your AI providers here. Keys are stored only in this browser and reused automatically, even after refresh or restart. Models without a key cannot be used.</div>
 
       <form class="api-card" data-provider="openai">
         <div class="api-card-head">
@@ -735,7 +738,7 @@
 
       <div class="setting-row setting-row-column">
         <span class="setting-label">Storage used</span>
-        <div class="usage-bar-track"><div class="usage-bar-fill" id="storageBar" style="width:0%;"></div></div>
+        <div class="usage-bar-track"><div class="usage-bar-fill" id="storageBar"></div></div>
         <div class="setting-desc" id="statStorage">Calculating...</div>
       </div>
 
@@ -757,7 +760,7 @@
 
       <div class="setting-row setting-row-column">
         <span class="setting-label">By role</span>
-        <div class="usage-bar-track"><div class="usage-bar-fill" id="roleUserBar" style="width:0%;"></div></div>
+        <div class="usage-bar-track"><div class="usage-bar-fill" id="roleUserBar"></div></div>
         <div class="setting-desc" id="statByRole">Calculating...</div>
       </div>
 
@@ -876,15 +879,18 @@
         </div>
     </div>
 
+    <!-- Every third-party library is vendored under vendor/<name>/<version>/.
+         Pinned versions plus a same-origin path mean no SRI attribute is needed
+         and the Content-Security-Policy can stay at script-src 'self'. -->
     <!-- DOMPurify: sanitizes Markdown-rendered HTML before it is injected into the DOM -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+    <script src="vendor/dompurify/3.4.17/purify.min.js"></script>
     <!-- pdf.js: extracts text from uploaded PDFs entirely client-side (lightweight RAG) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="vendor/pdfjs/3.11.174/pdf.min.js"></script>
     <!-- Supabase: optional cloud sync (auth + Postgres). IndexedDB stays the UI source of truth. -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="vendor/supabase/2.117.3/supabase.min.js"></script>
     <!-- KaTeX: renders $...$ and $$...$$ in replies. Optional - the Markdown
          pipeline falls back to showing raw LaTeX when it is absent. -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script defer src="vendor/katex/0.16.11/katex.min.js"></script>
     <!-- LaTeX delimiter rules; must load before script.js consumes them. -->
     <script src="js/markdown-math.js"></script>
     <!-- Single source of truth for every user preference. -->

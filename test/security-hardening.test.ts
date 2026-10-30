@@ -94,9 +94,9 @@ describe('XSS: sanitiser must fail closed', () => {
   const scriptJs = read('js/script.js');
 
   it('never returns unsanitised HTML when DOMPurify is unavailable', () => {
-    // The sanitiser is loaded from a CDN. An ad blocker, corporate proxy,
-    // regional block or CDN outage leaves it undefined; returning `html` there
-    // turns every model reply into an injection sink.
+    // The sanitiser is a separate script. A failed or blocked vendor load
+    // leaves it undefined; returning `html` there turns every model reply into
+    // an injection sink.
     const body = scriptJs.slice(
       scriptJs.indexOf('function sanitizeHtml(html)'),
       scriptJs.indexOf('function highlightCode('),

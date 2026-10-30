@@ -1488,6 +1488,10 @@
             display: block;
         }
 
+        .typing-indicator .message-avatar {
+            background: var(--accent-color);
+        }
+
         .typing-indicator .message-content {
             display: flex;
         }
@@ -2558,6 +2562,7 @@
 }
 
 .setting-desc{ font-size:12.5px; color:#8a8a92; margin-top:3px; }
+.api-key-intro{ margin-bottom:14px; }
 
 /* A long account email is the only .setting-desc that can exceed the space
    next to its label. Left unconstrained it pushes the row past the panel
@@ -2653,6 +2658,7 @@
 }
 .usage-bar-fill{
   height:100%;
+  width:0%;
   background:#4a9eff;
   border-radius:999px;
 }
