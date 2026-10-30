@@ -4169,9 +4169,18 @@ function applyTheme() {
             const RAG_MAX_PAGES = 50;                     // stop early on very long PDFs
             const RAG_MAX_BYTES = 25 * 1024 * 1024;       // refuse files above 25 MB
 
-            if (window.pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
-                pdfjsLib.GlobalWorkerOptions.workerSrc =
-                    '/vendor/pdfjs/3.11.174/pdf.worker.min.js';
+            // js/pdfjs-init.js starts the ESM import and stores the promise on
+            // `window.pdfjsReady`. Awaiting it means a PDF attached before the
+            // module finishes loading still works instead of reporting that
+            // pdf.js is unavailable.
+            async function getPdfjsLib() {
+                if (window.pdfjsLib && typeof window.pdfjsLib.getDocument === 'function') {
+                    return window.pdfjsLib;
+                }
+                if (window.pdfjsReady && typeof window.pdfjsReady.then === 'function') {
+                    return await window.pdfjsReady;
+                }
+                return null;
             }
 
             const btnAttachDoc = document.getElementById('btnAttachDoc');
@@ -4228,14 +4237,20 @@ function applyTheme() {
             // Extracts text from a PDF with pdf.js. The document (and its worker)
             // are always torn down in `finally`, and the source buffer is dropped.
             async function extractPdfText(file) {
-                const lib = window.pdfjsLib;
+                const lib = await getPdfjsLib();
                 if (!lib || typeof lib.getDocument !== 'function') {
                     throw new Error('pdf.js unavailable');
                 }
                 const buffer = await file.arrayBuffer();
                 let pdf = null;
                 try {
-                    pdf = await lib.getDocument({ data: new Uint8Array(buffer) }).promise;
+                    // Text extraction never decodes images. Disable the WASM
+                    // decoders so an unusual PDF cannot trigger a request for
+                    // assets this deployment does not ship.
+                    pdf = await lib.getDocument({
+                        data: new Uint8Array(buffer),
+                        useWasm: false
+                    }).promise;
                     const pageCount = Math.min(pdf.numPages, RAG_MAX_PAGES);
                     let text = '';
                     for (let p = 1; p <= pageCount; p++) {
@@ -4368,10 +4383,14 @@ function applyTheme() {
                 }
             });
 
-        })();
-
         // ===== SETTINGS MODAL =====
-        (function() {
+        // Runs in the same scope as the chat engine on purpose: the Data &
+        // privacy and Usage panels read the very same session list
+        // (loadSessions/clearSessions) and reset the same chat DOM. When this
+        // was a second IIFE it could not see those bindings; the resulting
+        // ReferenceError aborted every handler declared after it, so Send and
+        // the settings panels silently stopped working.
+        {
             const settingsModalOverlay = document.getElementById('settingsModalOverlay');
             const btnOpenSettings = document.getElementById('btnOpenSettings');
             const btnCloseSettings = document.getElementById('btnCloseSettings');
@@ -4454,6 +4473,10 @@ function applyTheme() {
                         : (key.charAt(0).toUpperCase() + key.slice(1));
                 }
                 if (key === 'account') refreshAccountPanel();
+                // The stats listener sits on the menu, so opening the panel
+                // through the public bridge (deep links, the usage shortcut)
+                // used to leave the placeholders unresolved forever.
+                if (key === 'usage' || key === 'analytics') refreshUsageStats();
             };
 
             // Sidebar footer gear button - quick access to the Safety panel.
@@ -4928,9 +4951,22 @@ function applyTheme() {
                         await clearSessions();
                         await idbWrite(IDB_STORE, function (store) { store.clear(); });
                         try {
-                            localStorage.removeItem('chatbot.apikeys.v1');
-                            localStorage.removeItem('chatbot.profile.v1');
-                            localStorage.removeItem('chatbot.translationCache');
+                            // The profile is namespaced per owner
+                            // (`chatbot.profile.v1:guest`, `...:user:<id>`), and the
+                            // translation cache is stored under `translationCache`.
+                            // Removing the un-suffixed spellings used to be a no-op,
+                            // leaving personal data behind after the confirmation.
+                            const exactKeys = [
+                                'chatbot.apikeys.v1',
+                                'translationCache',
+                                'chatbotai_cloud_session_id'
+                            ];
+                            Object.keys(localStorage).forEach(function (key) {
+                                if (exactKeys.indexOf(key) !== -1
+                                    || key.indexOf('chatbot.profile.v1:') === 0) {
+                                    localStorage.removeItem(key);
+                                }
+                            });
                         } catch (e) {}
 
                         sessions = [];
@@ -5114,6 +5150,7 @@ function applyTheme() {
                     if (panel === 'usage' || panel === 'analytics') refreshUsageStats();
                 }, true);
             }
+        }
         })();
 
 

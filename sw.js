@@ -14,7 +14,7 @@
    opened" with nothing to act on. */
 'use strict';
 
-const CACHE_NAME = 'chatbotai-static-v8';
+const CACHE_NAME = 'chatbotai-static-v9';
 const OFFLINE_URL = '/index.html';
 
 // Everything is served from this origin (see vendor/). Nothing here needs a
@@ -27,6 +27,7 @@ const PRECACHE_URLS = [
   '/css/fonts.css',
   '/css/style.css',
   '/js/markdown-math.js',
+  '/js/pdfjs-init.js',
   '/js/settings.js',
   '/js/voice.js',
   '/js/share.js',
@@ -38,8 +39,8 @@ const PRECACHE_URLS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/vendor/dompurify/3.4.17/purify.min.js',
-  '/vendor/pdfjs/3.11.174/pdf.min.js',
-  '/vendor/pdfjs/3.11.174/pdf.worker.min.js',
+  '/vendor/pdfjs/6.4.299/pdf.min.mjs',
+  '/vendor/pdfjs/6.4.299/pdf.worker.min.mjs',
   '/vendor/supabase/2.117.3/supabase.min.js',
   '/vendor/font-awesome/6.5.1/css/all.min.css',
   '/vendor/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',

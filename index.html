@@ -779,7 +779,6 @@
         <div class="setting-desc" id="statLastUsed">Calculating...</div>
       </div>
     </div>
-    </div>
 
     <!-- SAFETY -->
     <div class="settings-panel" data-panel="safety">
@@ -827,6 +826,7 @@
         <span class="setting-label">Delete account</span>
         <button class="btn danger" id="btnDeleteAccountPrivacy" type="button">Delete account</button>
         </div>
+    </div>
     </div>
 
     <!-- API Key Required Popup -->
@@ -884,8 +884,10 @@
          and the Content-Security-Policy can stay at script-src 'self'. -->
     <!-- DOMPurify: sanitizes Markdown-rendered HTML before it is injected into the DOM -->
     <script src="vendor/dompurify/3.4.17/purify.min.js"></script>
-    <!-- pdf.js: extracts text from uploaded PDFs entirely client-side (lightweight RAG) -->
-    <script src="vendor/pdfjs/3.11.174/pdf.min.js"></script>
+    <!-- pdf.js: extracts text from uploaded PDFs entirely client-side (lightweight RAG).
+         v6 is ESM-only, so js/pdfjs-init.js imports the module and exposes a
+         ready-promise while keeping the rest of the page on classic scripts. -->
+    <script src="js/pdfjs-init.js"></script>
     <!-- Supabase: optional cloud sync (auth + Postgres). IndexedDB stays the UI source of truth. -->
     <script src="vendor/supabase/2.117.3/supabase.min.js"></script>
     <!-- KaTeX: renders $...$ and $$...$$ in replies. Optional - the Markdown

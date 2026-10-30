@@ -149,6 +149,38 @@ describe('XSS: sanitiser must fail closed', () => {
   });
 });
 
+describe('vendored dependency versions', () => {
+  it('loads a PDF.js release that fixes CVE-2024-4367', () => {
+    // 3.11.174 executed attacker-controlled JavaScript from a malicious PDF.
+    // The fix landed in 4.2.67; PDF.js 4+ is ESM-only, hence the init shim.
+    const init = read('js/pdfjs-init.js');
+    const match = /PDFJS_VERSION = '([\d.]+)'/.exec(init);
+    assert.ok(match, 'PDF.js version pin not found');
+    const [major = 0, minor = 0, patch = 0] = (match?.[1] ?? '').split('.').map(Number);
+
+    const fixed = major > 4
+      || (major === 4 && (minor > 2 || (minor === 2 && patch >= 67)));
+    assert.ok(fixed, `PDF.js ${match?.[1]} is still vulnerable to CVE-2024-4367`);
+
+    // The main app must load the shim, never the old UMD build directly.
+    const html = read('index.html');
+    assert.match(html, /src="js\/pdfjs-init\.js"/, 'index.html must load the PDF.js init shim');
+    assert.doesNotMatch(html, /pdfjs\/[\d.]+\/pdf\.min\.js/, 'index.html still loads a UMD PDF.js');
+
+    // Both module files must exist at the pinned path or getDocument fails at
+    // runtime while the page still looks healthy.
+    const base = path.join(root, 'vendor', 'pdfjs', match?.[1] ?? '');
+    assert.ok(fs.existsSync(path.join(base, 'pdf.min.mjs')), 'pdf.min.mjs missing');
+    assert.ok(fs.existsSync(path.join(base, 'pdf.worker.min.mjs')), 'pdf.worker.min.mjs missing');
+  });
+
+  it('waits for the asynchronous PDF.js module before extracting text', () => {
+    const script = read('js/script.js');
+    assert.match(script, /window\.pdfjsReady/, 'script.js must await window.pdfjsReady');
+    assert.match(script, /useWasm:\s*false/, 'text extraction must not fetch optional WASM assets');
+  });
+});
+
 describe('secret hygiene', () => {
   it('keeps .env and local databases out of version control', () => {
     const ignore = read('.gitignore').split(/\r?\n/).map((l) => l.trim());
